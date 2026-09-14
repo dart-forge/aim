@@ -265,7 +265,9 @@ class PostgresConnection {
   /// server-reported [QueryException] (socket error, unexpected end of
   /// stream, malformed message), or once [ping] failed. A [QueryException]
   /// leaves this false: the server returned ReadyForQuery, so the connection
-  /// is intact.
+  /// is intact. A [PostgresDecodeException] likewise leaves this false: it
+  /// is only ever thrown after ReadyForQuery has been read, so the
+  /// connection is intact (A-046).
   bool get isBroken => _isBroken;
 
   /// `true` once [close] has been called.
@@ -289,7 +291,7 @@ class PostgresConnection {
 
   /// Sends a request via [send], then reads until ReadyForQuery and parses
   /// the result. Any failure other than a server-reported [QueryException]
-  /// marks the connection broken.
+  /// or a [PostgresDecodeException] marks the connection broken.
   Future<QueryResult> _roundTrip(Future<void> Function() send) {
     return _serialized(() async {
       try {
@@ -305,6 +307,10 @@ class PostgresConnection {
         }
         return parseQueryResult(messages);
       } on QueryException {
+        rethrow;
+      } on PostgresDecodeException {
+        // Decoding runs after ReadyForQuery was consumed, so the socket is
+        // positioned at a message boundary and the connection is intact.
         rethrow;
       } catch (_) {
         _isBroken = true;
