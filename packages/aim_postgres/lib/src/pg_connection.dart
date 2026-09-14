@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:aim_postgres/src/types/command_complete_tag.dart';
 import 'package:aim_postgres/src/types/notice_message.dart';
+import 'package:aim_postgres/src/types/parameter_encoder.dart';
 import 'package:aim_postgres/src/types/query_result_decoder.dart';
 import 'package:aim_postgres/src/util.dart';
 import 'package:crypto/crypto.dart';
@@ -1291,33 +1292,7 @@ extension PostgresConnectionExtendedQuery on PostgresConnection {
     await _socket.flush();
   }
 
-  /// Encodes a parameter value to text format.
-  ///
-  /// Returns null for null values. Supports int, double, String, bool, and
-  /// DateTime types. DateTime values are encoded as ISO 8601 strings.
-  Uint8List? _encodeParameter(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-
-    String stringValue;
-
-    if (value is int) {
-      stringValue = value.toString();
-    } else if (value is double) {
-      stringValue = value.toString();
-    } else if (value is String) {
-      stringValue = value;
-    } else if (value is bool) {
-      stringValue = value ? 't' : 'f';
-    } else if (value is DateTime) {
-      // ISO 8601 format
-      stringValue = value.toUtc().toIso8601String();
-    } else {
-      // Fallback: toString()
-      stringValue = value.toString();
-    }
-
-    return utf8.encode(stringValue);
-  }
+  /// Encodes a parameter value to text format. See [encodeParameterText]
+  /// for the supported types.
+  Uint8List? _encodeParameter(dynamic value) => encodeParameter(value);
 }
