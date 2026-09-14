@@ -19,7 +19,7 @@ void main() async {
   );
 
   final result = await db.query('SELECT COUNT(*) from users;');
-  int count = int.parse(result[0]['count']);
+  int count = result[0]['count'] as int;
   if (count == 0) {
     await db.transaction((tx) async {
       for (var i = 0; i < 100; i++) {
@@ -38,7 +38,7 @@ void main() async {
   final users = await db.users.select().limit(1).then((value) => value.first);
 
   final postsCount = await db.query('SELECT COUNT(*) from posts;');
-  int postCount = int.parse(postsCount[0]['count']);
+  int postCount = postsCount[0]['count'] as int;
   if (postCount == 0) {
     await db.transaction((tx) async {
       for (var i = 0; i < 100; i++) {
