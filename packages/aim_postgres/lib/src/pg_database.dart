@@ -108,8 +108,8 @@ class PostgresDatabase extends Database implements PostgresQueryable {
     List<dynamic>? args,
   }) {
     return _withConnection((conn, _) async {
-      await _runQuery(conn, sql, params: params, args: args);
-      return 0;
+      final result = await _runQuery(conn, sql, params: params, args: args);
+      return result.affectedRows;
     });
   }
 
@@ -183,8 +183,9 @@ class PostgresTransaction implements Transaction, PostgresQueryable {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   }) async {
-    await _runQuery(_connection, sql, params: params, args: args);
-    return 0;
+    final result =
+        await _runQuery(_connection, sql, params: params, args: args);
+    return result.affectedRows;
   }
 }
 
