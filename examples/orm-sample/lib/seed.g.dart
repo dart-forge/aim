@@ -81,7 +81,7 @@ class StatusSelectBuilder extends QueryFuture<List<StatusRow>>
         return (
           id: row['id'] as String,
           description: row['description'] as String,
-          createdAt: DateTime.parse(row['created_at'] as String),
+          createdAt: row['created_at'] as DateTime,
         );
       }).toList();
     });

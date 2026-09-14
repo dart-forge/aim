@@ -89,9 +89,9 @@ class UsersSelectBuilder extends QueryFuture<List<UsersRow>>
           id: row['id'] as String,
           name: row['name'] as String,
           email: row['email'] as String,
-          age: row['age'] != null ? int.parse(row['age'] as String) : null,
+          age: row['age'] as int?,
           gender: row['gender'] as String?,
-          createdAt: DateTime.parse(row['created_at'] as String),
+          createdAt: row['created_at'] as DateTime,
         );
       }).toList();
     });
@@ -490,7 +490,7 @@ class PostsSelectBuilder extends QueryFuture<List<PostsRow>>
           userId: row['user_id'] as String,
           title: row['title'] as String,
           content: row['content'] as String,
-          createdAt: DateTime.parse(row['created_at'] as String),
+          createdAt: row['created_at'] as DateTime,
           statusId: row['status_id'] as String,
         );
       }).toList();
@@ -886,18 +886,16 @@ class PostsWithUserSelectBuilder extends QueryFuture<List<PostsWithUserRow>>
             userId: row['posts_user_id'] as String,
             title: row['posts_title'] as String,
             content: row['posts_content'] as String,
-            createdAt: DateTime.parse(row['posts_created_at'] as String),
+            createdAt: row['posts_created_at'] as DateTime,
             statusId: row['posts_status_id'] as String,
           ),
           user: (
             id: row['users_id'] as String,
             name: row['users_name'] as String,
             email: row['users_email'] as String,
-            age: row['users_age'] != null
-                ? int.parse(row['users_age'] as String)
-                : null,
+            age: row['users_age'] as int?,
             gender: row['users_gender'] as String?,
-            createdAt: DateTime.parse(row['users_created_at'] as String),
+            createdAt: row['users_created_at'] as DateTime,
           ),
         );
       }).toList();
@@ -1015,13 +1013,13 @@ class PostsWithStatusSelectBuilder extends QueryFuture<List<PostsWithStatusRow>>
             userId: row['posts_user_id'] as String,
             title: row['posts_title'] as String,
             content: row['posts_content'] as String,
-            createdAt: DateTime.parse(row['posts_created_at'] as String),
+            createdAt: row['posts_created_at'] as DateTime,
             statusId: row['posts_status_id'] as String,
           ),
           status: (
             id: row['status_id'] as String,
             description: row['status_description'] as String,
-            createdAt: DateTime.parse(row['status_created_at'] as String),
+            createdAt: row['status_created_at'] as DateTime,
           ),
         );
       }).toList();
@@ -1145,23 +1143,21 @@ class PostsWithUserWithStatusSelectBuilder
             userId: row['posts_user_id'] as String,
             title: row['posts_title'] as String,
             content: row['posts_content'] as String,
-            createdAt: DateTime.parse(row['posts_created_at'] as String),
+            createdAt: row['posts_created_at'] as DateTime,
             statusId: row['posts_status_id'] as String,
           ),
           user: (
             id: row['users_id'] as String,
             name: row['users_name'] as String,
             email: row['users_email'] as String,
-            age: row['users_age'] != null
-                ? int.parse(row['users_age'] as String)
-                : null,
+            age: row['users_age'] as int?,
             gender: row['users_gender'] as String?,
-            createdAt: DateTime.parse(row['users_created_at'] as String),
+            createdAt: row['users_created_at'] as DateTime,
           ),
           status: (
             id: row['status_id'] as String,
             description: row['status_description'] as String,
-            createdAt: DateTime.parse(row['status_created_at'] as String),
+            createdAt: row['status_created_at'] as DateTime,
           ),
         );
       }).toList();
