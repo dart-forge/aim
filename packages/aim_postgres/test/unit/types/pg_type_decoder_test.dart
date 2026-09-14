@@ -191,4 +191,68 @@ void main() {
       expect(PgTypeDecoder.decode(enumOid, 'happy'), 'happy');
     });
   });
+
+  group('PgTypeDecoder arrays', () {
+    test('int4[] with NULL element', () {
+      expect(
+        PgTypeDecoder.decode(PgTypeOid.int4Array, '{1,NULL,3}'),
+        [1, null, 3],
+      );
+    });
+
+    test('text[] with quoted elements', () {
+      expect(
+        PgTypeDecoder.decode(PgTypeOid.textArray, r'{"a b",c,"NULL",NULL}'),
+        ['a b', 'c', 'NULL', null],
+      );
+    });
+
+    test('bool[] and float8[]', () {
+      expect(PgTypeDecoder.decode(PgTypeOid.boolArray, '{t,f}'), [true, false]);
+      expect(PgTypeDecoder.decode(PgTypeOid.float8Array, '{1.5,NaN}'), [
+        1.5,
+        isNaN,
+      ]);
+    });
+
+    test('timestamp[] elements are UTC', () {
+      final v = PgTypeDecoder.decode(
+        PgTypeOid.timestampArray,
+        '{"2024-01-02 03:04:05","2024-01-03 00:00:00"}',
+      ) as List;
+      expect(v, [DateTime.utc(2024, 1, 2, 3, 4, 5), DateTime.utc(2024, 1, 3)]);
+    });
+
+    test('jsonb[] elements are decoded', () {
+      expect(
+        PgTypeDecoder.decode(PgTypeOid.jsonbArray, r'{"{\"a\": 1}","[2]"}'),
+        [
+          {'a': 1},
+          [2],
+        ],
+      );
+    });
+
+    test('empty array', () {
+      expect(PgTypeDecoder.decode(PgTypeOid.int4Array, '{}'), isEmpty);
+    });
+
+    test('nested or bounded arrays fall back to the raw text', () {
+      expect(
+        PgTypeDecoder.decode(PgTypeOid.int4Array, '{{1,2},{3,4}}'),
+        '{{1,2},{3,4}}',
+      );
+      expect(
+        PgTypeDecoder.decode(PgTypeOid.int4Array, '[0:1]={1,2}'),
+        '[0:1]={1,2}',
+      );
+    });
+
+    test('element decode failure propagates as FormatException', () {
+      expect(
+        () => PgTypeDecoder.decode(PgTypeOid.int4Array, '{1,x}'),
+        throwsFormatException,
+      );
+    });
+  });
 }

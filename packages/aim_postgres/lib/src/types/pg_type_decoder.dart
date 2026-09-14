@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:aim_postgres/src/types/pg_array_literal.dart';
 import 'package:aim_postgres/src/types/pg_type_oid.dart';
 
 /// Converts the text-format representation of one PostgreSQL value into a
@@ -43,7 +44,25 @@ abstract final class PgTypeDecoder {
 
   /// Returns the decoder for [typeOid], or `null` when the type is not
   /// supported (the caller then keeps the raw text).
-  static PgDecoder? forOid(int typeOid) => _scalar[typeOid];
+  ///
+  /// One-dimensional arrays of supported scalar types decode to
+  /// `List<Object?>`; shapes [parsePgArrayLiteral] rejects (nested arrays,
+  /// explicit bounds) are returned as the raw text.
+  static PgDecoder? forOid(int typeOid) {
+    final scalar = _scalar[typeOid];
+    if (scalar != null) return scalar;
+    final elementOid = PgTypeOid.arrayElement[typeOid];
+    if (elementOid == null) return null;
+    final elementDecoder = _scalar[elementOid];
+    if (elementDecoder == null) return null;
+    return (text) => _decodeArray(text, elementDecoder);
+  }
+
+  static Object? _decodeArray(String text, PgDecoder element) {
+    final parts = parsePgArrayLiteral(text);
+    if (parts == null) return text;
+    return [for (final p in parts) p == null ? null : element(p)];
+  }
 
   /// Decodes [text] as [typeOid]. Unknown types return [text] unchanged.
   static Object? decode(int typeOid, String text) {
