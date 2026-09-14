@@ -215,6 +215,24 @@ void main() {
       ]);
     });
 
+    test('float8[] with a bare integer element', () {
+      expect(PgTypeDecoder.decode(PgTypeOid.float8Array, '{1.5,2}'), [1.5, 2.0]);
+    });
+
+    test('interval[] stays String per element', () {
+      expect(
+        PgTypeDecoder.decode(PgTypeOid.intervalArray, '{"1 day","2 hours"}'),
+        ['1 day', '2 hours'],
+      );
+    });
+
+    test('time[] stays String per element, with NULL', () {
+      expect(
+        PgTypeDecoder.decode(PgTypeOid.timeArray, '{12:00:00,NULL}'),
+        ['12:00:00', null],
+      );
+    });
+
     test('timestamp[] elements are UTC', () {
       final v = PgTypeDecoder.decode(
         PgTypeOid.timestampArray,

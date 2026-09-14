@@ -42,8 +42,11 @@ abstract final class PgTypeOid {
   static const int jsonArray = 199;
   static const int timestampArray = 1115;
   static const int dateArray = 1182;
+  static const int timeArray = 1183;
   static const int timestamptzArray = 1185;
+  static const int intervalArray = 1187;
   static const int numericArray = 1231;
+  static const int timetzArray = 1270;
   static const int uuidArray = 2951;
   static const int jsonbArray = 3807;
 
@@ -64,8 +67,11 @@ abstract final class PgTypeOid {
     jsonArray: json,
     timestampArray: timestamp,
     dateArray: date,
+    timeArray: time,
     timestamptzArray: timestamptz,
+    intervalArray: interval,
     numericArray: numeric,
+    timetzArray: timetz,
     uuidArray: uuid,
     jsonbArray: jsonb,
   };

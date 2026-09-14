@@ -211,6 +211,22 @@ void main() {
     });
   });
 
+  group('multi-statement Simple Query does not corrupt connection state (F1)', () {
+    test('query() returns the rows of the last row-returning statement', () async {
+      final before = db.poolStats.destroyed;
+      final rows = await db.query("SELECT 1 AS a, 2 AS b; SELECT 'x' AS c");
+      expect(rows, [{'c': 'x'}]);
+      expect(db.poolStats.destroyed, before);
+    });
+
+    test('execute() sums affected rows from several SELECTs', () async {
+      expect(
+        await db.execute("SELECT 1 AS a, 2 AS b; SELECT 'x' AS c"),
+        2,
+      );
+    });
+  });
+
   group('decode failures (A-046)', () {
     test("'infinity'::timestamp throws PostgresDecodeException and the connection survives",
         () async {
@@ -223,8 +239,7 @@ void main() {
               .having((e) => e.rawValue, 'rawValue', 'infinity'),
         ),
       );
-      // Same pool, the connection was not discarded: stats.destroyed unchanged
-      // is hard to assert with a pool, so assert behaviour instead.
+      // The pool must not have discarded the connection (A-046).
       final row = (await db.query('SELECT 1 AS v')).single;
       expect(row['v'], 1);
       expect(db.poolStats.destroyed, before);

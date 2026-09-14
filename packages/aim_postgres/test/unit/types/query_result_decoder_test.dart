@@ -86,6 +86,24 @@ void main() {
       );
     });
 
+    test('row with wrong cell count throws PostgresDecodeException, not RangeError', () {
+      expect(
+        () => decodeRows(columns, [
+          [text('7'), text('t')],
+        ]),
+        throwsA(
+          isA<PostgresDecodeException>()
+              .having((e) => e.columnName, 'columnName', '<row>')
+              .having((e) => e.typeOid, 'typeOid', 0)
+              .having(
+                (e) => e.rawValue,
+                'rawValue',
+                'DataRow has 2 cells for ${columns.length} columns',
+              ),
+        ),
+      );
+    });
+
     test('toString names the column and raw value', () {
       final e = PostgresDecodeException(
         columnName: 'at',

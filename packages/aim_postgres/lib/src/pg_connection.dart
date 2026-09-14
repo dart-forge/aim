@@ -89,7 +89,9 @@ class QueryResult {
   final List<Map<String, dynamic>> columns;
 
   /// Row data as a list of lists, where each inner list represents a row.
-  /// Cell values are decoded Dart values (see `PgTypeDecoder`).
+  /// Cell values are decoded Dart values (see `PgTypeDecoder`). When a
+  /// Simple Query ran several `;`-separated statements, these are the rows
+  /// of the LAST row-returning statement only.
   final List<List<dynamic>> rows;
 
   /// Rows affected as reported by CommandComplete (`INSERT 0 3` → 3). When a
@@ -262,13 +264,13 @@ class PostgresConnection {
   bool _isClosed = false;
   String _transactionStatus = 'I';
 
-  /// `true` once a query round-trip failed for any reason other than a
-  /// server-reported [QueryException] (socket error, unexpected end of
-  /// stream, malformed message), or once [ping] failed. A [QueryException]
-  /// leaves this false: the server returned ReadyForQuery, so the connection
-  /// is intact. A [PostgresDecodeException] likewise leaves this false: it
-  /// is only ever thrown after ReadyForQuery has been read, so the
-  /// connection is intact (A-046).
+  /// `true` once sending a request or reading the response up to
+  /// ReadyForQuery failed (socket error, unexpected end of stream,
+  /// malformed message), or once [ping] failed. Any failure after the full
+  /// response was received — a server-reported [QueryException], a
+  /// [PostgresDecodeException], or any other problem found while parsing
+  /// the already-buffered messages — leaves this false: the server
+  /// returned ReadyForQuery, so the connection is intact (A-046).
   bool get isBroken => _isBroken;
 
   /// `true` once [close] has been called.
@@ -291,32 +293,34 @@ class PostgresConnection {
   }
 
   /// Sends a request via [send], then reads until ReadyForQuery and parses
-  /// the result. Any failure other than a server-reported [QueryException]
-  /// or a [PostgresDecodeException] marks the connection broken.
+  /// the result. Only a send/receive failure (the socket may be left
+  /// mid-message) marks the connection broken; any failure while parsing
+  /// the already-buffered response leaves it healthy.
   Future<QueryResult> _roundTrip(Future<void> Function() send) {
     return _serialized(() async {
+      final List<Uint8List> messages;
       try {
         await send();
-        final messages = await _receiveUntilReady();
-        // The last message is ReadyForQuery; its single payload byte is the
-        // backend transaction status ('I' / 'T' / 'E').
-        final last = messages.last;
-        if (String.fromCharCode(last[0]) ==
-                PostgresMessageType.readyForQuery.code &&
-            last.length > 5) {
-          _transactionStatus = String.fromCharCode(last[5]);
-        }
-        return parseQueryResult(messages);
-      } on QueryException {
-        rethrow;
-      } on PostgresDecodeException {
-        // Decoding runs after ReadyForQuery was consumed, so the socket is
-        // positioned at a message boundary and the connection is intact.
-        rethrow;
+        messages = await _receiveUntilReady();
       } catch (_) {
+        // The socket may be mid-message: never reuse this connection.
         _isBroken = true;
         rethrow;
       }
+      // Everything below runs with the socket at a message boundary
+      // (ReadyForQuery consumed), so no failure here can break the
+      // connection: server errors (QueryException), decode failures
+      // (PostgresDecodeException) and protocol-shape surprises all leave it
+      // healthy and reusable.
+      // The last message is ReadyForQuery; its single payload byte is the
+      // backend transaction status ('I' / 'T' / 'E').
+      final last = messages.last;
+      if (String.fromCharCode(last[0]) ==
+              PostgresMessageType.readyForQuery.code &&
+          last.length > 5) {
+        _transactionStatus = String.fromCharCode(last[5]);
+      }
+      return parseQueryResult(messages);
     });
   }
 
@@ -973,9 +977,16 @@ extension PostgresConnectionMessageParser on PostgresConnection {
   /// Cell decoding runs here, after the whole response (through
   /// ReadyForQuery) has been read, so a decode failure never leaves the
   /// socket mid-message.
+  ///
+  /// A Simple Query can carry several `;`-separated statements, each with
+  /// its own RowDescription/DataRow/CommandComplete sequence. [columns] and
+  /// [QueryResult.rows] reflect only the LAST row-returning statement: a new
+  /// RowDescription discards any rows collected for a previous statement.
+  /// [QueryResult.affectedRows] is unaffected by this — it keeps summing the
+  /// CommandComplete tag of every statement.
   QueryResult parseQueryResult(List<Uint8List> messages) {
     List<Map<String, dynamic>>? columns;
-    final rawRows = <List<Uint8List?>>[];
+    var rawRows = <List<Uint8List?>>[];
     var affectedRows = 0;
 
     for (final msg in messages) {
@@ -985,6 +996,9 @@ extension PostgresConnectionMessageParser on PostgresConnection {
 
       switch (messageType) {
         case PostgresMessageType.rowDescription:
+          // A later statement in the same Simple Query: its rows replace
+          // whatever the previous statement had accumulated.
+          if (columns != null) rawRows = <List<Uint8List?>>[];
           columns = parseRowDescription(msg.sublist(5));
           break;
         case PostgresMessageType.dataRow:

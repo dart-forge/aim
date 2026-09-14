@@ -55,6 +55,10 @@ List<PgDecoder?> resolveColumnDecoders(List<Map<String, dynamic>> columns) {
 /// Text-format cells are UTF-8 decoded and then converted by the column's
 /// decoder (unknown types stay [String]). Binary-format cells are passed
 /// through as [Uint8List]. NULL cells stay `null`.
+///
+/// A row whose cell count does not match [columns] is a protocol-shape
+/// surprise, not a normal decode failure, but it is still reported as a
+/// [PostgresDecodeException] so it never surfaces as a bare [RangeError].
 List<List<Object?>> decodeRows(
   List<Map<String, dynamic>> columns,
   List<List<Uint8List?>> rawRows,
@@ -63,10 +67,22 @@ List<List<Object?>> decodeRows(
   return [
     for (final raw in rawRows)
       [
-        for (var i = 0; i < raw.length; i++)
+        for (var i = 0; i < _checkedLength(raw, columns); i++)
           _decodeCell(columns[i], decoders[i], raw[i]),
       ],
   ];
+}
+
+int _checkedLength(List<Uint8List?> raw, List<Map<String, dynamic>> columns) {
+  if (raw.length != columns.length) {
+    throw PostgresDecodeException(
+      columnName: '<row>',
+      typeOid: 0,
+      rawValue: 'DataRow has ${raw.length} cells for ${columns.length} columns',
+      cause: StateError('cell/column count mismatch'),
+    );
+  }
+  return raw.length;
 }
 
 Object? _decodeCell(
