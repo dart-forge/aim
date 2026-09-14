@@ -72,7 +72,7 @@ void main(List<String> args) async {
   }
 
   stdout.writeln('Release created successfully!');
-  stdout.writeln('https://github.com/aim-dart/aim/releases/tag/$version');
+  stdout.writeln('https://github.com/dart-forge/aim/releases/tag/$version');
 }
 
 String? _extractVersionNotes(String content, String version) {

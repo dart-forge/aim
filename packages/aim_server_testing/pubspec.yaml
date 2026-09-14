@@ -1,7 +1,7 @@
 name: aim_server_testing
 description: Testing utilities for the Aim framework. Provides test helpers, matchers, and mock objects for testing Aim applications.
 version: 0.2.0
-repository: https://github.com/aim-dart/aim
+repository: https://github.com/dart-forge/aim
 resolution: workspace
 
 environment:

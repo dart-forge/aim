@@ -1,7 +1,7 @@
 name: aim_edge
 description: Run Aim web applications on Cloudflare workerd (Cloudflare Workers) compiled to WebAssembly with dart compile wasm.
 version: 0.2.0
-repository: https://github.com/aim-dart/aim
+repository: https://github.com/dart-forge/aim
 resolution: workspace
 
 environment:

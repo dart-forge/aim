@@ -3,7 +3,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('bumpChangelog', () {
-    const repoUrl = 'https://github.com/aim-dart/aim';
+    const repoUrl = 'https://github.com/dart-forge/aim';
 
     test('folds ## Unreleased into the new version, keeping entries', () {
       const content = '''# Changelog
@@ -16,7 +16,7 @@ void main() {
 
 ## 0.1.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.1.0)
 ''';
 
       final result = bumpChangelog(content, '0.2.0', repoUrl: repoUrl);
@@ -33,7 +33,7 @@ See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
 
 ## 0.1.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.1.0)
 ''',
       );
     });
@@ -44,7 +44,7 @@ See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
 
 ## 0.1.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.1.0)
 ''';
 
       final result = bumpChangelog(content, '0.2.0', repoUrl: repoUrl);
@@ -55,11 +55,11 @@ See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
 
 ## 0.2.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.2.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.2.0)
 
 ## 0.1.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.1.0)
 ''',
       );
     });
@@ -76,7 +76,7 @@ Initial release.
         result,
         '''## 0.2.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.2.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.2.0)
 
 ## 0.1.0
 
@@ -91,11 +91,11 @@ Initial release.
 
 ## 0.2.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.2.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.2.0)
 
 ## 0.1.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.1.0)
 ''';
 
       final result = bumpChangelog(content, '0.2.0', repoUrl: repoUrl);
@@ -112,7 +112,7 @@ See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
 
 ## 0.1.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.1.0)
 ''';
 
       final once = bumpChangelog(content, '0.2.0', repoUrl: repoUrl);
@@ -131,7 +131,7 @@ See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
 
 ## 0.1.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.1.0)
 ''';
 
       final result = bumpChangelog(content, '0.2.0', repoUrl: repoUrl);
@@ -146,7 +146,7 @@ See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
 
 ## 0.1.0
 
-See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.1.0)
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.1.0)
 ''',
       );
     });

@@ -1,7 +1,7 @@
 name: aim_server_static
 description: Static file serving middleware for the Aim framework with security built-in.
 version: 0.2.0
-repository: https://github.com/aim-dart/aim
+repository: https://github.com/dart-forge/aim
 resolution: workspace
 
 environment:

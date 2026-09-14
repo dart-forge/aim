@@ -114,8 +114,8 @@ export default defineConfig({
       {
         text: 'v0.2.0',
         items: [
-          { text: 'Changelog', link: 'https://github.com/aim-dart/aim/releases' },
-          { text: 'Contributing', link: 'https://github.com/aim-dart/aim/blob/main/CONTRIBUTING.md' }
+          { text: 'Changelog', link: 'https://github.com/dart-forge/aim/releases' },
+          { text: 'Contributing', link: 'https://github.com/dart-forge/aim/blob/main/CONTRIBUTING.md' }
         ]
       }
     ],
@@ -227,7 +227,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/aim-dart/aim' }
+      { icon: 'github', link: 'https://github.com/dart-forge/aim' }
     ],
 
     footer: {
@@ -236,7 +236,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/aim-dart/aim/edit/main/docs/:path',
+      pattern: 'https://github.com/dart-forge/aim/edit/main/docs/:path',
       text: 'Edit this page on GitHub'
     },
 

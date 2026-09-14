@@ -184,7 +184,7 @@ bool _isAimPackage(String packageName) {
   return aimPackagePrefixes.any((prefix) => packageName.startsWith(prefix));
 }
 
-const _repoUrl = 'https://github.com/aim-dart/aim';
+const _repoUrl = 'https://github.com/dart-forge/aim';
 
 final _unreleasedHeadingPattern = RegExp(
   r'^\s*##\s*unreleased\s*$',

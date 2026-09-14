@@ -1,7 +1,7 @@
 name: aim_server_cookie
 description: Cookie support for Aim framework with secure options like HttpOnly, SameSite, and expiration.
 version: 0.2.0
-repository: https://github.com/aim-dart/aim
+repository: https://github.com/dart-forge/aim
 resolution: workspace
 
 environment:

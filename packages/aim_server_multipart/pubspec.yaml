@@ -1,7 +1,7 @@
 name: aim_server_multipart
 description: Multipart form data parsing for aim_server framework. Supports multipart/form-data format.
 version: 0.2.0
-repository: https://github.com/aim-dart/aim
+repository: https://github.com/dart-forge/aim
 resolution: workspace
 
 environment:
