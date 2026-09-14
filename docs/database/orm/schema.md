@@ -55,6 +55,9 @@ Key points:
 | `text(name)` | TEXT | `String` |
 | `timestamp(name)` | TIMESTAMP | `DateTime` |
 
+`DateTime` values read back are always UTC (`isUtc == true`); call
+`.toLocal()` for display.
+
 ### PostgreSQL Types (aim_orm_postgres)
 
 | Function | PostgreSQL Type | Dart Type |

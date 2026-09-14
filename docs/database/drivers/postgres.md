@@ -134,6 +134,10 @@ final result = await db.query('SELECT version()');
 print(result.first['version']);
 ```
 
+When a single `query()` call runs several `;`-separated statements, the rows
+of the last row-returning statement are returned; use `execute()` for the
+summed row count.
+
 ## Type Mapping
 
 `query()` returns values already converted to Dart types based on the
@@ -190,7 +194,7 @@ await db.execute(
   args: [
     ['dart', 'postgres'],          // text[]
     {'draft': true},               // jsonb
-    Uint8List.fromList(bytes),     // bytea
+    Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]), // bytea
   ],
 );
 ```

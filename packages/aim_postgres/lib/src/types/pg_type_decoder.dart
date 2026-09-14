@@ -85,9 +85,11 @@ abstract final class PgTypeDecoder {
     return DateTime.parse('${text}Z');
   }
 
-  // PostgreSQL prints `2024-01-02 12:00:00+09` (offset may be `+hh`,
-  // `+hh:mm`, or `+hh:mm:ss`). DateTime.parse resolves the offset and
-  // returns a UTC value.
+  // PostgreSQL prints `2024-01-02 12:00:00+09` (offset may be `+hh` or
+  // `+hh:mm`). DateTime.parse resolves the offset and returns a UTC value.
+  // An offset with seconds (historical LMT zones) is rejected by
+  // DateTime.parse as a FormatException, which surfaces as a
+  // PostgresDecodeException.
   static Object? _decodeTimestamptz(String text) {
     _rejectSpecialTimestamp(text);
     return DateTime.parse(text).toUtc();
