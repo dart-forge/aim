@@ -5,7 +5,7 @@ const _url = 'postgresql://test:test@localhost:5433/test_db';
 
 Future<int> _pid(PostgresQueryable q) async {
   final rows = await q.query('SELECT pg_backend_pid() AS pid');
-  return int.parse(rows.single['pid'] as String);
+  return rows.single['pid'] as int;
 }
 
 void main() {
@@ -58,7 +58,7 @@ void main() {
           30,
           (_) => db
               .query('SELECT pg_sleep(0.02), pg_backend_pid() AS pid')
-              .then((rows) => rows.single['pid'] as String),
+              .then((rows) => rows.single['pid'] as int),
         ));
         expect(pids, hasLength(30));
         expect(pids.toSet().length, lessThanOrEqualTo(3));
@@ -80,7 +80,7 @@ void main() {
               tx.query('SELECT 2 AS v'),
               tx.query('SELECT 3 AS v'),
             ]));
-        expect(result.map((r) => r.single['v']).toList(), ['1', '2', '3']);
+        expect(result.map((r) => r.single['v']).toList(), [1, 2, 3]);
       } finally {
         await db.close();
       }
@@ -119,7 +119,7 @@ void main() {
           throwsStateError,
         );
         final rows = await single.query('SELECT count(*) AS c FROM pool_tx');
-        expect(rows.single['c'], '0');
+        expect(rows.single['c'], 0);
         expect(single.poolStats.destroyed, 0);
       } finally {
         await single.close();
@@ -140,7 +140,7 @@ void main() {
         await terminate(pid);
 
         final rows = await db.query('SELECT 1 AS v');
-        expect(rows.single['v'], '1');
+        expect(rows.single['v'], 1);
         expect(db.poolStats.validationFailures, 1);
         expect(db.poolStats.destroyed, 1);
         expect(db.poolStats.created, 2);
@@ -164,7 +164,7 @@ void main() {
         expect(db.poolStats.destroyed, 1);
 
         final rows = await db.query('SELECT 2 AS v');
-        expect(rows.single['v'], '2');
+        expect(rows.single['v'], 2);
         expect(db.poolStats.created, 2);
       } finally {
         await db.close();
@@ -180,7 +180,7 @@ void main() {
         );
         expect(db.poolStats.destroyed, 0);
         final rows = await db.query('SELECT 3 AS v');
-        expect(rows.single['v'], '3');
+        expect(rows.single['v'], 3);
         expect(db.poolStats.created, 1);
       } finally {
         await db.close();
@@ -232,7 +232,7 @@ void main() {
         expect(db.poolStats.idle, 0);
         // The next call gets a fresh connection with no open transaction.
         final rows = await db.query('SELECT 1 AS v');
-        expect(rows.single['v'], '1');
+        expect(rows.single['v'], 1);
         expect(db.poolStats.created, 2);
       } finally {
         await db.close();
@@ -261,7 +261,7 @@ void main() {
         );
         expect(conn.isBroken, isFalse);
         final result = await conn.sendSimpleQuery('SELECT 1 AS v');
-        expect(result.toMaps().single['v'], '1');
+        expect(result.toMaps().single['v'], 1);
       } finally {
         await conn.close();
       }
@@ -269,11 +269,9 @@ void main() {
 
     test('a terminated backend marks the connection broken', () async {
       final conn = await PostgresConnection.connect(_url);
-      final pid = int.parse(
-        (await conn.sendSimpleQuery('SELECT pg_backend_pid() AS pid'))
-            .toMaps()
-            .single['pid'] as String,
-      );
+      final pid = (await conn.sendSimpleQuery('SELECT pg_backend_pid() AS pid'))
+          .toMaps()
+          .single['pid'] as int;
       await terminate(pid);
       await expectLater(
         conn.sendSimpleQuery('SELECT 1'),
@@ -305,11 +303,9 @@ void main() {
     test('ping returns false on a terminated backend', () async {
       final conn = await PostgresConnection.connect(_url);
       expect(await conn.ping(), isTrue);
-      final pid = int.parse(
-        (await conn.sendSimpleQuery('SELECT pg_backend_pid() AS pid'))
-            .toMaps()
-            .single['pid'] as String,
-      );
+      final pid = (await conn.sendSimpleQuery('SELECT pg_backend_pid() AS pid'))
+          .toMaps()
+          .single['pid'] as int;
       await terminate(pid);
       expect(await conn.ping(), isFalse);
       expect(conn.isBroken, isTrue);
