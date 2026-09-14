@@ -134,29 +134,99 @@ final result = await db.query('SELECT version()');
 print(result.first['version']);
 ```
 
-## Execute
+## Type Mapping
 
-Use `execute` for `INSERT`, `UPDATE`, `DELETE`:
+`query()` returns values already converted to Dart types based on the
+column's PostgreSQL type. You never parse strings yourself.
+
+| PostgreSQL | Dart |
+|---|---|
+| `smallint`, `integer`, `bigint`, `oid` | `int` |
+| `real`, `double precision` | `double` (`NaN`, `Infinity` preserved) |
+| `numeric`, `decimal` | `String` — arbitrary precision is not representable as `double`; parse it with your decimal library of choice |
+| `boolean` | `bool` |
+| `text`, `varchar`, `char`, `name`, `uuid` | `String` |
+| `timestamp`, `timestamptz`, `date` | `DateTime` in **UTC** (see below) |
+| `time`, `timetz`, `interval` | `String` |
+| `json`, `jsonb` | result of `jsonDecode` (`Map`, `List`, scalar, or `null`) |
+| `bytea` | `Uint8List` |
+| one-dimensional arrays of the above | `List<T?>` |
+| anything else (enums, ranges, nested arrays, ...) | `String` |
+
+### DateTime is always UTC
+
+Every `DateTime` the driver returns has `isUtc == true`.
+
+- `timestamp without time zone` is read as a UTC wall clock. Parameters are
+  sent in UTC too, so a `DateTime` round-trips to the same instant no matter
+  what the server's `TimeZone` setting is. Call `.toLocal()` when you need
+  local time.
+- `timestamptz` is normalized to UTC.
+- `date` becomes midnight UTC.
+
+`'infinity'::timestamp` cannot be represented as `DateTime` and raises a
+`PostgresDecodeException`.
+
+### Parameters
+
+Parameters accept the same types the driver returns, so a value read from
+one query can be passed to the next:
+
+| Dart | Sent as |
+|---|---|
+| `int`, `double`, `String` | as is |
+| `bool` | `t` / `f` |
+| `DateTime` | ISO 8601 in UTC |
+| `Uint8List` | `bytea` hex (`\x...`) |
+| `Map` | JSON |
+| `List` | PostgreSQL array literal (`{1,"a",NULL}`) |
+
+A Dart `List` is sent as a PostgreSQL **array**. To send a JSON array to a
+`json` / `jsonb` column, pass `jsonEncode(list)` as a `String`.
 
 ```dart
-// Insert
 await db.execute(
-  'INSERT INTO users (name, email) VALUES (:name, :email)',
-  params: {'name': 'Alice', 'email': 'alice@example.com'},
-);
-
-// Update
-await db.execute(
-  'UPDATE users SET name = :name WHERE id = :id',
-  params: {'name': 'Bob', 'id': 1},
-);
-
-// Delete
-await db.execute(
-  'DELETE FROM users WHERE id = :id',
-  params: {'id': 1},
+  r'INSERT INTO posts (tags, meta, cover) VALUES ($1, $2, $3)',
+  args: [
+    ['dart', 'postgres'],          // text[]
+    {'draft': true},               // jsonb
+    Uint8List.fromList(bytes),     // bytea
+  ],
 );
 ```
+
+### Decode errors
+
+When a value of a known type cannot be decoded, the query fails with a
+`PostgresDecodeException` naming the column, the type OID and the raw text.
+The connection stays usable. Unknown types are not an error; they are
+returned as `String`.
+
+## Execute
+
+Use `execute` for `INSERT`, `UPDATE`, `DELETE`. It returns the number of
+affected rows:
+
+```dart
+final inserted = await db.execute(
+  'INSERT INTO users (name, email) VALUES (:name, :email)',
+  params: {'name': 'Alice', 'email': 'alice@example.com'},
+); // 1
+
+final updated = await db.execute(
+  'UPDATE users SET name = :name WHERE id = :id',
+  params: {'name': 'Bob', 'id': 1},
+); // 1
+
+final deleted = await db.execute(
+  'DELETE FROM users WHERE id = :id',
+  params: {'id': 1},
+); // 1 or 0
+```
+
+Statements that report no row count (DDL, `SET`, ...) return 0. When one
+`execute` call runs several `;`-separated statements, the counts are summed.
+Use `query()` with `RETURNING` when you need the rows themselves.
 
 ## Transactions
 

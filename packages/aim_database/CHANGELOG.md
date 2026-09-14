@@ -1,3 +1,8 @@
+## Unreleased
+
+- Document the value contract on `Database` / `Transaction`: drivers return
+  Dart-typed values, `DateTime` is always UTC, `execute()` returns affected rows.
+
 ## 0.2.0
 
 See [Release Notes](https://github.com/aim-dart/aim/releases/tag/0.2.0)

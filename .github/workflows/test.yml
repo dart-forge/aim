@@ -64,6 +64,10 @@ jobs:
         working-directory: packages/aim_cli
         run: dart test
 
+      - name: Run tests for aim_postgres (unit)
+        working-directory: packages/aim_postgres
+        run: dart test test/unit/
+
       - name: Run tests for aim_server_form
         working-directory: packages/aim_server_form
         run: dart test
