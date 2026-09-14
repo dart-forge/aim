@@ -35,5 +35,5 @@ workspace:
 dev_dependencies:
   rask:
     git:
-      url: https://github.com/dosukoi-android/rask
+      url: https://github.com/dart-forge/rask
       path: packages/rask

@@ -1,4 +1,4 @@
-// rask.dart — aim's task configuration. See https://github.com/dosukoi-android/rask.
+// rask.dart — aim's task configuration. See https://github.com/dart-forge/rask.
 import 'package:rask/rask.dart';
 
 final config = defineConfig(tasks: [
