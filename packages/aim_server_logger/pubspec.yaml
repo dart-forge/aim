@@ -1,7 +1,7 @@
 name: aim_server_logger
 description: HTTP logging middleware for aim_server with request/response details and customizable output formats.
 version: 0.2.0
-repository: https://github.com/aim-dart/aim
+repository: https://github.com/dart-forge/aim
 resolution: workspace
 
 environment:

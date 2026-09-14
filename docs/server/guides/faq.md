@@ -424,15 +424,15 @@ await app.serve(port: 3000);
 
 - Check this FAQ
 - Read the [documentation](/)
-- Open an issue on [GitHub](https://github.com/aim-dart/aim/issues)
+- Open an issue on [GitHub](https://github.com/dart-forge/aim/issues)
 
 ### How do I contribute?
 
-See the [Contributing Guide](https://github.com/aim-dart/aim/blob/main/CONTRIBUTING.md).
+See the [Contributing Guide](https://github.com/dart-forge/aim/blob/main/CONTRIBUTING.md).
 
 ### Where can I report bugs?
 
-Report bugs on [GitHub Issues](https://github.com/aim-dart/aim/issues).
+Report bugs on [GitHub Issues](https://github.com/dart-forge/aim/issues).
 
 ## Next Steps
 
