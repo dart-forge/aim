@@ -4,7 +4,9 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:aim_postgres/src/types/command_complete_tag.dart';
 import 'package:aim_postgres/src/types/notice_message.dart';
+import 'package:aim_postgres/src/types/query_result_decoder.dart';
 import 'package:aim_postgres/src/util.dart';
 import 'package:crypto/crypto.dart';
 
@@ -961,9 +963,13 @@ extension PostgresConnectionMessageParser on PostgresConnection {
   /// Extracts query results from a sequence of messages.
   ///
   /// Parses RowDescription and DataRow messages to construct a [QueryResult].
+  /// Cell decoding runs here, after the whole response (through
+  /// ReadyForQuery) has been read, so a decode failure never leaves the
+  /// socket mid-message.
   QueryResult parseQueryResult(List<Uint8List> messages) {
     List<Map<String, dynamic>>? columns;
-    final rows = <List<dynamic>>[];
+    final rawRows = <List<Uint8List?>>[];
+    var affectedRows = 0;
 
     for (final msg in messages) {
       final messageType = PostgresMessageType.fromCode(
@@ -975,11 +981,13 @@ extension PostgresConnectionMessageParser on PostgresConnection {
           columns = parseRowDescription(msg.sublist(5));
           break;
         case PostgresMessageType.dataRow:
-          rows.add(parseDataRow(msg.sublist(5)));
+          rawRows.add(parseDataRow(msg.sublist(5)));
+          break;
+        case PostgresMessageType.commandComplete:
+          affectedRows += affectedRowsFromCommandTag(utf8.decode(msg.sublist(5)));
           break;
         case PostgresMessageType.errorResponse:
           throw QueryException(utf8.decode(msg.sublist(5)));
-        case PostgresMessageType.commandComplete:
         case PostgresMessageType.parseComplete:
         case PostgresMessageType.bindComplete:
         case PostgresMessageType.noData:
@@ -992,7 +1000,12 @@ extension PostgresConnectionMessageParser on PostgresConnection {
       }
     }
 
-    return QueryResult(columns: columns ?? [], rows: rows);
+    final resolvedColumns = columns ?? const <Map<String, dynamic>>[];
+    return QueryResult(
+      columns: resolvedColumns,
+      rows: decodeRows(resolvedColumns, rawRows),
+      affectedRows: affectedRows,
+    );
   }
 
   /// Parses a RowDescription message.
@@ -1054,16 +1067,17 @@ extension PostgresConnectionMessageParser on PostgresConnection {
 
   /// Parses a DataRow message.
   ///
-  /// Returns a list of column values. NULL values are represented as null.
-  /// Non-null values are decoded as UTF-8 strings.
-  List<dynamic> parseDataRow(Uint8List payload) {
+  /// Returns the raw bytes of each cell; NULL is `null`. Conversion to Dart
+  /// values happens in [parseQueryResult] via `decodeRows`, once the column
+  /// types are known.
+  List<Uint8List?> parseDataRow(Uint8List payload) {
     var offset = 0;
 
     // Number of columns
     final columnCount = bytesToInt16(payload.sublist(offset, offset + 2));
     offset += 2;
 
-    final values = <dynamic>[];
+    final values = <Uint8List?>[];
 
     for (var i = 0; i < columnCount; i++) {
       // Value length
@@ -1074,10 +1088,7 @@ extension PostgresConnectionMessageParser on PostgresConnection {
         // NULL value
         values.add(null);
       } else {
-        // Value data (text format)
-        final valueBytes = payload.sublist(offset, offset + valueLength);
-        final value = utf8.decode(valueBytes);
-        values.add(value);
+        values.add(payload.sublist(offset, offset + valueLength));
         offset += valueLength;
       }
     }
