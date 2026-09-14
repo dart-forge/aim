@@ -213,17 +213,10 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
       switch (field.columnMapper) {
         case PgColumnMapper.integer:
         case PgColumnMapper.serial:
-          if (field.isNullable) {
-            buffer.writeln(
-              '  ${field.fieldName}: row[\'${field.columnName}\'] != null ? int.parse(row[\'${field.columnName}\'] as String) : null,',
-            );
-            break;
-          } else {
-            buffer.writeln(
-              '  ${field.fieldName}: int.parse(row[\'${field.columnName}\'] as String),',
-            );
-            break;
-          }
+          buffer.writeln(
+            '  ${field.fieldName}: row[\'${field.columnName}\'] as int${field.isNullable ? '?' : ''},',
+          );
+          break;
         case PgColumnMapper.varchar:
         case PgColumnMapper.text:
         case PgColumnMapper.uuid:
@@ -232,17 +225,10 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
           );
           break;
         case PgColumnMapper.timestamp:
-          if (field.isNullable) {
-            buffer.writeln(
-              '  ${field.fieldName}: row[\'${field.columnName}\'] != null ? DateTime.parse(row[\'${field.columnName}\'] as String) : null,',
-            );
-            break;
-          } else {
-            buffer.writeln(
-              '  ${field.fieldName}: DateTime.parse(row[\'${field.columnName}\'] as String),',
-            );
-            break;
-          }
+          buffer.writeln(
+            '  ${field.fieldName}: row[\'${field.columnName}\'] as DateTime${field.isNullable ? '?' : ''},',
+          );
+          break;
         case PgColumnMapper.jsonb:
           buffer.writeln(
             '  ${field.fieldName}: row[\'${field.columnName}\'] as Map<String, dynamic>${field.isNullable ? '?' : ''},',
@@ -899,15 +885,9 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
     switch (field.columnMapper) {
       case PgColumnMapper.integer:
       case PgColumnMapper.serial:
-        if (field.isNullable) {
-          buffer.writeln(
-            "$indent${field.fieldName}: row['$alias'] != null ? int.parse(row['$alias'] as String) : null,",
-          );
-        } else {
-          buffer.writeln(
-            "$indent${field.fieldName}: int.parse(row['$alias'] as String),",
-          );
-        }
+        buffer.writeln(
+          "$indent${field.fieldName}: row['$alias'] as int${field.isNullable ? '?' : ''},",
+        );
       case PgColumnMapper.varchar:
       case PgColumnMapper.text:
       case PgColumnMapper.uuid:
@@ -915,15 +895,9 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
           "$indent${field.fieldName}: row['$alias'] as String${field.isNullable ? '?' : ''},",
         );
       case PgColumnMapper.timestamp:
-        if (field.isNullable) {
-          buffer.writeln(
-            "$indent${field.fieldName}: row['$alias'] != null ? DateTime.parse(row['$alias'] as String) : null,",
-          );
-        } else {
-          buffer.writeln(
-            "$indent${field.fieldName}: DateTime.parse(row['$alias'] as String),",
-          );
-        }
+        buffer.writeln(
+          "$indent${field.fieldName}: row['$alias'] as DateTime${field.isNullable ? '?' : ''},",
+        );
       case PgColumnMapper.jsonb:
         buffer.writeln(
           "$indent${field.fieldName}: row['$alias'] as Map<String, dynamic>${field.isNullable ? '?' : ''},",

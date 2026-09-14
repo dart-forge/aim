@@ -87,9 +87,9 @@ class UsersSelectBuilder extends QueryFuture<List<UsersRow>>
         return (
           id: row['id'] as String,
           name: row['name'] as String,
-          age: row['age'] != null ? int.parse(row['age'] as String) : null,
-          active: int.parse(row['active'] as String),
-          createdAt: DateTime.parse(row['created_at'] as String),
+          age: row['age'] as int?,
+          active: row['active'] as int,
+          createdAt: row['created_at'] as DateTime,
         );
       }).toList();
     });
@@ -465,7 +465,7 @@ class PostsSelectBuilder extends QueryFuture<List<PostsRow>>
           title: row['title'] as String,
           content: row['content'] as String,
           userId: row['user_id'] as String,
-          createdAt: DateTime.parse(row['created_at'] as String),
+          createdAt: row['created_at'] as DateTime,
         );
       }).toList();
     });
@@ -824,16 +824,14 @@ class PostsWithUserSelectBuilder extends QueryFuture<List<PostsWithUserRow>>
             title: row['posts_title'] as String,
             content: row['posts_content'] as String,
             userId: row['posts_user_id'] as String,
-            createdAt: DateTime.parse(row['posts_created_at'] as String),
+            createdAt: row['posts_created_at'] as DateTime,
           ),
           user: (
             id: row['users_id'] as String,
             name: row['users_name'] as String,
-            age: row['users_age'] != null
-                ? int.parse(row['users_age'] as String)
-                : null,
-            active: int.parse(row['users_active'] as String),
-            createdAt: DateTime.parse(row['users_created_at'] as String),
+            age: row['users_age'] as int?,
+            active: row['users_active'] as int,
+            createdAt: row['users_created_at'] as DateTime,
           ),
         );
       }).toList();
@@ -967,7 +965,7 @@ class ArticlesSelectBuilder extends QueryFuture<List<ArticlesRow>>
           id: row['id'] as String,
           title: row['title'] as String,
           authorId: row['author_id'] as String?,
-          createdAt: DateTime.parse(row['created_at'] as String),
+          createdAt: row['created_at'] as DateTime,
         );
       }).toList();
     });
@@ -1299,18 +1297,16 @@ class ArticlesWithAuthorSelectBuilder
             id: row['articles_id'] as String,
             title: row['articles_title'] as String,
             authorId: row['articles_author_id'] as String?,
-            createdAt: DateTime.parse(row['articles_created_at'] as String),
+            createdAt: row['articles_created_at'] as DateTime,
           ),
           author: row['users_id'] == null
               ? null
               : (
                   id: row['users_id'] as String,
                   name: row['users_name'] as String,
-                  age: row['users_age'] != null
-                      ? int.parse(row['users_age'] as String)
-                      : null,
-                  active: int.parse(row['users_active'] as String),
-                  createdAt: DateTime.parse(row['users_created_at'] as String),
+                  age: row['users_age'] as int?,
+                  active: row['users_active'] as int,
+                  createdAt: row['users_created_at'] as DateTime,
                 ),
         );
       }).toList();
@@ -1444,7 +1440,7 @@ class CommentsSelectBuilder extends QueryFuture<List<CommentsRow>>
           content: row['content'] as String,
           postId: row['post_id'] as String,
           userId: row['user_id'] as String,
-          createdAt: DateTime.parse(row['created_at'] as String),
+          createdAt: row['created_at'] as DateTime,
         );
       }).toList();
     });
@@ -1816,14 +1812,14 @@ class CommentsWithPostSelectBuilder
             content: row['comments_content'] as String,
             postId: row['comments_post_id'] as String,
             userId: row['comments_user_id'] as String,
-            createdAt: DateTime.parse(row['comments_created_at'] as String),
+            createdAt: row['comments_created_at'] as DateTime,
           ),
           post: (
             id: row['posts_id'] as String,
             title: row['posts_title'] as String,
             content: row['posts_content'] as String,
             userId: row['posts_user_id'] as String,
-            createdAt: DateTime.parse(row['posts_created_at'] as String),
+            createdAt: row['posts_created_at'] as DateTime,
           ),
         );
       }).toList();
@@ -1940,16 +1936,14 @@ class CommentsWithUserSelectBuilder
             content: row['comments_content'] as String,
             postId: row['comments_post_id'] as String,
             userId: row['comments_user_id'] as String,
-            createdAt: DateTime.parse(row['comments_created_at'] as String),
+            createdAt: row['comments_created_at'] as DateTime,
           ),
           user: (
             id: row['users_id'] as String,
             name: row['users_name'] as String,
-            age: row['users_age'] != null
-                ? int.parse(row['users_age'] as String)
-                : null,
-            active: int.parse(row['users_active'] as String),
-            createdAt: DateTime.parse(row['users_created_at'] as String),
+            age: row['users_age'] as int?,
+            active: row['users_active'] as int,
+            createdAt: row['users_created_at'] as DateTime,
           ),
         );
       }).toList();
@@ -2071,23 +2065,21 @@ class CommentsWithPostWithUserSelectBuilder
             content: row['comments_content'] as String,
             postId: row['comments_post_id'] as String,
             userId: row['comments_user_id'] as String,
-            createdAt: DateTime.parse(row['comments_created_at'] as String),
+            createdAt: row['comments_created_at'] as DateTime,
           ),
           post: (
             id: row['posts_id'] as String,
             title: row['posts_title'] as String,
             content: row['posts_content'] as String,
             userId: row['posts_user_id'] as String,
-            createdAt: DateTime.parse(row['posts_created_at'] as String),
+            createdAt: row['posts_created_at'] as DateTime,
           ),
           user: (
             id: row['users_id'] as String,
             name: row['users_name'] as String,
-            age: row['users_age'] != null
-                ? int.parse(row['users_age'] as String)
-                : null,
-            active: int.parse(row['users_active'] as String),
-            createdAt: DateTime.parse(row['users_created_at'] as String),
+            age: row['users_age'] as int?,
+            active: row['users_active'] as int,
+            createdAt: row['users_created_at'] as DateTime,
           ),
         );
       }).toList();
