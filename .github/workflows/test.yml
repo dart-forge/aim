@@ -49,14 +49,11 @@ jobs:
         run: dart pub get
 
       - name: Install rask
-        # rask is not on pub.dev yet. Its CLI package depends on the (also
-        # unpublished) rask library, so it cannot be installed straight from
-        # git; activating it from a checkout resolves the library inside that
-        # checkout's workspace instead.
+        # The command comes from pub.dev; the library rask.dart compiles
+        # against is pinned by the root pubspec (dev_dependencies: rask).
         run: |
-          git clone --depth 1 https://github.com/dart-forge/rask "$RUNNER_TEMP/rask"
-          dart pub global activate -s path "$RUNNER_TEMP/rask/packages/rask_cli"
-          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+          dart install rask_cli
+          echo "${XDG_DATA_HOME:-$HOME/.local/share}/dart/install/bin" >> "$GITHUB_PATH"
 
       - name: Analyze
         # rask.dart's analyze task adds --fatal-warnings; runs per package, in parallel.
