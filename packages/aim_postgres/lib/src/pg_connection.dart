@@ -76,13 +76,23 @@ enum PostgresMessageType {
 /// Contains the column metadata and row data returned from a PostgreSQL query.
 class QueryResult {
   /// Creates a query result with the given [columns] and [rows].
-  QueryResult({required this.columns, required this.rows});
+  QueryResult({
+    required this.columns,
+    required this.rows,
+    this.affectedRows = 0,
+  });
 
   /// Column metadata including names, types, and other attributes.
   final List<Map<String, dynamic>> columns;
 
   /// Row data as a list of lists, where each inner list represents a row.
+  /// Cell values are decoded Dart values (see `PgTypeDecoder`).
   final List<List<dynamic>> rows;
+
+  /// Rows affected as reported by CommandComplete (`INSERT 0 3` → 3). When a
+  /// Simple Query ran several statements this is the sum over all of them.
+  /// Commands that report no count (DDL, `BEGIN`, ...) contribute 0.
+  final int affectedRows;
 
   /// Converts row data to a list of maps.
   ///
