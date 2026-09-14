@@ -31,3 +31,9 @@ workspace:
   - packages/aim_orm_codegen/test/golden/fixtures/foreign_key
   - packages/aim_orm_codegen/test/golden/fixtures/multiple_fk
   - packages/aim_orm_codegen/test/golden/fixtures/nullable_fk
+
+dev_dependencies:
+  rask:
+    git:
+      url: https://github.com/dosukoi-android/rask
+      path: packages/rask
