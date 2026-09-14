@@ -48,58 +48,30 @@ jobs:
       - name: Get dependencies
         run: dart pub get
 
-      - name: Run tests for aim_core
-        working-directory: packages/aim_core
-        run: dart test
+      - name: Install rask
+        # rask is not on pub.dev yet. Its CLI package depends on the (also
+        # unpublished) rask library, so it cannot be installed straight from
+        # git; activating it from a checkout resolves the library inside that
+        # checkout's workspace instead.
+        run: |
+          git clone --depth 1 https://github.com/dart-forge/rask "$RUNNER_TEMP/rask"
+          dart pub global activate -s path "$RUNNER_TEMP/rask/packages/rask_cli"
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
 
-      - name: Run tests for aim_server
-        working-directory: packages/aim_server
-        run: dart test
+      - name: Analyze
+        # rask.dart's analyze task adds --fatal-warnings; runs per package, in parallel.
+        run: rask analyze -j 4
 
-      - name: Run tests for aim_edge
-        working-directory: packages/aim_edge
-        run: dart test
+      - name: Test
+        # The same twelve packages CI ran before rask; aim_postgres keeps its
+        # unit-only run below because its integration tests need Docker.
+        # -j 2 because dart test parallelises its own suites too.
+        run: >-
+          rask test -j 2
+          -F aim_core -F aim_server -F aim_edge -F aim_cli
+          -F aim_server_form -F aim_server_multipart -F aim_server_testing -F aim_server_static
+          -F aim_server_logger -F aim_server_sse -F aim_server_jwt -F aim_server_basic_auth
 
-      - name: Run tests for aim_cli
-        working-directory: packages/aim_cli
-        run: dart test
-
-      - name: Run tests for aim_postgres (unit)
+      - name: Test aim_postgres (unit only, no Docker)
         working-directory: packages/aim_postgres
         run: dart test test/unit/
-
-      - name: Run tests for aim_server_form
-        working-directory: packages/aim_server_form
-        run: dart test
-
-      - name: Run tests for aim_server_multipart
-        working-directory: packages/aim_server_multipart
-        run: dart test
-
-      - name: Run tests for aim_server_testing
-        working-directory: packages/aim_server_testing
-        run: dart test
-
-      - name: Run tests for aim_server_static
-        working-directory: packages/aim_server_static
-        run: dart test
-
-      - name: Run tests for aim_server_logger
-        working-directory: packages/aim_server_logger
-        run: dart test
-
-      - name: Run tests for aim_server_sse
-        working-directory: packages/aim_server_sse
-        run: dart test
-
-      - name: Run tests for aim_server_jwt
-        working-directory: packages/aim_server_jwt
-        run: dart test
-
-      - name: Run tests for aim_server_basic_auth
-        working-directory: packages/aim_server_basic_auth
-        run: dart test
-
-      - name: Analyze code
-        run: dart analyze --fatal-warnings
-
