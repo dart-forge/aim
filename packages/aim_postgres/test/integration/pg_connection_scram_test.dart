@@ -19,7 +19,7 @@ void main() {
     test('connects successfully with SCRAM-SHA-256', () async {
       final result = await conn.sendSimpleQuery('SELECT 1 as num');
       expect(result.rows.length, 1);
-      expect(result.rows[0][0], '1');
+      expect(result.rows[0][0], 1);
     });
 
     test('executes SELECT query', () async {
@@ -28,7 +28,7 @@ void main() {
       );
       expect(result.rows.length, 1);
       expect(result.rows[0][0], 'hello');
-      expect(result.rows[0][1], '42');
+      expect(result.rows[0][1], 42);
     });
 
     test('executes CREATE TABLE', () async {
@@ -128,7 +128,7 @@ void main() {
 
       expect(result.rows.length, 1);
       expect(result.rows[0][1], 'Alice');
-      expect(result.rows[0][2], '30');
+      expect(result.rows[0][2], 30);
     });
 
     test('executes INSERT with parameters', () async {
@@ -138,7 +138,7 @@ void main() {
       );
 
       expect(result.rows.length, 1);
-      expect(int.parse(result.rows[0][0]), greaterThan(0));
+      expect(result.rows[0][0] as int, greaterThan(0));
     });
 
     test('executes UPDATE with parameters', () async {
@@ -158,7 +158,7 @@ void main() {
       );
 
       expect(result.rows.length, 1);
-      expect(result.rows[0][0], '40');
+      expect(result.rows[0][0], 40);
     });
 
     test('executes DELETE with parameters', () async {
@@ -207,7 +207,7 @@ void main() {
       );
 
       expect(result.rows.length, 1);
-      expect(int.parse(result.rows[0][0]), 2);
+      expect(result.rows[0][0] as int, 2);
     });
   });
 
@@ -264,8 +264,8 @@ void main() {
       final result1 = await conn1.sendSimpleQuery('SELECT 1');
       final result2 = await conn2.sendSimpleQuery('SELECT 2');
 
-      expect(result1.rows[0][0], '1');
-      expect(result2.rows[0][0], '2');
+      expect(result1.rows[0][0], 1);
+      expect(result2.rows[0][0], 2);
 
       await conn1.close();
       await conn2.close();

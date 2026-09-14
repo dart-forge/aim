@@ -189,7 +189,7 @@ void main() {
         args: ['Headphones'],
       );
 
-      expect(products[0]['in_stock'], 'f');
+      expect(products[0]['in_stock'], isFalse);
     });
 
     test('DELETE with positional parameters', () async {
@@ -303,8 +303,7 @@ void main() {
         args: ['Webcam', 89.99, true],
       );
 
-      // Currently returns 0, but verify data was inserted
-      expect(rowCount, 0); // TODO: Parse CommandComplete to get actual row count
+      expect(rowCount, 1);
 
       final products = await db.query(
         'SELECT * FROM test_products WHERE name = \$1',
@@ -325,7 +324,7 @@ void main() {
         params: {'price': 69.99, 'name': 'Speaker'},
       );
 
-      expect(rowCount, 0); // TODO: Parse CommandComplete
+      expect(rowCount, 1);
 
       final products = await db.query(
         'SELECT price FROM test_products WHERE name = \$1',
@@ -345,7 +344,7 @@ void main() {
         args: ['ToDelete'],
       );
 
-      expect(rowCount, 0); // TODO: Parse CommandComplete
+      expect(rowCount, 1);
 
       final products = await db.query(
         'SELECT * FROM test_products WHERE name = \$1',
@@ -359,7 +358,7 @@ void main() {
         "DELETE FROM test_products WHERE name = 'Webcam'",
       );
 
-      expect(rowCount, 0); // TODO: Parse CommandComplete
+      expect(rowCount, 1);
     });
 
     test('execute throws ArgumentError when both params and args provided', () async {

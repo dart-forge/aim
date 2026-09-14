@@ -81,7 +81,7 @@ class UsersSelectBuilder extends QueryFuture<List<UsersRow>>
         return (
           id: row['id'] as String,
           name: row['name'] as String,
-          createdAt: DateTime.parse(row['created_at'] as String),
+          createdAt: row['created_at'] as DateTime,
         );
       }).toList();
     });

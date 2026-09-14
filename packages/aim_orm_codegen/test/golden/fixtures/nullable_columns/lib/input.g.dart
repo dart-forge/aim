@@ -79,12 +79,10 @@ class ProductsSelectBuilder extends QueryFuture<List<ProductsRow>>
     return db.query(sql, params: params).then((result) {
       return result.map((row) {
         return (
-          id: int.parse(row['id'] as String),
+          id: row['id'] as int,
           name: row['name'] as String,
           description: row['description'] as String?,
-          price: row['price'] != null
-              ? int.parse(row['price'] as String)
-              : null,
+          price: row['price'] as int?,
         );
       }).toList();
     });

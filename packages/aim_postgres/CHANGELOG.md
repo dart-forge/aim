@@ -1,3 +1,30 @@
+## Unreleased
+
+### Breaking
+
+- Query results are now typed. Values are decoded by PostgreSQL type OID:
+  integers → `int`, floats → `double`, `boolean` → `bool`, `json`/`jsonb` →
+  `jsonDecode` result, `bytea` → `Uint8List`, one-dimensional arrays →
+  `List`. `numeric` stays `String`. Unknown types stay `String`.
+  Code that did `int.parse(row['id'] as String)` must become `row['id'] as int`.
+- `DateTime` values are always UTC (`isUtc == true`). `timestamp without
+  time zone` is read as a UTC wall clock, matching how parameters are sent;
+  previously it was read in the local zone, which shifted values on servers
+  whose `TimeZone` was not UTC.
+- `execute()` returns the affected row count from CommandComplete instead of
+  always `0`. Multiple statements in one call are summed.
+- `PostgresConnectionMessageParser.parseDataRow` returns raw `Uint8List?`
+  cells instead of `String?`.
+
+### Features
+
+- Parameters accept `List` (PostgreSQL array literal), `Map` (JSON) and
+  `Uint8List` (`bytea`), so values read from one query can be passed to the next.
+- `PostgresDecodeException` (exported) is thrown when a value of a known type
+  cannot be decoded (for example `'infinity'::timestamp`). The connection
+  stays usable.
+- `QueryResult.affectedRows`.
+
 ## 0.2.0
 
 ### Features

@@ -1,3 +1,12 @@
+## Unreleased
+
+### Breaking
+
+- Generated row mappers cast typed driver values (`row['id'] as int`,
+  `row['created_at'] as DateTime`) instead of parsing strings. Requires the
+  matching `aim_postgres` release; regenerate with `build_runner`.
+- `DateTime` fields are UTC (see `aim_postgres`).
+
 ## 0.2.0
 
 - Requires analyzer ^14.0.0, source_gen ^4.3.0, build ^4.0.11; compatible with build_runner 2.16.

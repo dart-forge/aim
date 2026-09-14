@@ -48,14 +48,14 @@ void main() {
 
       expect(rows.length, 3);
       expect(rows[0]['name'], 'Alice');
-      expect(rows[0]['age'], '30');
-      expect(rows[0]['active'], 't');
+      expect(rows[0]['age'], 30);
+      expect(rows[0]['active'], isTrue);
       expect(rows[1]['name'], 'Bob');
-      expect(rows[1]['age'], '25');
-      expect(rows[1]['active'], 'f');
+      expect(rows[1]['age'], 25);
+      expect(rows[1]['active'], isFalse);
       expect(rows[2]['name'], 'Charlie');
       expect(rows[2]['age'], null); // NULL値
-      expect(rows[2]['active'], 't');
+      expect(rows[2]['active'], isTrue);
     });
 
     test('SELECT with columns metadata', () async {
@@ -79,7 +79,7 @@ void main() {
 
       expect(rows.length, 1);
       expect(rows[0]['name'], 'Dave');
-      expect(rows[0]['age'], '40');
+      expect(rows[0]['age'], 40);
     });
 
     test('UPDATE works correctly', () async {
@@ -90,7 +90,7 @@ void main() {
       final selectResult = await conn.sendSimpleQuery(
         "SELECT age FROM test_users WHERE name = 'Alice'",
       );
-      expect(selectResult.toMaps()[0]['age'], '99');
+      expect(selectResult.toMaps()[0]['age'], 99);
 
       // 元に戻す
       await conn.sendSimpleQuery(
@@ -131,7 +131,7 @@ void main() {
 
       expect(rows.length, 1);
       expect(rows[0]['name'], 'Alice');
-      expect(rows[0]['age'], '30');
+      expect(rows[0]['age'], 30);
     });
 
     test('SELECT with multiple parameters', () async {
@@ -159,8 +159,8 @@ void main() {
 
       expect(rows.length, 1);
       expect(rows[0]['name'], 'Extended');
-      expect(rows[0]['age'], '50');
-      expect(rows[0]['active'], 't');
+      expect(rows[0]['age'], 50);
+      expect(rows[0]['active'], isTrue);
     });
 
     test('handles NULL parameters', () async {
@@ -188,8 +188,8 @@ void main() {
       );
       final row = result.toMaps()[0];
       expect(row['name'], 'TypeTest');
-      expect(row['age'], '35');
-      expect(row['active'], 'f');
+      expect(row['age'], 35);
+      expect(row['active'], isFalse);
     });
 
     test('handles empty result with parameters', () async {
@@ -210,7 +210,7 @@ void main() {
         'SELECT age FROM test_users WHERE name = \$1',
         ['Bob'],
       );
-      expect(selectResult.toMaps()[0]['age'], '88');
+      expect(selectResult.toMaps()[0]['age'], 88);
 
       // 元に戻す
       await conn.sendExtendedQuery(
@@ -416,7 +416,7 @@ void main() {
       // Should be able to execute new queries after cancellation
       final result = await testConn.sendSimpleQuery('SELECT 42 as answer');
       expect(result.rows.length, 1);
-      expect(result.rows[0][0], '42');
+      expect(result.rows[0][0], 42);
 
       await testConn.close();
     });

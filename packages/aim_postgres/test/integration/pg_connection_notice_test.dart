@@ -153,7 +153,7 @@ void main() {
       );
 
       expect(result.rows.length, 1);
-      expect(result.rows[0][0], '1');
+      expect(result.rows[0][0], 1);
       expect(result.rows[0][1], 'test');
 
       // Clean up

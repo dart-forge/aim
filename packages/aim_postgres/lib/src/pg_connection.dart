@@ -4,7 +4,10 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:aim_postgres/src/types/command_complete_tag.dart';
 import 'package:aim_postgres/src/types/notice_message.dart';
+import 'package:aim_postgres/src/types/parameter_encoder.dart';
+import 'package:aim_postgres/src/types/query_result_decoder.dart';
 import 'package:aim_postgres/src/util.dart';
 import 'package:crypto/crypto.dart';
 
@@ -76,13 +79,25 @@ enum PostgresMessageType {
 /// Contains the column metadata and row data returned from a PostgreSQL query.
 class QueryResult {
   /// Creates a query result with the given [columns] and [rows].
-  QueryResult({required this.columns, required this.rows});
+  QueryResult({
+    required this.columns,
+    required this.rows,
+    this.affectedRows = 0,
+  });
 
   /// Column metadata including names, types, and other attributes.
   final List<Map<String, dynamic>> columns;
 
   /// Row data as a list of lists, where each inner list represents a row.
+  /// Cell values are decoded Dart values (see `PgTypeDecoder`). When a
+  /// Simple Query ran several `;`-separated statements, these are the rows
+  /// of the LAST row-returning statement only.
   final List<List<dynamic>> rows;
+
+  /// Rows affected as reported by CommandComplete (`INSERT 0 3` → 3). When a
+  /// Simple Query ran several statements this is the sum over all of them.
+  /// Commands that report no count (DDL, `BEGIN`, ...) contribute 0.
+  final int affectedRows;
 
   /// Converts row data to a list of maps.
   ///
@@ -249,11 +264,13 @@ class PostgresConnection {
   bool _isClosed = false;
   String _transactionStatus = 'I';
 
-  /// `true` once a query round-trip failed for any reason other than a
-  /// server-reported [QueryException] (socket error, unexpected end of
-  /// stream, malformed message), or once [ping] failed. A [QueryException]
-  /// leaves this false: the server returned ReadyForQuery, so the connection
-  /// is intact.
+  /// `true` once sending a request or reading the response up to
+  /// ReadyForQuery failed (socket error, unexpected end of stream,
+  /// malformed message), or once [ping] failed. Any failure after the full
+  /// response was received — a server-reported [QueryException], a
+  /// [PostgresDecodeException], or any other problem found while parsing
+  /// the already-buffered messages — leaves this false: the server
+  /// returned ReadyForQuery, so the connection is intact (A-046).
   bool get isBroken => _isBroken;
 
   /// `true` once [close] has been called.
@@ -276,28 +293,34 @@ class PostgresConnection {
   }
 
   /// Sends a request via [send], then reads until ReadyForQuery and parses
-  /// the result. Any failure other than a server-reported [QueryException]
-  /// marks the connection broken.
+  /// the result. Only a send/receive failure (the socket may be left
+  /// mid-message) marks the connection broken; any failure while parsing
+  /// the already-buffered response leaves it healthy.
   Future<QueryResult> _roundTrip(Future<void> Function() send) {
     return _serialized(() async {
+      final List<Uint8List> messages;
       try {
         await send();
-        final messages = await _receiveUntilReady();
-        // The last message is ReadyForQuery; its single payload byte is the
-        // backend transaction status ('I' / 'T' / 'E').
-        final last = messages.last;
-        if (String.fromCharCode(last[0]) ==
-                PostgresMessageType.readyForQuery.code &&
-            last.length > 5) {
-          _transactionStatus = String.fromCharCode(last[5]);
-        }
-        return parseQueryResult(messages);
-      } on QueryException {
-        rethrow;
+        messages = await _receiveUntilReady();
       } catch (_) {
+        // The socket may be mid-message: never reuse this connection.
         _isBroken = true;
         rethrow;
       }
+      // Everything below runs with the socket at a message boundary
+      // (ReadyForQuery consumed), so no failure here can break the
+      // connection: server errors (QueryException), decode failures
+      // (PostgresDecodeException) and protocol-shape surprises all leave it
+      // healthy and reusable.
+      // The last message is ReadyForQuery; its single payload byte is the
+      // backend transaction status ('I' / 'T' / 'E').
+      final last = messages.last;
+      if (String.fromCharCode(last[0]) ==
+              PostgresMessageType.readyForQuery.code &&
+          last.length > 5) {
+        _transactionStatus = String.fromCharCode(last[5]);
+      }
+      return parseQueryResult(messages);
     });
   }
 
@@ -951,9 +974,20 @@ extension PostgresConnectionMessageParser on PostgresConnection {
   /// Extracts query results from a sequence of messages.
   ///
   /// Parses RowDescription and DataRow messages to construct a [QueryResult].
+  /// Cell decoding runs here, after the whole response (through
+  /// ReadyForQuery) has been read, so a decode failure never leaves the
+  /// socket mid-message.
+  ///
+  /// A Simple Query can carry several `;`-separated statements, each with
+  /// its own RowDescription/DataRow/CommandComplete sequence. [columns] and
+  /// [QueryResult.rows] reflect only the LAST row-returning statement: a new
+  /// RowDescription discards any rows collected for a previous statement.
+  /// [QueryResult.affectedRows] is unaffected by this — it keeps summing the
+  /// CommandComplete tag of every statement.
   QueryResult parseQueryResult(List<Uint8List> messages) {
     List<Map<String, dynamic>>? columns;
-    final rows = <List<dynamic>>[];
+    var rawRows = <List<Uint8List?>>[];
+    var affectedRows = 0;
 
     for (final msg in messages) {
       final messageType = PostgresMessageType.fromCode(
@@ -962,14 +996,19 @@ extension PostgresConnectionMessageParser on PostgresConnection {
 
       switch (messageType) {
         case PostgresMessageType.rowDescription:
+          // A later statement in the same Simple Query: its rows replace
+          // whatever the previous statement had accumulated.
+          if (columns != null) rawRows = <List<Uint8List?>>[];
           columns = parseRowDescription(msg.sublist(5));
           break;
         case PostgresMessageType.dataRow:
-          rows.add(parseDataRow(msg.sublist(5)));
+          rawRows.add(parseDataRow(msg.sublist(5)));
+          break;
+        case PostgresMessageType.commandComplete:
+          affectedRows += affectedRowsFromCommandTag(utf8.decode(msg.sublist(5)));
           break;
         case PostgresMessageType.errorResponse:
           throw QueryException(utf8.decode(msg.sublist(5)));
-        case PostgresMessageType.commandComplete:
         case PostgresMessageType.parseComplete:
         case PostgresMessageType.bindComplete:
         case PostgresMessageType.noData:
@@ -982,7 +1021,12 @@ extension PostgresConnectionMessageParser on PostgresConnection {
       }
     }
 
-    return QueryResult(columns: columns ?? [], rows: rows);
+    final resolvedColumns = columns ?? const <Map<String, dynamic>>[];
+    return QueryResult(
+      columns: resolvedColumns,
+      rows: decodeRows(resolvedColumns, rawRows),
+      affectedRows: affectedRows,
+    );
   }
 
   /// Parses a RowDescription message.
@@ -1044,16 +1088,17 @@ extension PostgresConnectionMessageParser on PostgresConnection {
 
   /// Parses a DataRow message.
   ///
-  /// Returns a list of column values. NULL values are represented as null.
-  /// Non-null values are decoded as UTF-8 strings.
-  List<dynamic> parseDataRow(Uint8List payload) {
+  /// Returns the raw bytes of each cell; NULL is `null`. Conversion to Dart
+  /// values happens in [parseQueryResult] via `decodeRows`, once the column
+  /// types are known.
+  List<Uint8List?> parseDataRow(Uint8List payload) {
     var offset = 0;
 
     // Number of columns
     final columnCount = bytesToInt16(payload.sublist(offset, offset + 2));
     offset += 2;
 
-    final values = <dynamic>[];
+    final values = <Uint8List?>[];
 
     for (var i = 0; i < columnCount; i++) {
       // Value length
@@ -1064,10 +1109,7 @@ extension PostgresConnectionMessageParser on PostgresConnection {
         // NULL value
         values.add(null);
       } else {
-        // Value data (text format)
-        final valueBytes = payload.sublist(offset, offset + valueLength);
-        final value = utf8.decode(valueBytes);
-        values.add(value);
+        values.add(payload.sublist(offset, offset + valueLength));
         offset += valueLength;
       }
     }
@@ -1264,33 +1306,7 @@ extension PostgresConnectionExtendedQuery on PostgresConnection {
     await _socket.flush();
   }
 
-  /// Encodes a parameter value to text format.
-  ///
-  /// Returns null for null values. Supports int, double, String, bool, and
-  /// DateTime types. DateTime values are encoded as ISO 8601 strings.
-  Uint8List? _encodeParameter(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-
-    String stringValue;
-
-    if (value is int) {
-      stringValue = value.toString();
-    } else if (value is double) {
-      stringValue = value.toString();
-    } else if (value is String) {
-      stringValue = value;
-    } else if (value is bool) {
-      stringValue = value ? 't' : 'f';
-    } else if (value is DateTime) {
-      // ISO 8601 format
-      stringValue = value.toUtc().toIso8601String();
-    } else {
-      // Fallback: toString()
-      stringValue = value.toString();
-    }
-
-    return utf8.encode(stringValue);
-  }
+  /// Encodes a parameter value to text format. See [encodeParameterText]
+  /// for the supported types.
+  Uint8List? _encodeParameter(dynamic value) => encodeParameter(value);
 }

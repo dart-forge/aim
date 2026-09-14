@@ -37,3 +37,4 @@ library;
 export 'src/pg_connection.dart';
 export 'src/pg_database.dart';
 export 'src/pool/pool.dart' show PoolOptions, PoolStats, PoolTimeoutException;
+export 'src/types/query_result_decoder.dart' show PostgresDecodeException;
