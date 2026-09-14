@@ -18,7 +18,9 @@ void main(List<String> args) {
   }
   _updateCliTemplates(newVersion);
   _updateDocsVersion(newVersion);
-  stdout.writeln('Done. Next: review `git diff`, commit, tag $newVersion, then `rask publish` and `dart run release:create_release $newVersion`.');
+  stdout.writeln(
+    'Done. Next: review `git diff`, commit, tag $newVersion, then `rask publish` and `dart run release:create_release $newVersion`.',
+  );
 }
 
 bool _isValidVersion(String version) {
@@ -47,9 +49,7 @@ void _updateCliTemplates(String newVersion) {
     final depName = match[2]!;
     final oldVersion = match[3]!;
     if (oldVersion != newVersion) {
-      stdout.writeln(
-        'aim_cli templates: $depName ^$oldVersion → ^$newVersion',
-      );
+      stdout.writeln('aim_cli templates: $depName ^$oldVersion → ^$newVersion');
     }
   }
 
