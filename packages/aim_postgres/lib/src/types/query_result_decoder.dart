@@ -8,7 +8,8 @@ import 'package:aim_postgres/src/types/pg_type_decoder.dart';
 /// JSON, or bytea in the legacy escape format).
 ///
 /// The whole query fails; the connection itself stays healthy because
-/// decoding happens after ReadyForQuery has been read (A-046).
+/// decoding happens after ReadyForQuery has been read, so a value this
+/// cannot decode fails the query without breaking the connection.
 class PostgresDecodeException implements Exception {
   PostgresDecodeException({
     required this.columnName,

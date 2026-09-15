@@ -90,7 +90,7 @@ void main() {
     });
   });
 
-  group('parameters round-trip (A-045)', () {
+  group('parameters round-trip', () {
     test('List, Map, Uint8List, DateTime, bool written with args and read back',
         () async {
       final at = DateTime.utc(2024, 5, 6, 7, 8, 9);
@@ -138,7 +138,7 @@ void main() {
     });
   });
 
-  group('DateTime is UTC regardless of session time zone (A-044)', () {
+  group('DateTime is UTC regardless of session time zone', () {
     test('TIMESTAMP round-trips to the same instant with TIME ZONE Asia/Tokyo',
         () async {
       final at = DateTime.utc(2024, 3, 4, 5, 6, 7);
@@ -172,7 +172,7 @@ void main() {
     });
   });
 
-  group('execute() returns affected rows (A-047)', () {
+  group('execute() returns affected rows', () {
     test('INSERT / UPDATE / DELETE counts', () async {
       expect(
         await db.execute('INSERT INTO typed_results (i4) VALUES (1), (2), (3)'),
@@ -230,7 +230,7 @@ void main() {
     });
   });
 
-  group('decode failures (A-046)', () {
+  group('decode failures fail the query and keep the connection', () {
     test("'infinity'::timestamp throws PostgresDecodeException and the connection survives",
         () async {
       final before = db.poolStats.destroyed;
@@ -242,7 +242,8 @@ void main() {
               .having((e) => e.rawValue, 'rawValue', 'infinity'),
         ),
       );
-      // The pool must not have discarded the connection (A-046).
+      // A decode failure is not a protocol failure: the pool must keep the
+      // connection rather than discarding it.
       final row = (await db.query('SELECT 1 AS v')).single;
       expect(row['v'], 1);
       expect(db.poolStats.destroyed, before);

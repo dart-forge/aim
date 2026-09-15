@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:aim_postgres/src/util.dart';
 
-/// Encodes a Dart value as a text-format query parameter (A-045).
+/// Encodes a Dart value as a text-format query parameter.
 ///
 /// Symmetric with `PgTypeDecoder`: every type the driver returns can be sent
 /// back. Returns `null` for `null` (sent as SQL NULL).

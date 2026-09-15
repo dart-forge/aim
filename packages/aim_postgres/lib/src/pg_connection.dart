@@ -270,7 +270,8 @@ class PostgresConnection {
   /// response was received — a server-reported [QueryException], a
   /// [PostgresDecodeException], or any other problem found while parsing
   /// the already-buffered messages — leaves this false: the server
-  /// returned ReadyForQuery, so the connection is intact (A-046).
+  /// returned ReadyForQuery, so the connection is intact and the pool can
+  /// keep it.
   bool get isBroken => _isBroken;
 
   /// `true` once [close] has been called.
