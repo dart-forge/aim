@@ -51,9 +51,13 @@ jobs:
       - name: Install rask
         # The command comes from pub.dev; the library rask.dart compiles
         # against is pinned by the root pubspec (dev_dependencies: rask).
+        # dart install puts binaries under the Dart state directory
+        # ($HOME/.local/state/Dart on Linux); the test fails loudly if that moves.
         run: |
           dart install rask_cli
-          echo "${XDG_DATA_HOME:-$HOME/.local/share}/dart/install/bin" >> "$GITHUB_PATH"
+          bin="${XDG_STATE_HOME:-$HOME/.local/state}/Dart/install/bin"
+          test -x "$bin/rask"
+          echo "$bin" >> "$GITHUB_PATH"
 
       - name: Analyze
         # rask.dart's analyze task adds --fatal-warnings; runs per package, in parallel.
