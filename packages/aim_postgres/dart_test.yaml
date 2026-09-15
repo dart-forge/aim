@@ -1,0 +1,3 @@
+tags:
+  integration:
+    skip: "Needs Postgres servers on localhost (see test/integration/docker-compose.yml, ports 5433/5434/5436). Run with: dart test -t integration --run-skipped"

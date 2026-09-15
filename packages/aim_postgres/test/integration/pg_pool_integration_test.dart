@@ -1,3 +1,6 @@
+@Tags(['integration'])
+library;
+
 import 'package:aim_postgres/aim_postgres.dart';
 import 'package:test/test.dart';
 

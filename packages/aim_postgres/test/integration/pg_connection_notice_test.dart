@@ -1,3 +1,6 @@
+@Tags(['integration'])
+library;
+
 import 'package:aim_postgres/src/pg_connection.dart';
 import 'package:aim_postgres/src/types/notice_message.dart';
 import 'package:test/test.dart';
