@@ -48,28 +48,34 @@ jobs:
       - name: Get dependencies
         run: dart pub get
 
-      - name: Install rask
-        # The command comes from pub.dev; the library rask.dart compiles
-        # against is pinned by the root pubspec (dev_dependencies: rask).
-        # dart install puts binaries under the Dart state directory
-        # ($HOME/.local/state/Dart on Linux); the test fails loudly if that moves.
-        run: |
-          dart install rask_cli
-          bin="${XDG_STATE_HOME:-$HOME/.local/state}/Dart/install/bin"
-          test -x "$bin/rask"
-          echo "$bin" >> "$GITHUB_PATH"
-
       - name: Analyze
-        # rask.dart's analyze task adds --fatal-warnings; runs per package, in parallel.
-        run: rask analyze -j 4
+        run: dart analyze --fatal-warnings .
 
       - name: Test
-        # No filters: every package's self-contained tests run. Suites that
-        # need a Postgres server or a download are tagged `integration` (or
-        # `slow` for the build_runner golden tests) and skipped by default
-        # via each package's dart_test.yaml.
-        # -j 2 because dart test parallelises its own suites too.
-        run: rask test -j 2
+        # Runs `dart test` in every package that has one, skipping any
+        # directory with no test/ folder or with no *_test.dart file in it
+        # (dart test exits 79 on an empty suite, which would fail the job
+        # for nothing). Suites that need a Postgres server or a download are
+        # tagged `integration` (or `slow` for the build_runner golden tests)
+        # and skipped by default via each package's dart_test.yaml.
+        run: |
+          fail=0
+          for dir in packages/*/ examples/*/ tools/*/; do
+            dir="${dir%/}"
+            if [ ! -d "$dir/test" ]; then
+              continue
+            fi
+            if ! find "$dir/test" -name '*_test.dart' -print -quit | grep -q .; then
+              continue
+            fi
+            echo "::group::dart test in $dir"
+            if ! (cd "$dir" && dart test); then
+              echo "FAILED: $dir"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $fail
 
       - name: Test aim_edge integration (wrangler dev)
         # The one tagged suite CI is equipped for: Node is set up and
