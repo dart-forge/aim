@@ -56,5 +56,5 @@ specs/
 .wrangler/
 .vercel/
 
-# local dependency overrides (e.g. rask from a sibling checkout)
+# local dependency overrides (e.g. a sibling checkout of a dependency)
 pubspec_overrides.yaml
