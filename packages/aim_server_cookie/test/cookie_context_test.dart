@@ -241,6 +241,36 @@ void main() {
         expect(await response.bodyAsString(), equals('true'));
       },
     );
+
+    test('a value that needed encoding survives a set-then-read round trip '
+        'through the test client', () async {
+      const original = 'hello world; foo=bar, "quoted"';
+      final app = Aim()
+        ..get('/set', (c) async {
+          c.setCookie('message', original);
+          return c.text('set');
+        })
+        ..get('/get', (c) async => c.text(c.getCookie('message') ?? 'null'));
+      final client = TestClient(app);
+
+      final setResponse = await client.get('/set');
+      final setCookieHeader = setResponse.header('set-cookie')!;
+      // Only the `name=value` portion is relevant to the request Cookie
+      // header; a real browser would strip the Set-Cookie attributes the
+      // same way before sending the cookie back.
+      final nameValue = setCookieHeader.split(';').first;
+      expect(
+        nameValue,
+        equals('message=hello%20world%3B%20foo%3Dbar%2C%20%22quoted%22'),
+      );
+
+      final getResponse = await client.get(
+        '/get',
+        headers: {'cookie': nameValue},
+      );
+
+      expect(await getResponse.bodyAsString(), equals(original));
+    });
   });
 
   group('deleteCookie', () {

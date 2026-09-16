@@ -8,7 +8,9 @@ extension CookieContext on Context {
   /// `name=value`, with whitespace around a pair trimmed. A pair with no
   /// `=` is skipped. When the same name appears twice, the first one wins,
   /// which is the order a browser sends the most specific cookie in.
-  /// Returns an empty map when the request has no `Cookie` header at all.
+  /// Values are percent-decoded to match the encoding [setCookie] applies
+  /// when writing them. Returns an empty map when the request has no
+  /// `Cookie` header at all.
   ///
   /// Example:
   /// ```dart
@@ -32,7 +34,7 @@ extension CookieContext on Context {
       if (result.containsKey(name)) continue;
 
       final value = pair.substring(separator + 1);
-      result[name] = value;
+      result[name] = Uri.decodeComponent(value);
     }
     return result;
   }
@@ -52,6 +54,11 @@ extension CookieContext on Context {
   /// Sets a cookie in the response.
   ///
   /// Multiple cookies can be set by calling this method multiple times.
+  ///
+  /// [value] is percent-encoded before it is written, so it survives
+  /// round-tripping through [cookies] / [getCookie] even when it contains
+  /// characters such as `;`, `,`, whitespace, or a quote that would
+  /// otherwise be ambiguous or invalid inside a `Set-Cookie` header.
   ///
   /// Example:
   /// ```dart
@@ -79,7 +86,7 @@ extension CookieContext on Context {
 
   /// Builds a Set-Cookie header value from name, value, and options.
   String _buildCookieString(String name, String value, CookieOptions? options) {
-    final buffer = StringBuffer('$name=$value');
+    final buffer = StringBuffer('$name=${Uri.encodeComponent(value)}');
 
     if (options != null) {
       if (options.path != null) {
