@@ -47,7 +47,7 @@ void main() {
   });
 
   group('PgTypeDecoder.decode numeric', () {
-    test('numeric stays String (A-043)', () {
+    test('numeric stays String, by contract and not by accident', () {
       expect(PgTypeDecoder.decode(PgTypeOid.numeric, '1234.5600'), '1234.5600');
     });
   });
@@ -82,7 +82,7 @@ void main() {
     });
   });
 
-  group('PgTypeDecoder.decode date/time (A-044: always UTC)', () {
+  group('PgTypeDecoder.decode date/time (always UTC)', () {
     test('timestamp without time zone is read as UTC wall clock', () {
       final v =
           PgTypeDecoder.decode(PgTypeOid.timestamp, '2024-01-02 03:04:05.123456')

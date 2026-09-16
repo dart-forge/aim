@@ -41,7 +41,7 @@ void main() {
     });
   });
 
-  group('encodeParameterText List (array literal, A-045)', () {
+  group('encodeParameterText List (array literal by default)', () {
     test('numbers and bools unquoted, null as NULL', () {
       expect(encodeParameterText([1, 2, null]), '{1,2,NULL}');
       expect(encodeParameterText([true, false]), '{t,f}');

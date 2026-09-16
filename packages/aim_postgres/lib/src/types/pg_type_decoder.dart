@@ -10,7 +10,7 @@ typedef PgDecoder = Object? Function(String text);
 
 /// Text-format decoders for PostgreSQL types, keyed by type OID.
 ///
-/// Contract (A-041, A-043, A-044, A-046):
+/// The contract:
 /// - Known types are converted to Dart values; `numeric` stays [String].
 /// - [DateTime] values are always UTC. `timestamp` without time zone is read
 ///   as a UTC wall clock, matching how parameters are sent.
@@ -79,7 +79,8 @@ abstract final class PgTypeDecoder {
       };
 
   // PostgreSQL prints `2024-01-02 03:04:05.123456`. Appending `Z` makes
-  // DateTime.parse treat it as UTC instead of the local zone (A-044).
+  // DateTime.parse treat it as UTC instead of the local zone, so a round
+  // trip through the database does not depend on the server's time zone.
   static Object? _decodeTimestamp(String text) {
     _rejectSpecialTimestamp(text);
     return DateTime.parse('${text}Z');

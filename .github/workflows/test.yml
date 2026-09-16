@@ -64,15 +64,15 @@ jobs:
         run: rask analyze -j 4
 
       - name: Test
-        # The same twelve packages CI ran before rask; aim_postgres keeps its
-        # unit-only run below because its integration tests need Docker.
+        # No filters: every package's self-contained tests run. Suites that
+        # need a Postgres server or a download are tagged `integration` (or
+        # `slow` for the build_runner golden tests) and skipped by default
+        # via each package's dart_test.yaml.
         # -j 2 because dart test parallelises its own suites too.
-        run: >-
-          rask test -j 2
-          -F aim_core -F aim_server -F aim_edge -F aim_cli
-          -F aim_server_form -F aim_server_multipart -F aim_server_testing -F aim_server_static
-          -F aim_server_logger -F aim_server_sse -F aim_server_jwt -F aim_server_basic_auth
+        run: rask test -j 2
 
-      - name: Test aim_postgres (unit only, no Docker)
-        working-directory: packages/aim_postgres
-        run: dart test test/unit/
+      - name: Test aim_edge integration (wrangler dev)
+        # The one tagged suite CI is equipped for: Node is set up and
+        # wrangler is already warmed above.
+        working-directory: packages/aim_edge
+        run: dart test -t integration --run-skipped

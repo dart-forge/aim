@@ -1,0 +1,5 @@
+tags:
+  integration:
+    skip: "Needs a Postgres on localhost:5437 (see test/integration/docker-compose.yml). Run with: dart test -t integration --run-skipped"
+  slow:
+    skip: "Runs build_runner in every golden fixture directory; takes minutes. Run with: dart test -t slow --run-skipped"
