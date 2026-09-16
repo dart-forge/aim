@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:args/command_runner.dart';
+import 'package:aim_orm/aim_orm.dart';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
@@ -183,7 +184,11 @@ class DbGenerateCommand extends Command<void> {
                 if (field is! RecordLiteralNamedField) continue;
 
                 final fieldName = field.name.lexeme;
-                final columnInfo = _analyzeColumn(fieldName, field.fieldExpression);
+                final columnInfo = _analyzeColumn(
+                  fieldName,
+                  field.fieldExpression,
+                  filePath,
+                );
 
                 columns.add(columnInfo.column);
                 if (columnInfo.isIndexed) {
@@ -209,7 +214,11 @@ class DbGenerateCommand extends Command<void> {
     return Schema(tables: tables);
   }
 
-  _ColumnAnalysisResult _analyzeColumn(String fieldName, Expression expr) {
+  _ColumnAnalysisResult _analyzeColumn(
+    String fieldName,
+    Expression expr,
+    String filePath,
+  ) {
     String? columnName;
     String columnType = 'unknown';
     bool isPrimaryKey = false;
@@ -299,7 +308,8 @@ class DbGenerateCommand extends Command<void> {
                     column: columnName ?? fieldName,
                     referencesTable: refTable,
                     referencesColumn: refColumn,
-                    onDelete: _extractOnDelete(args),
+                    onDelete: _extractOnDelete(args, filePath),
+                    onUpdate: _extractOnUpdate(args, filePath),
                   );
                 }
               }
@@ -348,15 +358,62 @@ class DbGenerateCommand extends Command<void> {
     return '__HAS_DEFAULT__';
   }
 
-  String? _extractOnDelete(NodeList<Argument> args) {
+  String? _extractOnDelete(NodeList<Argument> args, String filePath) {
+    final name = _extractActionName(args, 'onDelete');
+    if (name == null) return null;
+    if (!OnDeleteAction.values.any((action) => action.name == name)) {
+      throw FormatException(
+        'Unknown onDelete action "$name" in $filePath',
+      );
+    }
+    return name;
+  }
+
+  String? _extractOnUpdate(NodeList<Argument> args, String filePath) {
+    final name = _extractActionName(args, 'onUpdate');
+    if (name == null) return null;
+    if (!OnUpdateAction.values.any((action) => action.name == name)) {
+      throw FormatException(
+        'Unknown onUpdate action "$name" in $filePath',
+      );
+    }
+    return name;
+  }
+
+  /// Pulls the identifier name out of a named argument like
+  /// `onDelete: OnDeleteAction.setNull`, without checking whether it is a
+  /// value the enum actually declares.
+  String? _extractActionName(NodeList<Argument> args, String argName) {
     for (final arg in args) {
-      if (arg is NamedArgument && arg.name.lexeme == 'onDelete') {
+      if (arg is NamedArgument && arg.name.lexeme == argName) {
         if (arg.argumentExpression is PrefixedIdentifier) {
           return (arg.argumentExpression as PrefixedIdentifier).identifier.name;
         }
       }
     }
     return null;
+  }
+
+  /// Resolves a stored `onDelete` action name back to its [OnDeleteAction]
+  /// SQL keyword. The name was already validated in [_extractOnDelete], so
+  /// this only fails if that validation was somehow bypassed.
+  String _onDeleteKeyword(String name) {
+    try {
+      return OnDeleteAction.values.byName(name).sqlKeyword;
+    } on ArgumentError {
+      throw FormatException('Unknown onDelete action "$name"');
+    }
+  }
+
+  /// Resolves a stored `onUpdate` action name back to its [OnUpdateAction]
+  /// SQL keyword. The name was already validated in [_extractOnUpdate], so
+  /// this only fails if that validation was somehow bypassed.
+  String _onUpdateKeyword(String name) {
+    try {
+      return OnUpdateAction.values.byName(name).sqlKeyword;
+    } on ArgumentError {
+      throw FormatException('Unknown onUpdate action "$name"');
+    }
   }
 
   List<_SchemaDiff> _calculateDiff(Schema? previous, Schema current) {
@@ -642,7 +699,10 @@ class DbGenerateCommand extends Command<void> {
               'ALTER TABLE ${diff.table.name} ADD CONSTRAINT $constraintName '
               'FOREIGN KEY (${fk.column}) REFERENCES ${fk.referencesTable}(${fk.referencesColumn})';
           if (fk.onDelete != null) {
-            sql += ' ON DELETE ${fk.onDelete!.toUpperCase()}';
+            sql += ' ON DELETE ${_onDeleteKeyword(fk.onDelete!)}';
+          }
+          if (fk.onUpdate != null) {
+            sql += ' ON UPDATE ${_onUpdateKeyword(fk.onUpdate!)}';
           }
           buffer.writeln('$sql;');
         case _DiffType.dropForeignKey:
@@ -817,7 +877,9 @@ class DbGenerateCommand extends Command<void> {
   /// カラム型のシグネチャ（型変更検出用）
   String _columnTypeSignature(ColumnSchema col) {
     if (col.type == 'varchar') {
-      return 'varchar(${col.varcharLength ?? 255})';
+      return col.varcharLength == null
+          ? 'varchar'
+          : 'varchar(${col.varcharLength})';
     }
     return col.type;
   }
@@ -830,7 +892,9 @@ class DbGenerateCommand extends Command<void> {
       case 'serial':
         return 'SERIAL';
       case 'varchar':
-        return 'VARCHAR(${col.varcharLength ?? 255})';
+        return col.varcharLength == null
+            ? 'VARCHAR'
+            : 'VARCHAR(${col.varcharLength})';
       case 'text':
         return 'TEXT';
       case 'timestamp':
@@ -858,7 +922,10 @@ class DbGenerateCommand extends Command<void> {
       var fkDef =
           '  FOREIGN KEY (${fk.column}) REFERENCES ${fk.referencesTable}(${fk.referencesColumn})';
       if (fk.onDelete != null) {
-        fkDef += ' ON DELETE ${fk.onDelete!.toUpperCase()}';
+        fkDef += ' ON DELETE ${_onDeleteKeyword(fk.onDelete!)}';
+      }
+      if (fk.onUpdate != null) {
+        fkDef += ' ON UPDATE ${_onUpdateKeyword(fk.onUpdate!)}';
       }
       columnDefs.add(fkDef);
     }
@@ -887,7 +954,11 @@ class DbGenerateCommand extends Command<void> {
       case 'serial':
         parts.add('SERIAL');
       case 'varchar':
-        parts.add('VARCHAR(${col.varcharLength ?? 255})');
+        parts.add(
+          col.varcharLength == null
+              ? 'VARCHAR'
+              : 'VARCHAR(${col.varcharLength})',
+        );
       case 'text':
         parts.add('TEXT');
       case 'timestamp':
