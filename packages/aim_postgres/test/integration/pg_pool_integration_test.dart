@@ -4,7 +4,10 @@ library;
 import 'package:aim_postgres/aim_postgres.dart';
 import 'package:test/test.dart';
 
-const _url = 'postgresql://test:test@localhost:15433/test_db';
+import 'docker_stack.dart';
+
+const _port = 15433;
+const _url = 'postgresql://test:test@localhost:$_port/test_db';
 
 Future<int> _pid(PostgresQueryable q) async {
   final rows = await q.query('SELECT pg_backend_pid() AS pid');
@@ -16,7 +19,11 @@ void main() {
   late PostgresConnection admin;
 
   setUpAll(() async {
-    admin = await PostgresConnection.connect(_url);
+    await ensurePostgresStack();
+    admin = await reportPortIfTaken(
+      () => PostgresConnection.connect(_url),
+      port: _port,
+    );
   });
 
   tearDownAll(() => admin.close());

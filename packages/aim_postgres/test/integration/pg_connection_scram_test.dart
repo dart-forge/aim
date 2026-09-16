@@ -4,14 +4,21 @@ library;
 import 'package:aim_postgres/src/pg_connection.dart';
 import 'package:test/test.dart';
 
+import 'docker_stack.dart';
+
 void main() {
+  setUpAll(ensurePostgresStack);
+
   group('SCRAM-SHA-256 Authentication', () {
     late PostgresConnection conn;
 
     setUp(() async {
       // Connect to SCRAM-SHA-256 environment (port 15435)
-      conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15435/test_db',
+      conn = await reportPortIfTaken(
+        () => PostgresConnection.connect(
+          'postgresql://test:test@localhost:15435/test_db',
+        ),
+        port: 15435,
       );
     });
 

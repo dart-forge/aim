@@ -6,12 +6,18 @@ import 'dart:typed_data';
 import 'package:aim_postgres/aim_postgres.dart';
 import 'package:test/test.dart';
 
+import 'docker_stack.dart';
+
 void main() {
   late PostgresDatabase db;
 
   setUpAll(() async {
-    db = await PostgresDatabase.connect(
-      'postgresql://test:test@localhost:15433/test_db',
+    await ensurePostgresStack();
+    db = await reportPortIfTaken(
+      () => PostgresDatabase.connect(
+        'postgresql://test:test@localhost:15433/test_db',
+      ),
+      port: 15433,
     );
     await db.execute('DROP TABLE IF EXISTS typed_results');
     await db.execute('''

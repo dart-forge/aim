@@ -4,6 +4,8 @@ library;
 import 'package:aim_postgres/src/pg_connection.dart';
 import 'package:test/test.dart';
 
+import 'docker_stack.dart';
+
 void main() {
   late PostgresConnection conn;
 
@@ -19,10 +21,12 @@ void main() {
   });
 
   setUpAll(() async {
-    // Docker Composeでテスト用PostgreSQLが起動していることを前提
-    // docker-compose -f test/integration/docker-compose.yml up -d
-    conn = await PostgresConnection.connect(
-      'postgresql://test:test@localhost:15433/test_db',
+    await ensurePostgresStack();
+    conn = await reportPortIfTaken(
+      () => PostgresConnection.connect(
+        'postgresql://test:test@localhost:15433/test_db',
+      ),
+      port: 15433,
     );
 
     // テスト用テーブル作成
