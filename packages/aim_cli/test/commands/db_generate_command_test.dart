@@ -113,6 +113,41 @@ final posts = (
     });
   });
 
+  group('db:generate - foreign key ON UPDATE rendering', () {
+    test('onUpdate is no longer dropped: it renders ON UPDATE after '
+        'ON DELETE', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  userId: integer('user_id').references(
+    () => users.id,
+    onDelete: OnDeleteAction.cascade,
+    onUpdate: OnUpdateAction.setNull,
+  ),
+);
+''');
+
+      await generate();
+
+      final sql = readGeneratedMigration();
+      expect(
+        sql,
+        contains(
+          'FOREIGN KEY (user_id) REFERENCES users(id) '
+          'ON DELETE CASCADE ON UPDATE SET NULL',
+        ),
+      );
+    });
+  });
+
   group('db:generate - unrecognised action names fail loudly', () {
     test('an onDelete name outside OnDeleteAction throws, naming the '
         'value and the schema file', () async {

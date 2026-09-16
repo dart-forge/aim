@@ -309,6 +309,7 @@ class DbGenerateCommand extends Command<void> {
                     referencesTable: refTable,
                     referencesColumn: refColumn,
                     onDelete: _extractOnDelete(args, filePath),
+                    onUpdate: _extractOnUpdate(args, filePath),
                   );
                 }
               }
@@ -368,6 +369,17 @@ class DbGenerateCommand extends Command<void> {
     return name;
   }
 
+  String? _extractOnUpdate(NodeList<Argument> args, String filePath) {
+    final name = _extractActionName(args, 'onUpdate');
+    if (name == null) return null;
+    if (!OnUpdateAction.values.any((action) => action.name == name)) {
+      throw FormatException(
+        'Unknown onUpdate action "$name" in $filePath',
+      );
+    }
+    return name;
+  }
+
   /// Pulls the identifier name out of a named argument like
   /// `onDelete: OnDeleteAction.setNull`, without checking whether it is a
   /// value the enum actually declares.
@@ -390,6 +402,17 @@ class DbGenerateCommand extends Command<void> {
       return OnDeleteAction.values.byName(name).sqlKeyword;
     } on ArgumentError {
       throw FormatException('Unknown onDelete action "$name"');
+    }
+  }
+
+  /// Resolves a stored `onUpdate` action name back to its [OnUpdateAction]
+  /// SQL keyword. The name was already validated in [_extractOnUpdate], so
+  /// this only fails if that validation was somehow bypassed.
+  String _onUpdateKeyword(String name) {
+    try {
+      return OnUpdateAction.values.byName(name).sqlKeyword;
+    } on ArgumentError {
+      throw FormatException('Unknown onUpdate action "$name"');
     }
   }
 
@@ -678,6 +701,9 @@ class DbGenerateCommand extends Command<void> {
           if (fk.onDelete != null) {
             sql += ' ON DELETE ${_onDeleteKeyword(fk.onDelete!)}';
           }
+          if (fk.onUpdate != null) {
+            sql += ' ON UPDATE ${_onUpdateKeyword(fk.onUpdate!)}';
+          }
           buffer.writeln('$sql;');
         case _DiffType.dropForeignKey:
           final fk = diff.foreignKey!;
@@ -897,6 +923,9 @@ class DbGenerateCommand extends Command<void> {
           '  FOREIGN KEY (${fk.column}) REFERENCES ${fk.referencesTable}(${fk.referencesColumn})';
       if (fk.onDelete != null) {
         fkDef += ' ON DELETE ${_onDeleteKeyword(fk.onDelete!)}';
+      }
+      if (fk.onUpdate != null) {
+        fkDef += ' ON UPDATE ${_onUpdateKeyword(fk.onUpdate!)}';
       }
       columnDefs.add(fkDef);
     }
