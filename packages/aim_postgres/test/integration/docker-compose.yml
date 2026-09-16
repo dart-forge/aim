@@ -1,24 +1,24 @@
 services:
   postgres_password:
     image: postgres:16-alpine
-    container_name: aim_orm_postgres_test
+    container_name: aim_postgres_password_test
     environment:
       POSTGRES_USER: test
       POSTGRES_PASSWORD: test
       POSTGRES_DB: test_db
       POSTGRES_HOST_AUTH_METHOD: password  # cleartext password認証を使用
     ports:
-      - "5433:5432"  # ホストの5433にマッピング（既存のPostgreSQLと競合しないように）
+      - "15433:5432"  # ホストの15433にマッピング（既存のPostgreSQLと競合しないように）
     tmpfs:
       - /var/lib/postgresql/data  # メモリ上で動作させて高速化
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U test" ]
+      test: [ "CMD-SHELL", "pg_isready -U test -d test_db" ]
       interval: 2s
       timeout: 5s
       retries: 5
   postgres_md5:
     image: postgres:16-alpine
-    container_name: aim_orm_postgres_md5_test
+    container_name: aim_postgres_md5_test
     environment:
       POSTGRES_USER: test
       POSTGRES_PASSWORD: test
@@ -26,11 +26,16 @@ services:
       POSTGRES_HOST_AUTH_METHOD: md5  # md5
       POSTGRES_INITDB_ARGS: "--auth-host=md5 --pwfile=<(echo test)"
     ports:
-      - "5434:5432"  # ホストの5433にマッピング（既存のPostgreSQLと競合しないように）
+      - "15434:5432"  # ホストの15434にマッピング（既存のPostgreSQLと競合しないように）
 #    volumes:
 #      - ./init-md5.sql:/docker-entrypoint-initdb.d/init.sql  # MD5パスワード初期化
     tmpfs:
       - /var/lib/postgresql/data  # メモリ上で動作させて高速化
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U test -d test_db" ]
+      interval: 2s
+      timeout: 5s
+      retries: 5
     command:
       - "postgres"
       - "-c"
@@ -43,52 +48,23 @@ services:
       - "log_duration=on"                # クエリ実行時間をログ
       - "-c"
       - "log_line_prefix=%t [%p]: user=%u,db=%d,client=%h " # ログプレフィックス
-  postgres_ssl:
-    image: postgres:16-alpine
-    container_name: aim_orm_postgres_ssl_test
-    environment:
-      POSTGRES_USER: test
-      POSTGRES_PASSWORD: test
-      POSTGRES_DB: test_db
-      POSTGRES_HOST_AUTH_METHOD: md5
-      POSTGRES_INITDB_ARGS: "--auth-host=md5"
-    ports:
-      - "5435:5432"
-    volumes:
-      - ./server.crt:/var/lib/postgresql/server.crt:ro
-      - ./server.key:/var/lib/postgresql/server.key:ro
-    tmpfs:
-      - /var/lib/postgresql/data
-    command:
-      - "postgres"
-      - "-c"
-      - "ssl=on"
-      - "-c"
-      - "ssl_cert_file=/var/lib/postgresql/server.crt"
-      - "-c"
-      - "ssl_key_file=/var/lib/postgresql/server.key"
-      - "-c"
-      - "log_statement=all"
-      - "-c"
-      - "log_connections=on"
-      - "-c"
-      - "log_disconnections=on"
-      - "-c"
-      - "log_duration=on"
-      - "-c"
-      - "log_line_prefix=%t [%p]: user=%u,db=%d,client=%h "
   postgres_scram:
     image: postgres:16-alpine
-    container_name: aim_orm_postgres_scram_test
+    container_name: aim_postgres_scram_test
     environment:
       POSTGRES_USER: test
       POSTGRES_PASSWORD: test
       POSTGRES_DB: test_db
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     ports:
-      - "5436:5432"
+      - "15435:5432"
     tmpfs:
       - /var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U test -d test_db" ]
+      interval: 2s
+      timeout: 5s
+      retries: 5
     command:
       - "postgres"
       - "-c"

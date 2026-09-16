@@ -11,7 +11,7 @@ void main() {
 
   setUpAll(() async {
     db = await PostgresDatabase.connect(
-      'postgresql://test:test@localhost:5437/test_db',
+      'postgresql://test:test@localhost:15437/test_db',
     );
 
     // Create tables in correct order (respecting FK constraints)

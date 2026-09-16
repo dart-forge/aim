@@ -4,7 +4,7 @@ library;
 import 'package:aim_postgres/aim_postgres.dart';
 import 'package:test/test.dart';
 
-const _url = 'postgresql://test:test@localhost:5433/test_db';
+const _url = 'postgresql://test:test@localhost:15433/test_db';
 
 Future<int> _pid(PostgresQueryable q) async {
   final rows = await q.query('SELECT pg_backend_pid() AS pid');
@@ -38,7 +38,7 @@ void main() {
     test('fails fast on a bad connection string', () async {
       await expectLater(
         PostgresDatabase.connect(
-          'postgresql://test:wrong@localhost:5433/test_db',
+          'postgresql://test:wrong@localhost:15433/test_db',
         ),
         throwsA(isA<QueryException>()),
       );

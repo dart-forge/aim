@@ -11,7 +11,7 @@ void main() {
 
     setUp(() async {
       conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+        'postgresql://test:test@localhost:15433/test_db',
       );
     });
 

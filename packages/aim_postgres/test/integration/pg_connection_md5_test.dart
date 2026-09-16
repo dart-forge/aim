@@ -7,9 +7,9 @@ import 'package:test/test.dart';
 void main() {
   group('MD5 Authentication', () {
     test('connects with MD5 auth', () async {
-      // Docker Compose MD5環境に接続（ポート5434）
+      // Docker Compose MD5環境に接続（ポート15434）
       final conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5434/test_db',
+        'postgresql://test:test@localhost:15434/test_db',
       );
 
       // クエリを実行して認証成功を確認
@@ -22,7 +22,7 @@ void main() {
     test('fails with wrong password', () async {
       expect(
             () => PostgresConnection.connect(
-          'postgresql://test:wrong@localhost:5434/test_db',
+          'postgresql://test:wrong@localhost:15434/test_db',
         ),
         throwsA(isA<QueryException>()),
       );
@@ -30,7 +30,7 @@ void main() {
 
     test('sends Terminate message on close', () async {
       final conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5434/test_db',
+        'postgresql://test:test@localhost:15434/test_db',
       );
 
       // Execute a query to ensure connection is ready

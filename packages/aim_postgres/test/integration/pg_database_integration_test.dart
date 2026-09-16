@@ -11,7 +11,7 @@ void main() {
   setUpAll(() async {
     // Docker Composeでテスト用PostgreSQLが起動していることを前提
     db = await PostgresDatabase.connect(
-      'postgresql://test:test@localhost:5433/test_db',
+      'postgresql://test:test@localhost:15433/test_db',
     );
 
     // テスト用テーブル作成

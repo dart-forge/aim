@@ -11,7 +11,7 @@ void main() {
 
   setUpAll(() async {
     db = await PostgresDatabase.connect(
-      'postgresql://test:test@localhost:5433/test_db',
+      'postgresql://test:test@localhost:15433/test_db',
     );
     await db.execute('DROP TABLE IF EXISTS typed_results');
     await db.execute('''

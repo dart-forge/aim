@@ -9,9 +9,9 @@ void main() {
     late PostgresConnection conn;
 
     setUp(() async {
-      // Connect to SCRAM-SHA-256 environment (port 5436)
+      // Connect to SCRAM-SHA-256 environment (port 15435)
       conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5436/test_db',
+        'postgresql://test:test@localhost:15435/test_db',
       );
     });
 
@@ -106,7 +106,7 @@ void main() {
 
     setUp(() async {
       conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5436/test_db',
+        'postgresql://test:test@localhost:15435/test_db',
       );
       await conn.sendSimpleQuery('DROP TABLE IF EXISTS scram_test_extended');
       await conn.sendSimpleQuery(
@@ -219,7 +219,7 @@ void main() {
 
     setUp(() async {
       conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5436/test_db',
+        'postgresql://test:test@localhost:15435/test_db',
       );
     });
 
@@ -258,10 +258,10 @@ void main() {
   group('SCRAM-SHA-256 Connection', () {
     test('can establish multiple connections', () async {
       final conn1 = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5436/test_db',
+        'postgresql://test:test@localhost:15435/test_db',
       );
       final conn2 = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5436/test_db',
+        'postgresql://test:test@localhost:15435/test_db',
       );
 
       final result1 = await conn1.sendSimpleQuery('SELECT 1');
@@ -277,7 +277,7 @@ void main() {
     test('fails with wrong password', () async {
       expect(
         () => PostgresConnection.connect(
-          'postgresql://test:wrong_password@localhost:5436/test_db',
+          'postgresql://test:wrong_password@localhost:15435/test_db',
         ),
         throwsA(isA<Exception>()),
       );
@@ -285,7 +285,7 @@ void main() {
 
     test('sends Terminate message on close', () async {
       final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5436/test_db',
+        'postgresql://test:test@localhost:15435/test_db',
       );
 
       // Execute a query to ensure connection is ready
