@@ -4,6 +4,8 @@ library;
 import 'package:aim_postgres/src/pg_connection.dart';
 import 'package:test/test.dart';
 
+import 'docker_stack.dart';
+
 void main() {
   late PostgresConnection conn;
 
@@ -19,10 +21,12 @@ void main() {
   });
 
   setUpAll(() async {
-    // Docker Composeでテスト用PostgreSQLが起動していることを前提
-    // docker-compose -f test/integration/docker-compose.yml up -d
-    conn = await PostgresConnection.connect(
-      'postgresql://test:test@localhost:5433/test_db',
+    await ensurePostgresStack();
+    conn = await reportPortIfTaken(
+      () => PostgresConnection.connect(
+        'postgresql://test:test@localhost:15433/test_db',
+      ),
+      port: 15433,
     );
 
     // テスト用テーブル作成
@@ -300,7 +304,7 @@ void main() {
     test('sends Terminate message on close', () async {
       // Create a new connection for this test
       final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+        'postgresql://test:test@localhost:15433/test_db',
       );
 
       // Execute a simple query to ensure connection is ready
@@ -314,7 +318,7 @@ void main() {
     test('connection can execute queries before close', () async {
       // Create a new connection
       final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+        'postgresql://test:test@localhost:15433/test_db',
       );
 
       // Execute multiple queries
@@ -328,7 +332,7 @@ void main() {
     test('close handles connection that executed no queries', () async {
       // Create a connection and immediately close it
       final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+        'postgresql://test:test@localhost:15433/test_db',
       );
 
       // Close without executing any queries
@@ -339,7 +343,7 @@ void main() {
   group('Query Cancellation', () {
     test('cancels long-running query with pg_sleep', () async {
       final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+        'postgresql://test:test@localhost:15433/test_db',
       );
 
       // Start a long-running query (60 second sleep)
@@ -368,7 +372,7 @@ void main() {
 
     test('cancelQuery throws when no backend key data available', () async {
       final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+        'postgresql://test:test@localhost:15433/test_db',
       );
 
       // Execute a simple query first
@@ -383,7 +387,7 @@ void main() {
 
     test('handles cancellation when query completes before cancel', () async {
       final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+        'postgresql://test:test@localhost:15433/test_db',
       );
 
       // Start a very short query
@@ -401,7 +405,7 @@ void main() {
 
     test('can execute queries after cancellation', () async {
       final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+        'postgresql://test:test@localhost:15433/test_db',
       );
 
       // Start and cancel a long query
@@ -426,7 +430,7 @@ void main() {
 
     test('cancelQuery works with Extended Query Protocol', () async {
       final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+        'postgresql://test:test@localhost:15433/test_db',
       );
 
       // Start a long-running parameterized query

@@ -4,14 +4,19 @@ library;
 import 'package:aim_postgres/aim_postgres.dart';
 import 'package:test/test.dart';
 
+import 'docker_stack.dart';
 import 'fixtures/tables.dart';
 
 void main() {
   late PostgresDatabase db;
 
   setUpAll(() async {
-    db = await PostgresDatabase.connect(
-      'postgresql://test:test@localhost:5437/test_db',
+    await ensurePostgresStack();
+    db = await reportPortIfTaken(
+      () => PostgresDatabase.connect(
+        'postgresql://test:test@localhost:15437/test_db',
+      ),
+      port: 15437,
     );
 
     // Create tables in correct order (respecting FK constraints)

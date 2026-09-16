@@ -5,13 +5,20 @@ import 'package:aim_postgres/src/pg_connection.dart';
 import 'package:aim_postgres/src/types/notice_message.dart';
 import 'package:test/test.dart';
 
+import 'docker_stack.dart';
+
 void main() {
+  setUpAll(ensurePostgresStack);
+
   group('NoticeResponse', () {
     late PostgresConnection conn;
 
     setUp(() async {
-      conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:5433/test_db',
+      conn = await reportPortIfTaken(
+        () => PostgresConnection.connect(
+          'postgresql://test:test@localhost:15433/test_db',
+        ),
+        port: 15433,
       );
     });
 
