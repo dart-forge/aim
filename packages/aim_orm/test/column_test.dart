@@ -152,4 +152,40 @@ void main() {
       expect(timestamp('created_at').defaultNow, isFalse);
     });
   });
+
+  group('OnDeleteAction - SQL keyword mapping', () {
+    test('cascade maps to CASCADE', () {
+      expect(OnDeleteAction.cascade.sqlKeyword, equals('CASCADE'));
+    });
+
+    test('setNull maps to SET NULL', () {
+      expect(OnDeleteAction.setNull.sqlKeyword, equals('SET NULL'));
+    });
+
+    test('restrict maps to RESTRICT', () {
+      expect(OnDeleteAction.restrict.sqlKeyword, equals('RESTRICT'));
+    });
+
+    test('setDefault maps to SET DEFAULT', () {
+      expect(OnDeleteAction.setDefault.sqlKeyword, equals('SET DEFAULT'));
+    });
+  });
+
+  group('OnUpdateAction - SQL keyword mapping', () {
+    test('cascade maps to CASCADE', () {
+      expect(OnUpdateAction.cascade.sqlKeyword, equals('CASCADE'));
+    });
+
+    test('setNull maps to SET NULL', () {
+      expect(OnUpdateAction.setNull.sqlKeyword, equals('SET NULL'));
+    });
+
+    test('restrict maps to RESTRICT', () {
+      expect(OnUpdateAction.restrict.sqlKeyword, equals('RESTRICT'));
+    });
+
+    test('setDefault maps to SET DEFAULT', () {
+      expect(OnUpdateAction.setDefault.sqlKeyword, equals('SET DEFAULT'));
+    });
+  });
 }
