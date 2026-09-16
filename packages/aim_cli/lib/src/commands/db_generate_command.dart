@@ -817,7 +817,9 @@ class DbGenerateCommand extends Command<void> {
   /// カラム型のシグネチャ（型変更検出用）
   String _columnTypeSignature(ColumnSchema col) {
     if (col.type == 'varchar') {
-      return 'varchar(${col.varcharLength ?? 255})';
+      return col.varcharLength == null
+          ? 'varchar'
+          : 'varchar(${col.varcharLength})';
     }
     return col.type;
   }
@@ -830,7 +832,9 @@ class DbGenerateCommand extends Command<void> {
       case 'serial':
         return 'SERIAL';
       case 'varchar':
-        return 'VARCHAR(${col.varcharLength ?? 255})';
+        return col.varcharLength == null
+            ? 'VARCHAR'
+            : 'VARCHAR(${col.varcharLength})';
       case 'text':
         return 'TEXT';
       case 'timestamp':
@@ -887,7 +891,11 @@ class DbGenerateCommand extends Command<void> {
       case 'serial':
         parts.add('SERIAL');
       case 'varchar':
-        parts.add('VARCHAR(${col.varcharLength ?? 255})');
+        parts.add(
+          col.varcharLength == null
+              ? 'VARCHAR'
+              : 'VARCHAR(${col.varcharLength})',
+        );
       case 'text':
         parts.add('TEXT');
       case 'timestamp':

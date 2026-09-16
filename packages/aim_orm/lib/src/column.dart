@@ -192,7 +192,7 @@ class VarcharColumn extends Column<String, VarcharColumn> {
   );
 
   @override
-  String toSql() => 'VARCHAR($length)';
+  String toSql() => length == null ? 'VARCHAR' : 'VARCHAR($length)';
 }
 
 /// A column that stores text of unlimited length.

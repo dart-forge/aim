@@ -117,10 +117,16 @@ void main() {
     });
 
     // varchar() without a length is exercised by real code in this repo
-    // (examples/orm-sample/lib/test.dart: `varchar('gender').nullable()`),
-    // but VarcharColumn.toSql() renders the literal string "VARCHAR(null)"
-    // in that case, which is not valid SQL. See the report for details;
-    // that behaviour is deliberately left untested here.
+    // (examples/orm-sample/lib/test.dart: `varchar('gender').nullable()`).
+    // With no length given, VARCHAR has no length limit, so it must render
+    // with no parentheses and never invent a default length.
+    test('renders VARCHAR with no parentheses when no length is given', () {
+      expect(varchar('gender').toSql(), equals('VARCHAR'));
+    });
+
+    test('a nullable column with no length still renders VARCHAR', () {
+      expect(varchar('gender').nullable().toSql(), equals('VARCHAR'));
+    });
   });
 
   group('TextColumn - toSql()', () {
