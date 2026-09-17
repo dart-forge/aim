@@ -15,8 +15,10 @@ PostgreSQLサーバーを必要としない、低レベルのロジックテス�
 
 実際のPostgreSQLサーバーを使用した統合テスト。すべて `@Tags(['integration'])` が付いており、
 `dart_test.yaml` の設定で**デフォルトではスキップされます**（Docker が要るため）。各ファイルの
-`setUpAll` が `docker_stack.dart` のヘルパーを呼び、必要な Postgres コンテナを自分で起動してから
-接続するので、事前に `docker compose` を手で叩く必要はありません。
+先頭で `usePostgres()`（`package:rig_postgres`）を宣言すると、rig がコンテナを自分で用意して
+くれるので、事前に何かを手で起動する必要はありません。ポートは**動的に割り当てられる**ので、
+他のサービスと衝突しません。同じ認証設定を要求するスイートは1つのコンテナを共有し、その上で
+**スイート毎に専用のデータベース**が切られるため、並行して走っても互いのテーブルを見ません。
 
 - `pg_connection_integration_test.dart`: Simple QueryとExtended Queryプロトコル
 - `pg_connection_md5_test.dart`: MD5認証
@@ -46,8 +48,8 @@ cd packages/aim_postgres
 dart test -t integration --run-skipped
 ```
 
-コンテナは各統合テストファイルの `setUpAll` が自動で起動します（`docker compose ... up -d
---wait` を実行するだけなので、既に起動済みで健全なら数秒で戻ってきます）。Docker が入っていない
+コンテナは各統合テストファイルの `usePostgres()` が自動で用意します。同じ設定のコンテナが
+既に起動済みで健全なら、それを再利用するだけなので数秒で戻ってきます。Docker が入っていない
 環境でこれを実行すると、その旨を伝えるエラーで失敗します。
 
 ### 特定のテストファイルを実行
@@ -68,13 +70,11 @@ dart test --name "SELECT with parameters"
 
 ## コンテナを止める
 
-統合テストは複数のファイルが同じコンテナ群を並行して使うため、テスト側では**コンテナを止めません**
-（1つのスイートの `tearDownAll` で止めると、並行して走っている他のスイートを壊してしまうため）。
-使い終わったら手動で止めてください：
+統合テストが起動したコンテナは、テストが終わっても**意図的に落としません**（次回の実行が
+コンテナの再利用で速くなるため）。溜まったコンテナは `rig prune` で削除できます：
 
 ```bash
-cd packages/aim_postgres
-docker compose -f test/integration/docker-compose.yml down
+rig prune
 ```
 
 ## 前提条件
@@ -84,21 +84,20 @@ docker compose -f test/integration/docker-compose.yml down
 
 ### 統合テスト
 - Dart SDK 3.13.0以上
-- Docker & Docker Compose（`docker compose` サブコマンドが使えること）
+- Docker（コンテナは rig が直接起動します）
 
 ## テストデータベース情報
 
-統合テストでは以下の設定でPostgreSQLに接続します（詳細は
-`test/integration/docker-compose.yml`）：
+統合テストは `usePostgres()` の引数（`auth:`）で認証方式を選びます：
 
-| サービス | ホストポート | 認証方式 |
-| --- | --- | --- |
-| postgres_password | 15433 | cleartext password |
-| postgres_md5 | 15434 | md5 |
-| postgres_scram | 15435 | scram-sha-256 |
+| ファイル | 認証方式 |
+| --- | --- |
+| `pg_connection_md5_test.dart` | md5 |
+| `pg_connection_scram_test.dart` | scram-sha-256 |
+| それ以外 | cleartext password（デフォルト） |
 
-いずれも `test_db` / `test` / `test`（データベース名・ユーザー・パスワード）です。ホストの
-5432/5433番台は他のPostgreSQLやDBプロキシと衝突しがちなので、15000番台に寄せています。
+いずれも `test_db` / `test` / `test`（データベース名・ユーザー・パスワード）です。ホストポートは
+rig が起動時に空いているものを割り当てるので、固定値はありません。
 
 ## CI
 
@@ -107,26 +106,14 @@ docker compose -f test/integration/docker-compose.yml down
 
 ## トラブルシューティング
 
-### ポートが既に使用されている
-
-エラーメッセージに、どのポートが衝突しているか・どのコマンドで確認できるかが出ます
-（`lsof -nP -iTCP:<port> -sTCP:LISTEN`）。該当ポートを使っている別プロセスを止めるか、
-`test/integration/docker-compose.yml` の `ports` を編集して別のポートに変更してください。
-その場合はテストコード内の接続文字列（`postgresql://test:test@localhost:<port>/test_db`）も
-合わせて更新してください。
-
 ### PostgreSQLコンテナが起動しない
 
-ログを確認：
+`docker ps -a` でコンテナ名を確認し（rig が付けるランダムな名前です）、`docker logs <name>`
+でログを確認してください。それでも解決しない場合は、`rig prune` で溜まったコンテナを一旦
+全部消してから再実行してください：
 
 ```bash
-docker logs aim_postgres_password_test   # または aim_postgres_md5_test / aim_postgres_scram_test
-```
-
-コンテナを強制削除して再起動：
-
-```bash
-docker rm -f aim_postgres_password_test aim_postgres_md5_test aim_postgres_scram_test
+rig prune
 dart test -t integration --run-skipped
 ```
 
