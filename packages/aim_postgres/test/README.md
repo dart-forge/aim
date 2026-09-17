@@ -129,7 +129,9 @@ rig prune --all
 docker exec <コンテナID> psql -U test -d postgres -tAc "select datname from pg_database"
 ```
 
-ホストポートは rig が起動時に空いているものを割り当てるので、固定値はありません。
+ホストポートは rig が**コンテナを作るときに**空いているものを割り当て、そのコンテナを
+使い回す間は同じポートを使います(実行ごとに変わるわけではありません)。いずれにせよ
+固定値ではないので、手元の別の Postgres と衝突しません。
 
 ## CI
 

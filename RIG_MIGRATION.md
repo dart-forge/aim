@@ -86,5 +86,6 @@ cd packages/aim_orm_codegen && dart test -t integration --run-skipped
   ので、先に `dart pub global activate -s path ../rig/packages/rig_cli` で入れる必要がある。
   素の `rig prune` が消すのは作成から 7 日以上経った共有コンテナだけで、作ったばかりの
   コンテナには効かない。コンテナ全部を種類問わず消すには `rig prune --all` が要るが、これは
-  他のセッションが今使っている専用コンテナも一緒に消すので、並行実行中は注意が必要
+  **いま他のセッションが走らせている統合テストのコンテナも一緒に消す**(共有・専用の区別なく
+  rig が作った全部が対象で、使用中かどうかは見ない)ので、並行実行中は注意が必要
   （詳細は `packages/aim_postgres/test/README.md` の「コンテナを止める」節）。
