@@ -1,7 +1,8 @@
 /// Cookie support for Aim framework with secure options.
 ///
-/// Provides the `setCookie` extension method for `Context` to set cookies
-/// with options like HttpOnly, Secure, SameSite, and expiration.
+/// Provides `setCookie`, `getCookie`, `cookies`, and `deleteCookie`
+/// extension methods on `Context` to write and read cookies, with options
+/// like HttpOnly, Secure, SameSite, and expiration on the way out.
 ///
 /// Example:
 /// ```dart
@@ -19,6 +20,11 @@
 ///       sameSite: SameSite.strict,
 ///     ));
 ///     return c.json({'status': 'logged in'});
+///   });
+///
+///   app.get('/profile', (c) {
+///     final sessionId = c.getCookie('session_id');
+///     return c.json({'sessionId': sessionId});
 ///   });
 ///
 ///   app.listen(port: 3000);
