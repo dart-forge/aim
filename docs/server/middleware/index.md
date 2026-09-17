@@ -173,52 +173,60 @@ app.get('/profile', profileHandler);
 
 ### API with Multiple Features
 
+`form()`/`multipart()`/`sse()` aren't middleware — they're extension methods
+you call directly in a handler, so they need no `Variables` class of their
+own. Only middleware that actually carries per-request state, like JWT,
+needs one:
+
 ```dart
+import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_logger/aim_server_logger.dart';
 import 'package:aim_server_cors/aim_server_cors.dart';
 import 'package:aim_server_jwt/aim_server_jwt.dart';
 import 'package:aim_server_form/aim_server_form.dart';
 
-// Combine multiple middleware environments
-class ApiVariables extends JwtVariables with FormMixin {
-  ApiVariables()
-      : super(
-          jwtOptions: JwtOptions(
-            algorithm: HS256(
-              secretKey: SecretKey(secret: Platform.environment['JWT_SECRET']!),
-            ),
-          ),
-          jwtPayload: {},
-        );
-}
-
-final app = Aim<ApiVariables>(
-  variablesFactory: () => ApiVariables(),
+final app = Aim<JwtVariables>(
+  variablesFactory: () => JwtVariables.create(
+    JwtOptions(
+      algorithm: HS256(
+        secretKey: SecretKey(secret: Platform.environment['JWT_SECRET']!),
+      ),
+    ),
+  ),
 );
 
 app.use(logger());
 app.use(cors(origin: 'https://example.com'));
-app.use(form());
 app.use(jwt());
 
-app.post('/api/data', apiHandler);
+app.post('/api/data', (c) async {
+  final form = await c.req.formData();
+  return c.json({'received': form.toMap()});
+});
 ```
 
 ### File Upload API
 
 ```dart
+import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_multipart/aim_server_multipart.dart';
+import 'package:aim_server_multipart/aim_server_multipart_io.dart';
 
-final app = Aim<MultipartVariables>(
-  variablesFactory: () => MultipartVariables(),
-);
+final app = Aim();
 
 app.use(logger());
-app.use(multipart(
-  maxFileSize: 10 * 1024 * 1024, // 10MB
-));
 
-app.post('/upload', uploadHandler);
+app.post('/upload', (c) async {
+  final form = await c.req.multipart(maxFileSize: 10 * 1024 * 1024); // 10MB
+  final file = form.file('avatar');
+
+  if (file == null) {
+    return c.json({'error': 'No file uploaded'}, statusCode: 400);
+  }
+
+  await file.saveTo('uploads/${file.filename}');
+  return c.json({'uploaded': file.filename});
+});
 ```
 
 ## Creating Custom Middleware
