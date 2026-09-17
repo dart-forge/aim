@@ -106,7 +106,7 @@ void main() async {
   });
 
   // Fallback for SPA (Single Page Application)
-  app.all('*', (c) async {
+  app.notFound((c) async {
     final indexFile = File('public/index.html');
     if (await indexFile.exists()) {
       final content = await indexFile.readAsString();
@@ -169,8 +169,8 @@ void main() async {
   // API routes
   app.get('/api/*', apiHandler);
 
-  // SPA fallback - serve index.html for all routes
-  app.all('*', (c) async {
+  // SPA fallback - serve index.html for unmatched routes
+  app.notFound((c) async {
     final indexFile = File('dist/index.html');
     final content = await indexFile.readAsString();
     return c.html(content);
