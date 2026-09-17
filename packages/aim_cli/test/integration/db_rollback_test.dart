@@ -159,4 +159,72 @@ CREATE TABLE widgets (id SERIAL PRIMARY KEY);
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );
+
+  test('a migration marked to run outside a transaction may use a statement '
+      'a transaction forbids', () async {
+    final dir = await project('''
+-- UP
+-- aim: no-transaction
+CREATE TABLE widgets (id SERIAL PRIMARY KEY, name TEXT NOT NULL);
+CREATE INDEX CONCURRENTLY idx_widgets_name ON widgets (name);
+
+-- DOWN
+DROP TABLE IF EXISTS widgets;
+''');
+
+    final migrate = await aim(['db:migrate'], dir);
+    expect(migrate.exitCode, 0, reason: '${migrate.stdout}${migrate.stderr}');
+    expect(await tableExists('widgets'), isTrue);
+    expect(await appliedMigrations(), hasLength(1));
+  });
+
+  test('a statement a transaction forbids is told how to run', () async {
+    final dir = await project('''
+-- UP
+CREATE TABLE widgets (id SERIAL PRIMARY KEY, name TEXT NOT NULL);
+CREATE INDEX CONCURRENTLY idx_widgets_name ON widgets (name);
+
+-- DOWN
+DROP TABLE IF EXISTS widgets;
+''');
+
+    final migrate = await aim(['db:migrate'], dir);
+    expect(migrate.exitCode, isNot(0));
+    expect(migrate.stdout, contains('-- aim: no-transaction'));
+    expect(await tableExists('widgets'), isFalse);
+    expect(await appliedMigrations(), isEmpty);
+  });
+
+  test('the notes in a DOWN section are printed before it runs', () async {
+    final dir = await project('''
+-- UP
+DROP TABLE IF EXISTS widgets;
+
+-- DOWN
+-- Restores the table structure only. Rows removed by the UP section
+-- are not recovered.
+CREATE TABLE widgets (id SERIAL PRIMARY KEY);
+''');
+
+    final migrate = await aim(['db:migrate'], dir);
+    expect(migrate.exitCode, 0, reason: '${migrate.stdout}${migrate.stderr}');
+
+    final rollback = await aim(['db:rollback'], dir);
+    expect(
+      rollback.exitCode,
+      0,
+      reason: '${rollback.stdout}${rollback.stderr}',
+    );
+    final output = rollback.stdout as String;
+    final note = output.indexOf('Rows removed by the UP section');
+    final done = output.indexOf('Rolled back:');
+    expect(note, isNonNegative);
+    expect(done, isNonNegative);
+    expect(
+      note,
+      lessThan(done),
+      reason: 'a precondition read after the fact is no use',
+    );
+    expect(await tableExists('widgets'), isTrue);
+  });
 }

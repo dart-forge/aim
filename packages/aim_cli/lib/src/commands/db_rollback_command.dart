@@ -114,6 +114,14 @@ class DbRollbackCommand extends Command<void> {
 
         print('  Rolling back: $name');
 
+        final notes = _noteLines(statements);
+        if (notes.isNotEmpty) {
+          print('  Notes in this migration:');
+          for (final line in notes) {
+            print('     $line');
+          }
+        }
+
         if (statements.isEmpty) {
           if (sections.down == null || sections.down!.trim().isEmpty) {
             print('  ⚠️  No DOWN section found');
@@ -155,9 +163,6 @@ class DbRollbackCommand extends Command<void> {
         }
 
         print('  ✅ Rolled back: $name');
-        for (final line in _noteLines(statements)) {
-          print('     $line');
-        }
       }
 
       print('');
@@ -224,12 +229,13 @@ class DbRollbackCommand extends Command<void> {
     );
   }
 
-  /// The comment lines sitting above the statements that just ran.
+  /// The comment lines sitting above the statements about to run.
   ///
   /// The generated DOWN section says in a comment where a statement brings
-  /// structure back without the data that was in it. That belongs in front
-  /// of the person who just rolled back, not only in the file they are
-  /// unlikely to open afterwards.
+  /// structure back without the data that was in it, and a hand-written one
+  /// may say anything its author wanted read. Printing them before the
+  /// statements run puts them where a precondition is still useful, and
+  /// keeps them out of the slot where they would read as an outcome.
   List<String> _noteLines(List<String> statements) {
     final lines = <String>[];
     for (final statement in statements) {

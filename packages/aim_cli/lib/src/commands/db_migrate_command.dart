@@ -114,23 +114,47 @@ class DbMigrateCommand extends Command<void> {
           exit(1);
         }
 
+        final runOutsideTransaction = _noTransactionMarker.hasMatch(content);
+
         try {
-          // One transaction per migration: the statements and the history
-          // row go together, so a failure part way through leaves the
-          // database as it was. Postgres rolls DDL back too, which is why
-          // there is no hand-written undo here — there is nothing to undo.
-          await db.transaction((tx) async {
+          if (runOutsideTransaction) {
+            print('  Running outside a transaction (the file asks for it).');
             for (final stmt in statements) {
-              await tx.execute(stmt);
+              await db.execute(stmt);
             }
-            await _recordMigration(tx, name, checksum);
-          });
+            await _recordMigration(db, name, checksum);
+          } else {
+            // One transaction per migration: the statements and the history
+            // row go together, so a failure part way through leaves the
+            // database as it was. Postgres rolls DDL back too, which is why
+            // there is no hand-written undo here — there is nothing to undo.
+            await db.transaction((tx) async {
+              for (final stmt in statements) {
+                await tx.execute(stmt);
+              }
+              await _recordMigration(tx, name, checksum);
+            });
+          }
           print('  ✅ Applied: $name');
         } catch (e) {
           print('  ❌ Failed: $name');
           print('  Error: $e');
           print('');
-          print('  Nothing from this migration was applied.');
+          if (runOutsideTransaction) {
+            print('  This migration ran without a transaction, so the');
+            print('  statements before the failure are still applied.');
+          } else if (e.toString().contains(
+            'cannot run inside a transaction block',
+          )) {
+            print('  This statement has to run on its own. Put this line in');
+            print('  the migration file to apply it without a transaction:');
+            print('');
+            print('    -- aim: no-transaction');
+            print('');
+            print('  Nothing from this migration was applied.');
+          } else {
+            print('  Nothing from this migration was applied.');
+          }
           print('');
           print('Migration stopped. Please fix the error and retry.');
           exit(1);
@@ -239,3 +263,15 @@ class _MigrationSections {
 
   _MigrationSections({required this.up, this.down});
 }
+
+/// Matches the line that asks for a migration's statements to run outside a
+/// transaction.
+///
+/// A few statements cannot run inside one — `CREATE INDEX CONCURRENTLY`,
+/// `VACUUM`, `ALTER TYPE ... ADD VALUE` — and a migration that needs one
+/// says so with this line anywhere in the file.
+final _noTransactionMarker = RegExp(
+  r'^--\s*aim:\s*no-transaction\s*$',
+  multiLine: true,
+  caseSensitive: false,
+);
