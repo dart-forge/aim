@@ -1,10 +1,9 @@
 import 'dart:io';
 
+import 'package:aim_cli/src/migration/down_statements.dart';
 import 'package:aim_postgres/aim_postgres.dart';
 import 'package:args/command_runner.dart';
 import 'package:yaml/yaml.dart';
-
-import '../migration/down_statements.dart';
 
 class DbRollbackCommand extends Command<void> {
   @override
