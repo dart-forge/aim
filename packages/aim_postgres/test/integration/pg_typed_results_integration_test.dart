@@ -4,21 +4,16 @@ library;
 import 'dart:typed_data';
 
 import 'package:aim_postgres/aim_postgres.dart';
+import 'package:rig_postgres/rig_postgres.dart';
 import 'package:test/test.dart';
 
-import 'docker_stack.dart';
-
 void main() {
+  final pg = usePostgres();
+
   late PostgresDatabase db;
 
   setUpAll(() async {
-    await ensurePostgresStack();
-    db = await reportPortIfTaken(
-      () => PostgresDatabase.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      ),
-      port: 15433,
-    );
+    db = await PostgresDatabase.connect(pg.url);
     await db.execute('DROP TABLE IF EXISTS typed_results');
     await db.execute('''
       CREATE TABLE typed_results (
@@ -54,8 +49,7 @@ void main() {
                '\\x00ff'::bytea AS by,
                ARRAY[1, NULL, 3] AS ia, ARRAY['a b', 'NULL', NULL]::text[] AS ta,
                NULL::int AS n
-      '''))
-          .single;
+      ''')).single;
 
       expect(row['i2'], 1);
       expect(row['i4'], 2);
@@ -97,38 +91,40 @@ void main() {
   });
 
   group('parameters round-trip', () {
-    test('List, Map, Uint8List, DateTime, bool written with args and read back',
-        () async {
-      final at = DateTime.utc(2024, 5, 6, 7, 8, 9);
-      final inserted = await db.execute(
-        r'INSERT INTO typed_results (ia, ta, jb, by, ts, b, tsa) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        args: [
-          [1, null, 3],
-          ['a b', 'c"d', r'e\f', null],
-          {
-            'k': [1, 2],
-          },
-          Uint8List.fromList([1, 2, 3]),
-          at,
-          true,
-          [at, DateTime.utc(2024, 1, 1)],
-        ],
-      );
-      expect(inserted, 1);
+    test(
+      'List, Map, Uint8List, DateTime, bool written with args and read back',
+      () async {
+        final at = DateTime.utc(2024, 5, 6, 7, 8, 9);
+        final inserted = await db.execute(
+          r'INSERT INTO typed_results (ia, ta, jb, by, ts, b, tsa) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          args: [
+            [1, null, 3],
+            ['a b', 'c"d', r'e\f', null],
+            {
+              'k': [1, 2],
+            },
+            Uint8List.fromList([1, 2, 3]),
+            at,
+            true,
+            [at, DateTime.utc(2024, 1, 1)],
+          ],
+        );
+        expect(inserted, 1);
 
-      final row =
-          (await db.query('SELECT ia, ta, jb, by, ts, b, tsa FROM typed_results'))
-              .single;
-      expect(row['ia'], [1, null, 3]);
-      expect(row['ta'], ['a b', 'c"d', r'e\f', null]);
-      expect(row['jb'], {
-        'k': [1, 2],
-      });
-      expect(row['by'], Uint8List.fromList([1, 2, 3]));
-      expect(row['ts'], at);
-      expect(row['b'], isTrue);
-      expect(row['tsa'], [at, DateTime.utc(2024, 1, 1)]);
-    });
+        final row = (await db.query(
+          'SELECT ia, ta, jb, by, ts, b, tsa FROM typed_results',
+        )).single;
+        expect(row['ia'], [1, null, 3]);
+        expect(row['ta'], ['a b', 'c"d', r'e\f', null]);
+        expect(row['jb'], {
+          'k': [1, 2],
+        });
+        expect(row['by'], Uint8List.fromList([1, 2, 3]));
+        expect(row['ts'], at);
+        expect(row['b'], isTrue);
+        expect(row['tsa'], [at, DateTime.utc(2024, 1, 1)]);
+      },
+    );
 
     test('named params work the same way', () async {
       await db.execute(
@@ -145,37 +141,52 @@ void main() {
   });
 
   group('DateTime is UTC regardless of session time zone', () {
-    test('TIMESTAMP round-trips to the same instant with TIME ZONE Asia/Tokyo',
-        () async {
-      final at = DateTime.utc(2024, 3, 4, 5, 6, 7);
-      // A transaction pins one pooled connection, so SET applies to the
-      // same connection the INSERT and SELECT use.
-      await db.transaction((tx) async {
-        await tx.execute("SET TIME ZONE 'Asia/Tokyo'");
-        // One placeholder per column: a single $1 used for three column
-        // types would make PostgreSQL fail to infer the parameter type.
-        await tx.execute(
-          r'INSERT INTO typed_results (ts, tstz, d) VALUES ($1, $2, $3)',
-          args: [at, at, at],
-        );
-        final row = (await tx.query('SELECT ts, tstz, d FROM typed_results')).single;
-        expect(row['ts'], at);
-        expect(row['tstz'], at);
-        expect(row['d'], DateTime.utc(2024, 3, 4));
-        for (final v in row.values) {
-          expect((v as DateTime).isUtc, isTrue);
-        }
-        await tx.execute("SET TIME ZONE 'UTC'");
-      });
-    });
+    test(
+      'TIMESTAMP round-trips to the same instant with TIME ZONE Asia/Tokyo',
+      () async {
+        final at = DateTime.utc(2024, 3, 4, 5, 6, 7);
+        // A transaction pins one pooled connection, so SET applies to the
+        // same connection the INSERT and SELECT use.
+        await db.transaction((tx) async {
+          await tx.execute("SET TIME ZONE 'Asia/Tokyo'");
+          // One placeholder per column: a single $1 used for three column
+          // types would make PostgreSQL fail to infer the parameter type.
+          await tx.execute(
+            r'INSERT INTO typed_results (ts, tstz, d) VALUES ($1, $2, $3)',
+            args: [at, at, at],
+          );
+          final row = (await tx.query('SELECT ts, tstz, d FROM typed_results'))
+              .single;
+          expect(row['ts'], at);
+          expect(row['tstz'], at);
+          expect(row['d'], DateTime.utc(2024, 3, 4));
+          for (final v in row.values) {
+            expect((v as DateTime).isUtc, isTrue);
+          }
+          await tx.execute("SET TIME ZONE 'UTC'");
+        });
+      },
+    );
 
-    test('a local DateTime is stored and read back as the same instant',
-        () async {
-      final local = DateTime(2024, 3, 4, 5, 6, 7); // whatever the test host zone is
-      await db.execute(r'INSERT INTO typed_results (ts) VALUES ($1)', args: [local]);
-      final row = (await db.query('SELECT ts FROM typed_results')).single;
-      expect(row['ts'], local.toUtc());
-    });
+    test(
+      'a local DateTime is stored and read back as the same instant',
+      () async {
+        final local = DateTime(
+          2024,
+          3,
+          4,
+          5,
+          6,
+          7,
+        ); // whatever the test host zone is
+        await db.execute(
+          r'INSERT INTO typed_results (ts) VALUES ($1)',
+          args: [local],
+        );
+        final row = (await db.query('SELECT ts FROM typed_results')).single;
+        expect(row['ts'], local.toUtc());
+      },
+    );
   });
 
   group('execute() returns affected rows', () {
@@ -184,7 +195,10 @@ void main() {
         await db.execute('INSERT INTO typed_results (i4) VALUES (1), (2), (3)'),
         3,
       );
-      expect(await db.execute('UPDATE typed_results SET i4 = i4 + 1 WHERE i4 >= 2'), 2);
+      expect(
+        await db.execute('UPDATE typed_results SET i4 = i4 + 1 WHERE i4 >= 2'),
+        2,
+      );
       expect(await db.execute('DELETE FROM typed_results WHERE i4 = 4'), 1);
       expect(await db.execute('DELETE FROM typed_results WHERE i4 = 999'), 0);
     });
@@ -220,25 +234,29 @@ void main() {
     });
   });
 
-  group('multi-statement Simple Query does not corrupt connection state (F1)', () {
-    test('query() returns the rows of the last row-returning statement', () async {
-      final before = db.poolStats.destroyed;
-      final rows = await db.query("SELECT 1 AS a, 2 AS b; SELECT 'x' AS c");
-      expect(rows, [{'c': 'x'}]);
-      expect(db.poolStats.destroyed, before);
-    });
-
-    test('execute() sums affected rows from several SELECTs', () async {
-      expect(
-        await db.execute("SELECT 1 AS a, 2 AS b; SELECT 'x' AS c"),
-        2,
+  group(
+    'multi-statement Simple Query does not corrupt connection state (F1)',
+    () {
+      test(
+        'query() returns the rows of the last row-returning statement',
+        () async {
+          final before = db.poolStats.destroyed;
+          final rows = await db.query("SELECT 1 AS a, 2 AS b; SELECT 'x' AS c");
+          expect(rows, [
+            {'c': 'x'},
+          ]);
+          expect(db.poolStats.destroyed, before);
+        },
       );
-    });
-  });
+
+      test('execute() sums affected rows from several SELECTs', () async {
+        expect(await db.execute("SELECT 1 AS a, 2 AS b; SELECT 'x' AS c"), 2);
+      });
+    },
+  );
 
   group('decode failures fail the query and keep the connection', () {
-    test("'infinity'::timestamp throws PostgresDecodeException and the connection survives",
-        () async {
+    test("'infinity'::timestamp throws PostgresDecodeException and the connection survives", () async {
       final before = db.poolStats.destroyed;
       await expectLater(
         db.query("SELECT 'infinity'::timestamp AS ts"),
@@ -255,16 +273,18 @@ void main() {
       expect(db.poolStats.destroyed, before);
     });
 
-    test('inside a transaction the connection is still usable after the failure',
-        () async {
-      await db.transaction((tx) async {
-        await expectLater(
-          tx.query("SELECT 'infinity'::timestamp AS ts"),
-          throwsA(isA<PostgresDecodeException>()),
-        );
-        final row = (await tx.query('SELECT 2 AS v')).single;
-        expect(row['v'], 2);
-      });
-    });
+    test(
+      'inside a transaction the connection is still usable after the failure',
+      () async {
+        await db.transaction((tx) async {
+          await expectLater(
+            tx.query("SELECT 'infinity'::timestamp AS ts"),
+            throwsA(isA<PostgresDecodeException>()),
+          );
+          final row = (await tx.query('SELECT 2 AS v')).single;
+          expect(row['v'], 2);
+        });
+      },
+    );
   });
 }

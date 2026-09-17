@@ -2,21 +2,16 @@
 library;
 
 import 'package:aim_postgres/src/pg_database.dart';
+import 'package:rig_postgres/rig_postgres.dart';
 import 'package:test/test.dart';
 
-import 'docker_stack.dart';
-
 void main() {
+  final pg = usePostgres();
+
   late PostgresDatabase db;
 
   setUpAll(() async {
-    await ensurePostgresStack();
-    db = await reportPortIfTaken(
-      () => PostgresDatabase.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      ),
-      port: 15433,
-    );
+    db = await PostgresDatabase.connect(pg.url);
 
     // テスト用テーブル作成
     await db.query('''
@@ -53,7 +48,9 @@ void main() {
       });
 
       // トランザクション後にデータが確定されていることを確認
-      final accounts = await db.query('SELECT * FROM test_accounts ORDER BY name');
+      final accounts = await db.query(
+        'SELECT * FROM test_accounts ORDER BY name',
+      );
       expect(accounts.length, 2);
       expect(accounts[0]['name'], 'Alice');
       expect(accounts[0]['balance'], '1000.00');
@@ -87,7 +84,9 @@ void main() {
       expect(queriedName, 'Charlie');
 
       // トランザクション後に両方のデータが存在することを確認
-      final accounts = await db.query('SELECT * FROM test_accounts ORDER BY name');
+      final accounts = await db.query(
+        'SELECT * FROM test_accounts ORDER BY name',
+      );
       expect(accounts.length, 2);
       expect(accounts[0]['name'], 'Charlie');
       expect(accounts[1]['name'], 'David');
@@ -144,7 +143,10 @@ void main() {
       });
 
       // トランザクション後に最終的なデータを確認
-      final accounts = await db.query('SELECT * FROM test_accounts WHERE name = \$1', args: ['Frank']);
+      final accounts = await db.query(
+        'SELECT * FROM test_accounts WHERE name = \$1',
+        args: ['Frank'],
+      );
       expect(accounts.length, 1);
       expect(accounts.first['balance'], '3500.00');
     });
@@ -174,7 +176,9 @@ void main() {
       }
 
       // トランザクションがロールバックされ、Henryは追加されていないことを確認
-      final accounts = await db.query('SELECT * FROM test_accounts ORDER BY name');
+      final accounts = await db.query(
+        'SELECT * FROM test_accounts ORDER BY name',
+      );
       expect(accounts.length, 1);
       expect(accounts[0]['name'], 'Grace');
     });
@@ -188,7 +192,10 @@ void main() {
           );
 
           // 不正なSQL（存在しないテーブル）
-          await tx.execute('INSERT INTO non_existent_table (name) VALUES (\$1)', args: ['test']);
+          await tx.execute(
+            'INSERT INTO non_existent_table (name) VALUES (\$1)',
+            args: ['test'],
+          );
         });
         fail('Should have thrown an exception');
       } catch (e) {
@@ -209,7 +216,10 @@ void main() {
       );
 
       // JackのIDを取得
-      final jackRecord = await db.query('SELECT id FROM test_accounts WHERE name = \$1', args: ['Jack']);
+      final jackRecord = await db.query(
+        'SELECT id FROM test_accounts WHERE name = \$1',
+        args: ['Jack'],
+      );
       final jackId = jackRecord.first['id'];
 
       // PRIMARY KEY違反を発生させる
@@ -240,13 +250,19 @@ void main() {
       }
 
       // トランザクション全体がロールバックされている
-      final accounts = await db.query('SELECT * FROM test_accounts WHERE name = \$1', args: ['Jack']);
+      final accounts = await db.query(
+        'SELECT * FROM test_accounts WHERE name = \$1',
+        args: ['Jack'],
+      );
       expect(accounts.length, 1);
       // Jackの残高は元のまま（更新されていない）
       expect(accounts.first['balance'], '1000.00');
 
       // Kateも追加されていない
-      final kate = await db.query('SELECT * FROM test_accounts WHERE name = \$1', args: ['Kate']);
+      final kate = await db.query(
+        'SELECT * FROM test_accounts WHERE name = \$1',
+        args: ['Kate'],
+      );
       expect(kate.length, 0);
     });
   });
@@ -279,10 +295,16 @@ void main() {
       });
 
       // 送金後の残高を確認
-      final alice = await db.query('SELECT balance FROM test_accounts WHERE name = \$1', args: ['Alice']);
+      final alice = await db.query(
+        'SELECT balance FROM test_accounts WHERE name = \$1',
+        args: ['Alice'],
+      );
       expect(alice.first['balance'], '700.00');
 
-      final bob = await db.query('SELECT balance FROM test_accounts WHERE name = \$1', args: ['Bob']);
+      final bob = await db.query(
+        'SELECT balance FROM test_accounts WHERE name = \$1',
+        args: ['Bob'],
+      );
       expect(bob.first['balance'], '800.00');
     });
 
@@ -330,10 +352,16 @@ void main() {
       }
 
       // トランザクションがロールバックされ、残高は元のまま
-      final charlie = await db.query('SELECT balance FROM test_accounts WHERE name = \$1', args: ['Charlie']);
+      final charlie = await db.query(
+        'SELECT balance FROM test_accounts WHERE name = \$1',
+        args: ['Charlie'],
+      );
       expect(charlie.first['balance'], '100.00');
 
-      final david = await db.query('SELECT balance FROM test_accounts WHERE name = \$1', args: ['David']);
+      final david = await db.query(
+        'SELECT balance FROM test_accounts WHERE name = \$1',
+        args: ['David'],
+      );
       expect(david.first['balance'], '500.00');
     });
   });

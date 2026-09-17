@@ -2,11 +2,12 @@
 library;
 
 import 'package:aim_postgres/src/pg_connection.dart';
+import 'package:rig_postgres/rig_postgres.dart';
 import 'package:test/test.dart';
 
-import 'docker_stack.dart';
-
 void main() {
+  final pg = usePostgres();
+
   late PostgresConnection conn;
 
   setUp(() async {
@@ -21,13 +22,7 @@ void main() {
   });
 
   setUpAll(() async {
-    await ensurePostgresStack();
-    conn = await reportPortIfTaken(
-      () => PostgresConnection.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      ),
-      port: 15433,
-    );
+    conn = await PostgresConnection.connect(pg.url);
 
     // テスト用テーブル作成
     await conn.sendSimpleQuery('''
@@ -49,8 +44,9 @@ void main() {
 
   group('Simple Query Protocol', () {
     test('SELECT returns correct results', () async {
-      final result =
-          await conn.sendSimpleQuery('SELECT * FROM test_users ORDER BY id');
+      final result = await conn.sendSimpleQuery(
+        'SELECT * FROM test_users ORDER BY id',
+      );
       final rows = result.toMaps();
 
       expect(rows.length, 3);
@@ -66,8 +62,9 @@ void main() {
     });
 
     test('SELECT with columns metadata', () async {
-      final result =
-          await conn.sendSimpleQuery('SELECT id, name FROM test_users LIMIT 1');
+      final result = await conn.sendSimpleQuery(
+        'SELECT id, name FROM test_users LIMIT 1',
+      );
 
       expect(result.columns.length, 2);
       expect(result.columns[0]['name'], 'id');
@@ -232,10 +229,9 @@ void main() {
         ['ToDeleteExt', 1],
       );
 
-      await conn.sendExtendedQuery(
-        'DELETE FROM test_users WHERE name = \$1',
-        ['ToDeleteExt'],
-      );
+      await conn.sendExtendedQuery('DELETE FROM test_users WHERE name = \$1', [
+        'ToDeleteExt',
+      ]);
 
       final selectResult = await conn.sendExtendedQuery(
         'SELECT * FROM test_users WHERE name = \$1',
@@ -253,17 +249,21 @@ void main() {
       );
     });
 
-    test('throws QueryException on non-existent table (Simple Query)',
-        () async {
-      expect(
-        () => conn.sendSimpleQuery('SELECT * FROM non_existent_table'),
-        throwsA(isA<QueryException>()),
-      );
-    });
+    test(
+      'throws QueryException on non-existent table (Simple Query)',
+      () async {
+        expect(
+          () => conn.sendSimpleQuery('SELECT * FROM non_existent_table'),
+          throwsA(isA<QueryException>()),
+        );
+      },
+    );
 
     test('throws QueryException on syntax error (Extended Query)', () async {
       expect(
-        () => conn.sendExtendedQuery('SELCT * FROM test_users WHERE id = \$1', [1]),
+        () => conn.sendExtendedQuery('SELCT * FROM test_users WHERE id = \$1', [
+          1,
+        ]),
         throwsA(isA<QueryException>()),
       );
     });
@@ -303,9 +303,7 @@ void main() {
   group('Connection Management', () {
     test('sends Terminate message on close', () async {
       // Create a new connection for this test
-      final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      );
+      final testConn = await PostgresConnection.connect(pg.url);
 
       // Execute a simple query to ensure connection is ready
       final result = await testConn.sendSimpleQuery('SELECT 1');
@@ -317,9 +315,7 @@ void main() {
 
     test('connection can execute queries before close', () async {
       // Create a new connection
-      final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      );
+      final testConn = await PostgresConnection.connect(pg.url);
 
       // Execute multiple queries
       await testConn.sendSimpleQuery('SELECT 1');
@@ -331,9 +327,7 @@ void main() {
 
     test('close handles connection that executed no queries', () async {
       // Create a connection and immediately close it
-      final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      );
+      final testConn = await PostgresConnection.connect(pg.url);
 
       // Close without executing any queries
       await expectLater(testConn.close(), completes);
@@ -342,9 +336,7 @@ void main() {
 
   group('Query Cancellation', () {
     test('cancels long-running query with pg_sleep', () async {
-      final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      );
+      final testConn = await PostgresConnection.connect(pg.url);
 
       // Start a long-running query (60 second sleep)
       final queryFuture = testConn.sendSimpleQuery('SELECT pg_sleep(60)');
@@ -371,9 +363,7 @@ void main() {
     });
 
     test('cancelQuery throws when no backend key data available', () async {
-      final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      );
+      final testConn = await PostgresConnection.connect(pg.url);
 
       // Execute a simple query first
       await testConn.sendSimpleQuery('SELECT 1');
@@ -386,9 +376,7 @@ void main() {
     });
 
     test('handles cancellation when query completes before cancel', () async {
-      final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      );
+      final testConn = await PostgresConnection.connect(pg.url);
 
       // Start a very short query
       final queryFuture = testConn.sendSimpleQuery('SELECT 1');
@@ -404,9 +392,7 @@ void main() {
     });
 
     test('can execute queries after cancellation', () async {
-      final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      );
+      final testConn = await PostgresConnection.connect(pg.url);
 
       // Start and cancel a long query
       final queryFuture = testConn.sendSimpleQuery('SELECT pg_sleep(60)');
@@ -429,15 +415,12 @@ void main() {
     });
 
     test('cancelQuery works with Extended Query Protocol', () async {
-      final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      );
+      final testConn = await PostgresConnection.connect(pg.url);
 
       // Start a long-running parameterized query
-      final queryFuture = testConn.sendExtendedQuery(
-        'SELECT pg_sleep(\$1)',
-        [60],
-      );
+      final queryFuture = testConn.sendExtendedQuery('SELECT pg_sleep(\$1)', [
+        60,
+      ]);
 
       await Future.delayed(Duration(milliseconds: 100));
       await testConn.cancelQuery();
