@@ -20,6 +20,7 @@ dart pub add aim_server_basic_auth
 ## Quick Start
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_basic_auth/aim_server_basic_auth.dart';
 
@@ -42,7 +43,7 @@ void main() async {
     return c.json({'message': 'Welcome, $username!'});
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -223,7 +224,7 @@ void main() async {
     });
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   print('Server running on http://localhost:8080');
 }
 ```

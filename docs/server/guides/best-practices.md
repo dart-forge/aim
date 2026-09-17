@@ -57,6 +57,7 @@ Future<void> getAllUsers(Context c) async {
 
 ```dart
 // bin/server.dart
+import 'dart:io';
 import 'package:my_app/routes/users.dart';
 
 void main() async {
@@ -64,7 +65,7 @@ void main() async {
 
   registerUserRoutes(app);
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -152,12 +153,13 @@ void main() async {
       ..usePrivateKey('server_key.pem');
 
     await app.serve(
+      host: InternetAddress.anyIPv4,
       port: 443,
       securityContext: context,
     );
   } else {
     // Development
-    await app.serve(port: 8080);
+    await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   }
 }
 ```
@@ -424,7 +426,7 @@ void main() async {
     app.use(verboseLogging());
   }
 
-  await app.serve(port: Config.port);
+  await app.serve(host: InternetAddress.anyIPv4, port: Config.port);
 }
 ```
 
@@ -458,7 +460,7 @@ app.get('/health', (c) async {
 void main() async {
   final app = Aim();
 
-  final server = await app.serve(port: 8080);
+  final server = await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 
   // Handle shutdown signals
   ProcessSignal.sigterm.watch().listen((signal) async {

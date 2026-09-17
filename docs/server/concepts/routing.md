@@ -103,6 +103,7 @@ Aim createPostRoutes() {
 }
 
 // bin/server.dart
+import 'dart:io';
 import 'package:my_app/routes/users.dart';
 import 'package:my_app/routes/posts.dart';
 
@@ -113,7 +114,7 @@ void main() async {
   app.route('/users', createUserRoutes());
   app.route('/posts', createPostRoutes());
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -309,6 +310,7 @@ app.get('/users/me', handler);  // This will never match!
 Here's a complete RESTful API example:
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 
 void main() async {
@@ -389,7 +391,7 @@ void main() async {
     }, statusCode: 201);
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   print('API server running on http://localhost:8080');
 }
 ```

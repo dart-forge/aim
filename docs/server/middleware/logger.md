@@ -20,6 +20,7 @@ dart pub add aim_server_logger
 ## Quick Start
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_logger/aim_server_logger.dart';
 
@@ -31,7 +32,7 @@ void main() async {
 
   app.get('/', (c) async => c.text('Hello!'));
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -78,6 +79,7 @@ Output:
 ## Complete Example
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_logger/aim_server_logger.dart';
 
@@ -102,7 +104,7 @@ void main() async {
     return c.json({'created': body}, statusCode: 201);
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   print('Server running on http://localhost:8080');
 }
 ```

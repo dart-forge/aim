@@ -31,6 +31,7 @@ dart pub add aim_server
 ### Hello World
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 
 void main() async {
@@ -40,7 +41,7 @@ void main() async {
     return c.json({'message': 'Hello, Aim!'});
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   print('Server running on http://localhost:8080');
 }
 ```
@@ -48,6 +49,7 @@ void main() async {
 ### With Middleware
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_cors/aim_server_cors.dart';
 import 'package:aim_server_logger/aim_server_logger.dart';
@@ -69,7 +71,7 @@ void main() async {
     return c.json({'created': body}, statusCode: 201);
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 

@@ -20,6 +20,7 @@ dart pub add aim_server_cookie
 ## Quick Start
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_cookie/aim_server_cookie.dart';
 
@@ -40,7 +41,7 @@ void main() async {
     return c.text('Session: $sessionId');
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -189,6 +190,7 @@ CookieOptions(sameSite: SameSite.none, secure: true)
 ## Complete Example
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_cookie/aim_server_cookie.dart';
 
@@ -257,7 +259,7 @@ void main() async {
     return c.json({'message': 'Logged out'});
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   print('Server running on http://localhost:8080');
 }
 

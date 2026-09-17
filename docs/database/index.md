@@ -96,6 +96,7 @@ void main() async {
 Of course, you can also use it with `aim_server`:
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_postgres/aim_postgres.dart';
 
@@ -128,7 +129,7 @@ void main() async {
     return c.json(users.first);
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 

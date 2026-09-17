@@ -69,6 +69,7 @@ dart pub get
 Most middleware follows a similar usage pattern:
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_logger/aim_server_logger.dart';
 import 'package:aim_server_cors/aim_server_cors.dart';
@@ -83,7 +84,7 @@ void main() async {
   // Your routes
   app.get('/', (c) async => c.text('Hello!'));
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 

@@ -20,6 +20,7 @@ dart pub add aim_server_sse
 ## Quick Start
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_sse/aim_server_sse.dart';
 
@@ -39,7 +40,7 @@ void main() async {
     });
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 

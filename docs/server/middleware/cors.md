@@ -20,6 +20,7 @@ dart pub add aim_server_cors
 ## Quick Start
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_cors/aim_server_cors.dart';
 
@@ -33,7 +34,7 @@ void main() async {
     return c.json({'message': 'CORS enabled'});
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -152,6 +153,7 @@ Default: `Duration(hours: 24)`
 ## Complete Example
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_cors/aim_server_cors.dart';
 
@@ -181,7 +183,7 @@ void main() async {
     return c.json({'created': body}, statusCode: 201);
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   print('API server running on http://localhost:8080');
 }
 ```

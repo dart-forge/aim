@@ -322,6 +322,7 @@ final context = SecurityContext()
   ..usePrivateKey('server_key.pem');
 
 await app.serve(
+  host: InternetAddress.anyIPv4,
   port: 443,
   securityContext: context,
 );
@@ -372,7 +373,7 @@ void main() async {
 void startServer(int id) async {
   final app = Aim();
   // Configure app...
-  await app.serve(port: 8080 + id);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080 + id);
 }
 ```
 
@@ -415,7 +416,7 @@ lsof -i :8080
 kill -9 <PID>
 
 # Or use different port
-await app.serve(port: 3000);
+await app.serve(host: InternetAddress.anyIPv4, port: 3000);
 ```
 
 ## Community

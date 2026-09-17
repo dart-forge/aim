@@ -20,6 +20,7 @@ dart pub add aim_server_static
 ## Quick Start
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_static/aim_server_static.dart';
 
@@ -29,7 +30,7 @@ void main() async {
   // Serve files from 'public' directory
   app.use(serveStatic(root: 'public'));
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -114,7 +115,7 @@ void main() async {
     return c.json({'error': 'Not Found'}, statusCode: 404);
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   print('Server running on http://localhost:8080');
 }
 ```
@@ -175,7 +176,7 @@ void main() async {
     return c.html(content);
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
