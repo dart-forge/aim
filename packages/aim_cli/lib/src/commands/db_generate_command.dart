@@ -355,7 +355,7 @@ class DbGenerateCommand extends Command<void> {
       return expr.value ? 'TRUE' : 'FALSE';
     }
     // それ以外は「デフォルトがある」ことだけ記録
-    return '__HAS_DEFAULT__';
+    return _hasDefaultSentinel;
   }
 
   String? _extractOnDelete(NodeList<Argument> args, String filePath) {
@@ -513,12 +513,14 @@ class DbGenerateCommand extends Command<void> {
               type: _DiffType.alterColumnDropDefault,
               table: currTable,
               column: currCol,
+              oldColumn: prevCol,
             ));
           } else {
             diffs.add(_SchemaDiff(
               type: _DiffType.alterColumnSetDefault,
               table: currTable,
               column: currCol,
+              oldColumn: prevCol,
             ));
           }
         }
@@ -679,6 +681,8 @@ class DbGenerateCommand extends Command<void> {
     final buffer = StringBuffer();
 
     for (final diff in diffs) {
+      final note = diff.note;
+      if (note != null) buffer.writeln(note);
       switch (diff.type) {
         case _DiffType.createTable:
           buffer.writeln(_generateCreateTable(diff.table));
@@ -737,9 +741,21 @@ class DbGenerateCommand extends Command<void> {
           );
         case _DiffType.alterColumnSetDefault:
           final col = diff.column!;
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} ALTER COLUMN ${col.name} SET DEFAULT ${col.defaultValue};',
-          );
+          if (col.defaultValue == _hasDefaultSentinel) {
+            // The recorded schema says this column has a default but not
+            // what it is, so there is no value to write. Putting the
+            // marker into the statement would hand Postgres SQL it
+            // rejects, which is worse than saying nothing can be done.
+            buffer.writeln(
+              '-- Cannot set the default for "${col.name}": the recorded '
+              'schema says it has one, but not its value.',
+            );
+          } else {
+            buffer.writeln(
+              'ALTER TABLE ${diff.table.name} ALTER COLUMN ${col.name} '
+              'SET DEFAULT ${col.defaultValue};',
+            );
+          }
         case _DiffType.alterColumnDropDefault:
           buffer.writeln(
             'ALTER TABLE ${diff.table.name} ALTER COLUMN ${diff.column!.name} DROP DEFAULT;',
@@ -974,7 +990,7 @@ class DbGenerateCommand extends Command<void> {
     if (col.isPrimaryKey) parts.add('PRIMARY KEY');
     if (col.isUnique) parts.add('UNIQUE');
     if (!col.isNullable && !col.isPrimaryKey) parts.add('NOT NULL');
-    if (col.defaultValue != null && col.defaultValue != '__HAS_DEFAULT__') {
+    if (col.defaultValue != null && col.defaultValue != _hasDefaultSentinel) {
       parts.add('DEFAULT ${col.defaultValue}');
     }
 
@@ -1172,6 +1188,13 @@ class _SchemaDiff {
   final ForeignKeySchema? foreignKey; // ADD/DROP FOREIGN KEY 用
   final IndexSchema? index; // ADD/DROP INDEX 用
 
+  /// Comment lines written immediately above this diff's statement.
+  ///
+  /// Set when inverting a diff for the DOWN section and the statement
+  /// cannot put everything back, so the file says what will not return.
+  /// Diffs coming from the schema comparison never carry one.
+  final String? note;
+
   _SchemaDiff({
     required this.type,
     required this.table,
@@ -1179,8 +1202,15 @@ class _SchemaDiff {
     this.oldColumn,
     this.foreignKey,
     this.index,
+    // ignore: unused_element_parameter
+    this.note,
   });
 }
+
+/// Stored in [ColumnSchema.defaultValue] when the schema declares a default
+/// whose Dart expression is not a literal. The analyzer can record that the
+/// column has a default, but not a value that could be written into SQL.
+const _hasDefaultSentinel = '__HAS_DEFAULT__';
 
 /// Convert string to snake_case for migration file names
 String _toSnakeCase(String input) {
