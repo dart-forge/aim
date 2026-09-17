@@ -351,10 +351,10 @@ final app = Aim<JwtVariables>(
 app.use(logger());
 
 // CORS
-app.use(cors(
+app.use(cors(CorsOptions(
   origin: 'https://example.com',
   allowMethods: ['GET', 'POST'],
-));
+)));
 
 // JWT Authentication
 app.use(jwt());

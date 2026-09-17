@@ -167,7 +167,7 @@ void main() async {
 ### Input Sanitization
 
 ```dart
-import 'package:html_escape/html_escape.dart';
+import 'dart:convert';
 
 app.post('/comments', (c) async {
   final body = await c.req.json();

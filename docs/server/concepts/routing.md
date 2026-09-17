@@ -205,8 +205,8 @@ app.get('/api/*', (c) async {
   return c.json({'path': path});
 });
 
-// Catch-all route (must be defined last)
-app.all('*', (c) async {
+// 404 handler (must be defined last)
+app.notFound((c) async {
   return c.json({'error': 'Not Found'}, statusCode: 404);
 });
 ```
@@ -223,7 +223,7 @@ app.all('/webhook', (c) async {
 });
 
 // Global 404 handler
-app.all('*', (c) async {
+app.notFound((c) async {
   return c.json({
     'error': 'Not Found',
     'path': c.req.path,
@@ -408,7 +408,7 @@ app.get('/', handler);
 app.get('/users', handler);
 
 // 404 handler (must be last)
-app.all('*', (c) async {
+app.notFound((c) async {
   return c.json({
     'error': 'Not Found',
     'path': c.req.path,

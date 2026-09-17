@@ -254,7 +254,7 @@ void main() async {
   });
 
   // 404 handler
-  app.all('*', (c) async {
+  app.notFound((c) async {
     return c.json({
       'error': 'Not Found',
       'requestId': c.variables.requestId,

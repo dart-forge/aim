@@ -1,6 +1,6 @@
 ---
 title: Logger Middleware - Aim Framework
-description: HTTP request and response logging for Dart. Custom formatters, performance tracking, and JSON logging support.
+description: HTTP request and response logging for Dart. Custom logging callbacks, performance tracking, and JSON logging support.
 head:
   - - meta
     - name: keywords
@@ -58,14 +58,14 @@ The default format includes:
 --> POST /api/users 201 15ms
 ```
 
-## Custom Formatter
+## Custom Logging
 
-Customize the log output:
+Customize the log output with `onRequest` and `onResponse` callbacks:
 
 ```dart
 app.use(logger(
-  formatter: (method, path, statusCode, duration) {
-    return '[$method] $path -> $statusCode (${duration}ms)';
+  onResponse: (c, durationMs) async {
+    print('[${c.req.method}] ${c.req.path} -> ${c.response?.statusCode} (${durationMs}ms)');
   },
 ));
 ```
@@ -88,9 +88,9 @@ void main() async {
 
   // Add logger with custom format
   app.use(logger(
-    formatter: (method, path, statusCode, duration) {
+    onResponse: (c, durationMs) async {
       final timestamp = DateTime.now().toIso8601String();
-      return '[$timestamp] $method $path $statusCode ${duration}ms';
+      print('[$timestamp] ${c.req.method} ${c.req.path} ${c.response?.statusCode} ${durationMs}ms');
     },
   ));
 
@@ -127,11 +127,11 @@ app.use(logger()); // See all requests during development
 
 ```dart
 app.use(logger(
-  formatter: (method, path, statusCode, duration) {
-    if (statusCode >= 400) {
-      print('ERROR: $method $path $statusCode ${duration}ms');
+  onResponse: (c, durationMs) async {
+    if ((c.response?.statusCode ?? 0) >= 400) {
+      print('ERROR: ${c.req.method} ${c.req.path} ${c.response?.statusCode} ${durationMs}ms');
     }
-    return null; // Don't print successful requests
+    // Successful requests are simply not printed.
   },
 ));
 ```
@@ -140,11 +140,11 @@ app.use(logger(
 
 ```dart
 app.use(logger(
-  formatter: (method, path, statusCode, duration) {
-    if (duration > 1000) {
-      print('SLOW: $method $path took ${duration}ms');
+  onResponse: (c, durationMs) async {
+    if (durationMs > 1000) {
+      print('SLOW: ${c.req.method} ${c.req.path} took ${durationMs}ms');
     }
-    return '${method} ${path} ${statusCode} ${duration}ms';
+    print('${c.req.method} ${c.req.path} ${c.response?.statusCode} ${durationMs}ms');
   },
 ));
 ```
@@ -155,15 +155,15 @@ app.use(logger(
 import 'dart:convert';
 
 app.use(logger(
-  formatter: (method, path, statusCode, duration) {
+  onResponse: (c, durationMs) async {
     final log = {
       'timestamp': DateTime.now().toIso8601String(),
-      'method': method,
-      'path': path,
-      'status': statusCode,
-      'duration_ms': duration,
+      'method': c.req.method,
+      'path': c.req.path,
+      'status': c.response?.statusCode,
+      'duration_ms': durationMs,
     };
-    return jsonEncode(log);
+    print(jsonEncode(log));
   },
 ));
 ```
@@ -185,32 +185,32 @@ Output:
 2. **Custom format for production** - Include timestamps and metadata
    ```dart
    app.use(logger(
-     formatter: (method, path, statusCode, duration) {
-       return '[${DateTime.now()}] $method $path $statusCode ${duration}ms';
+     onResponse: (c, durationMs) async {
+       print('[${DateTime.now()}] ${c.req.method} ${c.req.path} ${c.response?.statusCode} ${durationMs}ms');
      },
    ));
    ```
 
 3. **Conditional logging** - Log only errors or slow requests
    ```dart
-   formatter: (method, path, statusCode, duration) {
-     if (statusCode >= 500 || duration > 5000) {
-       return 'ALERT: $method $path $statusCode ${duration}ms';
+   onResponse: (c, durationMs) async {
+     if ((c.response?.statusCode ?? 0) >= 500 || durationMs > 5000) {
+       print('ALERT: ${c.req.method} ${c.req.path} ${c.response?.statusCode} ${durationMs}ms');
      }
-     return null; // Skip normal requests
+     // Normal requests are simply not printed.
    },
    ```
 
 4. **Structured logging** - Use JSON for log aggregation
    ```dart
-   formatter: (method, path, statusCode, duration) {
-     return jsonEncode({
-       'level': statusCode >= 500 ? 'error' : 'info',
-       'method': method,
-       'path': path,
-       'status': statusCode,
-       'duration': duration,
-     });
+   onResponse: (c, durationMs) async {
+     print(jsonEncode({
+       'level': (c.response?.statusCode ?? 0) >= 500 ? 'error' : 'info',
+       'method': c.req.method,
+       'path': c.req.path,
+       'status': c.response?.statusCode,
+       'duration': durationMs,
+     }));
    },
    ```
 

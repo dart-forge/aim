@@ -29,7 +29,7 @@ Access request information through `c.req`:
 ### Method and Path
 
 ```dart
-app.all('/*', (c) async {
+app.notFound((c) async {
   final method = c.req.method;  // GET, POST, etc.
   final path = c.req.path;      // /users/123
 

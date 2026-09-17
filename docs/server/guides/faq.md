@@ -96,8 +96,8 @@ app.get('/search', (c) async {
 Yes:
 
 ```dart
-app.get('/api/*', handler);     // Match /api/anything
-app.all('*', notFoundHandler);  // Catch-all
+app.get('/api/*', handler);   // Match /api/anything
+app.notFound(notFoundHandler);  // Not found
 ```
 
 ## Middleware
