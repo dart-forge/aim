@@ -175,20 +175,23 @@ return c.json({'error': 'Not found'}, statusCode: 404);
 
 ### How do I handle file uploads?
 
-Use the [Multipart middleware](/server/middleware/multipart):
+Use the [Multipart middleware](/server/middleware/multipart) — `multipart()`
+is an extension method on `Request`, not a middleware:
 
 ```dart
+import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_multipart/aim_server_multipart.dart';
-
-final app = Aim<MultipartVariables>(
-  variablesFactory: () => MultipartVariables(),
-);
-
-app.use(multipart());
+import 'package:aim_server_multipart/aim_server_multipart_io.dart';
 
 app.post('/upload', (c) async {
-  final file = c.variables.files['document'];
-  await File('uploads/${file.filename}').writeAsBytes(file.bytes);
+  final form = await c.req.multipart();
+  final file = form.file('document');
+
+  if (file == null) {
+    return c.json({'error': 'No file uploaded'}, statusCode: 400);
+  }
+
+  await file.saveTo('uploads/${file.filename}');
   return c.json({'uploaded': file.filename});
 });
 ```
