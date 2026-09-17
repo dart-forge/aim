@@ -100,31 +100,41 @@ abstract class Column<T, Self> {
 /// Action to take when a referenced row is deleted.
 enum OnDeleteAction {
   /// Delete the referencing rows.
-  cascade,
+  cascade('CASCADE'),
 
   /// Set the foreign key column to null.
-  setNull,
+  setNull('SET NULL'),
 
   /// Prevent deletion if references exist.
-  restrict,
+  restrict('RESTRICT'),
 
   /// Set the foreign key column to its default value.
-  setDefault,
+  setDefault('SET DEFAULT');
+
+  /// The SQL keyword for this action.
+  final String sqlKeyword;
+
+  const OnDeleteAction(this.sqlKeyword);
 }
 
 /// Action to take when a referenced row is updated.
 enum OnUpdateAction {
   /// Update the foreign key in referencing rows.
-  cascade,
+  cascade('CASCADE'),
 
   /// Set the foreign key column to null.
-  setNull,
+  setNull('SET NULL'),
 
   /// Prevent update if references exist.
-  restrict,
+  restrict('RESTRICT'),
 
   /// Set the foreign key column to its default value.
-  setDefault,
+  setDefault('SET DEFAULT');
+
+  /// The SQL keyword for this action.
+  final String sqlKeyword;
+
+  const OnUpdateAction(this.sqlKeyword);
 }
 
 /// A column that stores integer values.
@@ -192,7 +202,7 @@ class VarcharColumn extends Column<String, VarcharColumn> {
   );
 
   @override
-  String toSql() => 'VARCHAR($length)';
+  String toSql() => length == null ? 'VARCHAR' : 'VARCHAR($length)';
 }
 
 /// A column that stores text of unlimited length.

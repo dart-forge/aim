@@ -8,6 +8,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
+  aim_orm: ^0.2.0
   aim_postgres: ^0.2.0
   analyzer: ^14.0.0
   args: ^2.5.0

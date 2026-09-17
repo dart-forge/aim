@@ -241,15 +241,13 @@ app.get('/dashboard', dashboardHandler);
 
 ### Can I use session-based auth?
 
-Yes, use the [Cookie middleware](/server/middleware/cookie):
+Yes, use the [Cookie extensions](/server/middleware/cookie):
 
 ```dart
 import 'package:aim_server_cookie/aim_server_cookie.dart';
 
-app.use(cookie());
-
 app.post('/login', (c) async {
-  c.variables.setCookie(
+  c.setCookie(
     'session_id',
     sessionId,
     options: CookieOptions(

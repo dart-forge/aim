@@ -136,6 +136,143 @@ void main() {
     );
   });
 
+  group('cookies / getCookie', () {
+    test('getCookie reads a single cookie from the Cookie header', () async {
+      final app = Aim()
+        ..get('/get', (c) async => c.text(c.getCookie('session_id') ?? 'null'));
+      final client = TestClient(app);
+
+      final response = await client.get(
+        '/get',
+        headers: {'cookie': 'session_id=abc123'},
+      );
+
+      expect(await response.bodyAsString(), equals('abc123'));
+    });
+
+    test('cookies reads every cookie out of one Cookie header', () async {
+      final app = Aim()..get('/get', (c) async => c.json(c.cookies));
+      final client = TestClient(app);
+
+      final response = await client.get(
+        '/get',
+        headers: {'cookie': 'a=1; b=2; c=3'},
+      );
+
+      expect(
+        await response.bodyAsJson(),
+        equals({'a': '1', 'b': '2', 'c': '3'}),
+      );
+    });
+
+    test('whitespace around a pair is trimmed', () async {
+      final app = Aim()..get('/get', (c) async => c.json(c.cookies));
+      final client = TestClient(app);
+
+      final response = await client.get(
+        '/get',
+        headers: {'cookie': '  a=1  ;   b=2  '},
+      );
+
+      expect(await response.bodyAsJson(), equals({'a': '1', 'b': '2'}));
+    });
+
+    test('the first "=" splits name from value, so a value containing "=" '
+        'survives', () async {
+      final app = Aim()
+        ..get('/get', (c) async => c.text(c.getCookie('token') ?? 'null'));
+      final client = TestClient(app);
+
+      final response = await client.get(
+        '/get',
+        headers: {'cookie': 'token=a=b=c'},
+      );
+
+      expect(await response.bodyAsString(), equals('a=b=c'));
+    });
+
+    test('a duplicate name keeps the first occurrence, the order a browser '
+        'sends the most specific cookie in', () async {
+      final app = Aim()
+        ..get('/get', (c) async => c.text(c.getCookie('a') ?? 'null'));
+      final client = TestClient(app);
+
+      final response = await client.get(
+        '/get',
+        headers: {'cookie': 'a=first; a=second'},
+      );
+
+      expect(await response.bodyAsString(), equals('first'));
+    });
+
+    test('a pair with no "=" is skipped rather than crashing', () async {
+      final app = Aim()..get('/get', (c) async => c.json(c.cookies));
+      final client = TestClient(app);
+
+      final response = await client.get(
+        '/get',
+        headers: {'cookie': 'malformed; a=1'},
+      );
+
+      expect(await response.bodyAsJson(), equals({'a': '1'}));
+    });
+
+    test('no Cookie header at all is an empty map, not an error', () async {
+      final app = Aim()..get('/get', (c) async => c.json(c.cookies));
+      final client = TestClient(app);
+
+      final response = await client.get('/get');
+
+      expect(await response.bodyAsJson(), equals(<String, dynamic>{}));
+    });
+
+    test(
+      'getCookie returns null when the request has no cookie by that name',
+      () async {
+        final app = Aim()
+          ..get(
+            '/get',
+            (c) async => c.text((c.getCookie('missing') == null).toString()),
+          );
+        final client = TestClient(app);
+
+        final response = await client.get('/get', headers: {'cookie': 'a=1'});
+
+        expect(await response.bodyAsString(), equals('true'));
+      },
+    );
+
+    test('a value that needed encoding survives a set-then-read round trip '
+        'through the test client', () async {
+      const original = 'hello world; foo=bar, "quoted"';
+      final app = Aim()
+        ..get('/set', (c) async {
+          c.setCookie('message', original);
+          return c.text('set');
+        })
+        ..get('/get', (c) async => c.text(c.getCookie('message') ?? 'null'));
+      final client = TestClient(app);
+
+      final setResponse = await client.get('/set');
+      final setCookieHeader = setResponse.header('set-cookie')!;
+      // Only the `name=value` portion is relevant to the request Cookie
+      // header; a real browser would strip the Set-Cookie attributes the
+      // same way before sending the cookie back.
+      final nameValue = setCookieHeader.split(';').first;
+      expect(
+        nameValue,
+        equals('message=hello%20world%3B%20foo%3Dbar%2C%20%22quoted%22'),
+      );
+
+      final getResponse = await client.get(
+        '/get',
+        headers: {'cookie': nameValue},
+      );
+
+      expect(await getResponse.bodyAsString(), equals(original));
+    });
+  });
+
   group('deleteCookie', () {
     test('deleting a cookie sends Max-Age=0 with an empty value, which is what '
         'a browser needs to drop it immediately', () async {

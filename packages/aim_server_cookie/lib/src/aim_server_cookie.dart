@@ -2,9 +2,63 @@ import 'package:aim_core/aim_core.dart';
 import 'package:aim_server_cookie/src/cookie_options.dart';
 
 extension CookieContext on Context {
+  /// Every cookie sent by the client on this request, keyed by name.
+  ///
+  /// Parses the request's `Cookie` header: pairs separated by `;`, each
+  /// `name=value`, with whitespace around a pair trimmed. A pair with no
+  /// `=` is skipped. When the same name appears twice, the first one wins,
+  /// which is the order a browser sends the most specific cookie in.
+  /// Values are percent-decoded to match the encoding [setCookie] applies
+  /// when writing them. Returns an empty map when the request has no
+  /// `Cookie` header at all.
+  ///
+  /// Example:
+  /// ```dart
+  /// app.get('/profile', (c) {
+  ///   return c.json(c.cookies);
+  /// });
+  /// ```
+  Map<String, String> get cookies {
+    final header = headers['cookie'];
+    if (header == null) return {};
+
+    final result = <String, String>{};
+    for (final rawPair in header.split(';')) {
+      final pair = rawPair.trim();
+      if (pair.isEmpty) continue;
+
+      final separator = pair.indexOf('=');
+      if (separator == -1) continue;
+
+      final name = pair.substring(0, separator);
+      if (result.containsKey(name)) continue;
+
+      final value = pair.substring(separator + 1);
+      result[name] = Uri.decodeComponent(value);
+    }
+    return result;
+  }
+
+  /// The value of the cookie named [name] on this request, or `null` when
+  /// the request carries no cookie by that name.
+  ///
+  /// Example:
+  /// ```dart
+  /// app.get('/profile', (c) {
+  ///   final sessionId = c.getCookie('session_id');
+  ///   return c.text('Session: $sessionId');
+  /// });
+  /// ```
+  String? getCookie(String name) => cookies[name];
+
   /// Sets a cookie in the response.
   ///
   /// Multiple cookies can be set by calling this method multiple times.
+  ///
+  /// [value] is percent-encoded before it is written, so it survives
+  /// round-tripping through [cookies] / [getCookie] even when it contains
+  /// characters such as `;`, `,`, whitespace, or a quote that would
+  /// otherwise be ambiguous or invalid inside a `Set-Cookie` header.
   ///
   /// Example:
   /// ```dart
@@ -32,7 +86,7 @@ extension CookieContext on Context {
 
   /// Builds a Set-Cookie header value from name, value, and options.
   String _buildCookieString(String name, String value, CookieOptions? options) {
-    final buffer = StringBuffer('$name=$value');
+    final buffer = StringBuffer('$name=${Uri.encodeComponent(value)}');
 
     if (options != null) {
       if (options.path != null) {

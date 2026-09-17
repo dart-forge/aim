@@ -9,7 +9,8 @@ head:
 
 # Cookie
 
-Secure cookie management middleware.
+Secure cookie management for Aim, via extension methods on `Context` — no
+middleware to register.
 
 ## Installation
 
@@ -21,23 +22,20 @@ dart pub add aim_server_cookie
 
 ```dart
 import 'dart:io';
+
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_cookie/aim_server_cookie.dart';
 
 void main() async {
-  final app = Aim<CookieVariables>(
-    variablesFactory: () => CookieVariables(),
-  );
-
-  app.use(cookie());
+  final app = Aim();
 
   app.get('/set', (c) async {
-    c.variables.setCookie('session_id', 'abc123');
+    c.setCookie('session_id', 'abc123');
     return c.text('Cookie set');
   });
 
   app.get('/get', (c) async {
-    final sessionId = c.variables.getCookie('session_id');
+    final sessionId = c.getCookie('session_id');
     return c.text('Session: $sessionId');
   });
 
@@ -45,18 +43,22 @@ void main() async {
 }
 ```
 
+`setCookie`, `getCookie`, `cookies`, and `deleteCookie` are all extension
+methods on `Context`. There is no `cookie()` middleware and nothing to add
+with `app.use()` — importing the package is enough to use them on any `c`.
+
 ## Setting Cookies
 
 ### Basic Cookie
 
 ```dart
-c.variables.setCookie('user_id', '123');
+c.setCookie('user_id', '123');
 ```
 
 ### With Options
 
 ```dart
-c.variables.setCookie(
+c.setCookie(
   'session_id',
   'abc123',
   options: CookieOptions(
@@ -71,7 +73,7 @@ c.variables.setCookie(
 ### Secure Cookie
 
 ```dart
-c.variables.setCookie(
+c.setCookie(
   'auth_token',
   'secret-token',
   options: CookieOptions(
@@ -82,11 +84,28 @@ c.variables.setCookie(
 );
 ```
 
+### Values with special characters
+
+The cookie value is percent-encoded when it is written and decoded again
+when it is read back through `getCookie` or `cookies`, so a value
+containing `;`, `,`, whitespace, or a quote round-trips intact:
+
+```dart
+c.setCookie('message', 'hello world; thanks!');
+// Set-Cookie: message=hello%20world%3B%20thanks%21
+```
+
+The cookie *name* is written as given and is not encoded — keep it to the
+characters the `Set-Cookie` specification allows for a cookie name.
+
 ## Getting Cookies
+
+`getCookie` returns the value of one cookie from the request's `Cookie`
+header, or `null` if the request didn't send it:
 
 ```dart
 app.get('/profile', (c) async {
-  final userId = c.variables.getCookie('user_id');
+  final userId = c.getCookie('user_id');
 
   if (userId == null) {
     return c.json({'error': 'Not logged in'}, statusCode: 401);
@@ -96,14 +115,31 @@ app.get('/profile', (c) async {
 });
 ```
 
+`cookies` returns every cookie on the request as a `Map<String, String>`:
+
+```dart
+app.get('/debug/cookies', (c) async {
+  return c.json(c.cookies);
+});
+```
+
 ## Deleting Cookies
 
 ```dart
 app.get('/logout', (c) async {
-  c.variables.deleteCookie('session_id');
-  c.variables.deleteCookie('user_id');
+  c.deleteCookie('session_id');
+  c.deleteCookie('user_id');
   return c.text('Logged out');
 });
+```
+
+`deleteCookie` sets the cookie's value to empty with `Max-Age=0`. If the
+cookie was set with a `path` or `domain`, pass the same ones to
+`deleteCookie` — a browser only clears a cookie whose path and domain
+match:
+
+```dart
+c.deleteCookie('session_id', path: '/', domain: '.example.com');
 ```
 
 ## Cookie Options
@@ -191,15 +227,12 @@ CookieOptions(sameSite: SameSite.none, secure: true)
 
 ```dart
 import 'dart:io';
+
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_cookie/aim_server_cookie.dart';
 
 void main() async {
-  final app = Aim<CookieVariables>(
-    variablesFactory: () => CookieVariables(),
-  );
-
-  app.use(cookie());
+  final app = Aim();
 
   // Login
   app.post('/login', (c) async {
@@ -210,7 +243,7 @@ void main() async {
     // Validate credentials...
     if (username == 'admin' && password == 'password') {
       // Set secure session cookie
-      c.variables.setCookie(
+      c.setCookie(
         'session_id',
         generateSessionId(),
         options: CookieOptions(
@@ -222,7 +255,7 @@ void main() async {
       );
 
       // Set user preference cookie
-      c.variables.setCookie(
+      c.setCookie(
         'theme',
         'dark',
         options: CookieOptions(
@@ -238,14 +271,14 @@ void main() async {
 
   // Profile (requires session)
   app.get('/profile', (c) async {
-    final sessionId = c.variables.getCookie('session_id');
+    final sessionId = c.getCookie('session_id');
 
     if (sessionId == null) {
       return c.json({'error': 'Not authenticated'}, statusCode: 401);
     }
 
     // Validate session...
-    final theme = c.variables.getCookie('theme') ?? 'light';
+    final theme = c.getCookie('theme') ?? 'light';
 
     return c.json({
       'username': 'admin',
@@ -255,7 +288,7 @@ void main() async {
 
   // Logout
   app.post('/logout', (c) async {
-    c.variables.deleteCookie('session_id');
+    c.deleteCookie('session_id');
     return c.json({'message': 'Logged out'});
   });
 
