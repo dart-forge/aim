@@ -539,6 +539,37 @@ import 'package:aim_orm/aim_orm.dart';
       );
     });
 
+    test('tables created together are dropped dependents first', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(() => users.id),
+);
+''');
+      await generate('first');
+
+      final down = downOf('first');
+      final dropPosts = down.indexOf('DROP TABLE IF EXISTS posts;');
+      final dropUsers = down.indexOf('DROP TABLE IF EXISTS users;');
+      expect(dropPosts, isNonNegative);
+      expect(dropUsers, isNonNegative);
+      expect(
+        dropPosts,
+        lessThan(dropUsers),
+        reason:
+            'a table cannot be dropped while another table still '
+            'references it',
+      );
+    });
+
     test('a self-referencing table still gets created', () async {
       writeSchema('''
 import 'package:aim_orm/aim_orm.dart';

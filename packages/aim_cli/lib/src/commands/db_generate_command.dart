@@ -1305,12 +1305,20 @@ List<_SchemaDiff> _orderForExecution(List<_SchemaDiff> diffs) {
   }
 
   final createPhase = _executionPhase(_DiffType.createTable);
+  final dropPhase = _executionPhase(_DiffType.dropTable);
   final result = <_SchemaDiff>[];
   for (final phase in byPhase.keys.toList()..sort()) {
     final group = byPhase[phase]!;
-    result.addAll(
-      phase == createPhase ? _orderTablesByReference(group) : group,
-    );
+    if (phase == createPhase) {
+      result.addAll(_orderTablesByReference(group));
+    } else if (phase == dropPhase) {
+      // Dropping runs the other way round: a table cannot go while
+      // another table's foreign key still points at it, and the
+      // generated DROP TABLE carries no CASCADE.
+      result.addAll(_orderTablesByReference(group).reversed);
+    } else {
+      result.addAll(group);
+    }
   }
   return result;
 }
@@ -1322,8 +1330,8 @@ List<_SchemaDiff> _orderForExecution(List<_SchemaDiff> diffs) {
 /// has to exist already. References to tables outside [creates] need no
 /// ordering: those tables are not being created here, so they are already
 /// there. A table referencing itself is left alone. Tables in a reference
-/// cycle keep their input order — Postgres rejects that schema either way,
-/// and choosing an order would not help.
+/// cycle come out in whatever order the traversal reaches them — Postgres
+/// rejects that schema whatever the order, so no ordering would help.
 List<_SchemaDiff> _orderTablesByReference(List<_SchemaDiff> creates) {
   final byName = {for (final diff in creates) diff.table.name: diff};
   final ordered = <_SchemaDiff>[];
