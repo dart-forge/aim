@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:aim_cli/aim_cli.dart';
@@ -624,6 +625,199 @@ final users = (
         downOf('second'),
         contains('ALTER TABLE users ALTER COLUMN code TYPE VARCHAR(10);'),
       );
+    });
+  });
+
+  group('db:generate - constraint order', () {
+    test(
+      'a foreign key is dropped before the unique constraint it needs',
+      () async {
+        writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  code: varchar('code', length: 20),
+);
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  ref: varchar('ref', length: 20),
+);
+''');
+        await generate('first');
+
+        writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  code: varchar('code', length: 20).unique(),
+);
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  ref: varchar('ref', length: 20).references(() => users.code),
+);
+''');
+        await generate('second');
+
+        final down = downOf('second');
+        final dropForeignKey = down.indexOf('DROP CONSTRAINT fk_posts_ref;');
+        final dropUnique = down.indexOf('DROP CONSTRAINT uq_users_code;');
+        expect(dropForeignKey, isNonNegative);
+        expect(dropUnique, isNonNegative);
+        expect(
+          dropForeignKey,
+          lessThan(dropUnique),
+          reason:
+              'the unique index backs the foreign key, so Postgres will '
+              'not drop it while the foreign key is still there',
+        );
+
+        final up = upOf('second');
+        final addUnique = up.indexOf('ADD CONSTRAINT uq_users_code');
+        final addForeignKey = up.indexOf('ADD CONSTRAINT fk_posts_ref');
+        expect(addUnique, isNonNegative);
+        expect(addForeignKey, isNonNegative);
+        expect(
+          addUnique,
+          lessThan(addForeignKey),
+          reason: 'the foreign key needs the unique index to exist first',
+        );
+      },
+    );
+  });
+
+  group('db:generate - UP statement order', () {
+    test('an index is dropped before the column it sits on', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  email: varchar('email', length: 255).indexed(),
+);
+''');
+      await generate('first');
+
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+''');
+      await generate('second');
+
+      final up = upOf('second');
+      final dropIndex = up.indexOf('DROP INDEX idx_users_email');
+      final dropColumn = up.indexOf('DROP COLUMN email');
+      expect(dropIndex, isNonNegative);
+      expect(dropColumn, isNonNegative);
+      expect(
+        dropIndex,
+        lessThan(dropColumn),
+        reason:
+            'dropping the column takes its index with it, so the '
+            'explicit DROP INDEX has to come first',
+      );
+    });
+
+    test('a referenced table is created before the table holding the '
+        'foreign key', () async {
+      // posts is declared first on purpose: without ordering, the tables
+      // are created in declaration order and posts' inline foreign key
+      // would point at a table that does not exist yet.
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(() => users.id),
+);
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+''');
+      await generate('first');
+
+      final up = upOf('first');
+      final createUsers = up.indexOf('CREATE TABLE users (');
+      final createPosts = up.indexOf('CREATE TABLE posts (');
+      expect(createUsers, isNonNegative);
+      expect(createPosts, isNonNegative);
+      expect(createUsers, lessThan(createPosts));
+    });
+  });
+
+  group('db:generate - a default the analyzer could not read', () {
+    test('is named on stdout when the migration is generated', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  created_at: timestamp('created_at'),
+);
+''');
+      await generate('first');
+
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  created_at: timestamp('created_at').withDefault(clockNow()),
+);
+''');
+
+      final printed = <String>[];
+      await runZoned(
+        () => generate('second'),
+        zoneSpecification: ZoneSpecification(
+          print: (self, parent, zone, line) => printed.add(line),
+        ),
+      );
+
+      final output = printed.join('\n');
+      expect(output, contains('could not be read'));
+      expect(output, contains('users.created_at'));
+    });
+
+    test('is named for a new table too', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('notes')
+final notes = (
+  id: integer('id').primaryKey(),
+  label: varchar('label', length: 40).withDefault(computeLabel()),
+);
+''');
+
+      final printed = <String>[];
+      await runZoned(
+        () => generate('first'),
+        zoneSpecification: ZoneSpecification(
+          print: (self, parent, zone, line) => printed.add(line),
+        ),
+      );
+
+      final output = printed.join('\n');
+      expect(output, contains('could not be read'));
+      expect(output, contains('notes.label'));
     });
   });
 }
