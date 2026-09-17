@@ -155,6 +155,14 @@ rig prune --all
 dart test -t integration --run-skipped
 ```
 
+### サーバー側のログを見たい
+
+認証方式の切り分けなど、サーバー側で何が起きているか見たいときは
+`usePostgres(auth: ..., verboseLogs: true)` を使います。`log_statement=all` /
+`log_connections=on` / `log_disconnections=on` / `log_duration=on` /
+`log_line_prefix=...` の5つが付き、`docker logs <name>` で見えるようになります
+（既定は `false` で、全スイートのログが膨らむのを避けています）。
+
 ## テスト戦略の参考
 
 このテスト戦略は、Dart `postgres`パッケージの実装を参考にしています：
