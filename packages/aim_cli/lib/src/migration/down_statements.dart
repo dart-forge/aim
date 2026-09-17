@@ -37,9 +37,16 @@ List<String> _splitOnSemicolons(String sql) {
     final char = sql[i];
     final next = i + 1 < sql.length ? sql[i + 1] : '';
 
-    if (!inBlockComment && char == '-' && next == '-') {
+    // Both characters of a comment delimiter are consumed together, so the
+    // middle character of `/*/` cannot close the comment it just opened.
+    // `_withoutComments` reads the text the same way, and the two have to
+    // agree: a fragment split out here and then found empty there would
+    // take a real statement with it.
+    if (!inBlockComment && !inLineComment && char == '-' && next == '-') {
       inLineComment = true;
       buffer.write(char);
+      buffer.write(next);
+      i++;
       continue;
     }
     if (inLineComment && char == '\n') {
@@ -47,14 +54,18 @@ List<String> _splitOnSemicolons(String sql) {
       buffer.write(char);
       continue;
     }
-    if (!inLineComment && char == '/' && next == '*') {
+    if (!inLineComment && !inBlockComment && char == '/' && next == '*') {
       inBlockComment = true;
       buffer.write(char);
+      buffer.write(next);
+      i++;
       continue;
     }
     if (inBlockComment && char == '*' && next == '/') {
       inBlockComment = false;
       buffer.write(char);
+      buffer.write(next);
+      i++;
       continue;
     }
     if (char == ';' && !inLineComment && !inBlockComment) {

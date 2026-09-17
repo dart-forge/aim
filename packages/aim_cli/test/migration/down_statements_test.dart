@@ -58,5 +58,17 @@ DROP TABLE a;
     test('keeps a trailing statement with no semicolon', () {
       expect(executableStatements('DROP TABLE a'), hasLength(1));
     });
+
+    test('keeps a block comment that shares a line with its statement', () {
+      final statements = executableStatements('/* why */ DROP TABLE a;');
+      expect(statements, hasLength(1));
+      expect(statements.single, '/* why */ DROP TABLE a');
+    });
+
+    test('reads an unclosed block comment as running to the end', () {
+      // The middle character of `/*/` cannot both open and close the
+      // comment, so nothing after it is a statement.
+      expect(executableStatements('/*/ DROP TABLE a;'), isEmpty);
+    });
   });
 }
