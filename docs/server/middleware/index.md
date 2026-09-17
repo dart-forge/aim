@@ -196,7 +196,7 @@ final app = Aim<JwtVariables>(
 );
 
 app.use(logger());
-app.use(cors(origin: 'https://example.com'));
+app.use(cors(CorsOptions(origin: 'https://example.com')));
 app.use(jwt());
 
 app.post('/api/data', (c) async {
