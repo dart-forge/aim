@@ -1323,17 +1323,19 @@ List<_SchemaDiff> _orderForExecution(List<_SchemaDiff> diffs) {
   return result;
 }
 
-/// [creates] — all CREATE TABLE diffs — ordered so a table comes after the
-/// tables its foreign keys point at.
+/// [tables] — whole-table diffs, all of one kind — ordered so a table comes
+/// after the tables its foreign keys point at.
 ///
-/// CREATE TABLE writes its foreign keys inline, so the referenced table
-/// has to exist already. References to tables outside [creates] need no
-/// ordering: those tables are not being created here, so they are already
-/// there. A table referencing itself is left alone. Tables in a reference
-/// cycle come out in whatever order the traversal reaches them — Postgres
-/// rejects that schema whatever the order, so no ordering would help.
-List<_SchemaDiff> _orderTablesByReference(List<_SchemaDiff> creates) {
-  final byName = {for (final diff in creates) diff.table.name: diff};
+/// CREATE TABLE writes its foreign keys inline, so the referenced table has
+/// to exist already. Dropping needs the opposite order, which the caller
+/// gets by reversing this. References to tables outside [tables] need no
+/// ordering: those tables are not part of this group, so they are already
+/// where they need to be. A table referencing itself is left alone. Tables
+/// in a reference cycle come out in whatever order the traversal reaches
+/// them — Postgres rejects that schema whatever the order, so no ordering
+/// would help.
+List<_SchemaDiff> _orderTablesByReference(List<_SchemaDiff> tables) {
+  final byName = {for (final diff in tables) diff.table.name: diff};
   final ordered = <_SchemaDiff>[];
   final placed = <String>{};
   final visiting = <String>{};
@@ -1352,7 +1354,7 @@ List<_SchemaDiff> _orderTablesByReference(List<_SchemaDiff> creates) {
     ordered.add(diff);
   }
 
-  for (final diff in creates) {
+  for (final diff in tables) {
     place(diff);
   }
   return ordered;
