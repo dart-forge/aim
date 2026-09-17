@@ -250,18 +250,20 @@ test('Returns 404 for unknown routes', () async {
 
 ## Testing Form Data
 
+`formData()` is an extension method on `Request`, not a middleware:
+
 ```dart
+import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_form/aim_server_form.dart';
+import 'package:aim_server_testing/aim_server_testing.dart';
+import 'package:test/test.dart';
 
 test('Form data is parsed', () async {
-  final app = Aim<FormVariables>(
-    variablesFactory: () => FormVariables(),
-  );
-
-  app.use(form());
+  final app = Aim();
 
   app.post('/submit', (c) async {
-    final name = c.variables.formData['name'];
+    final form = await c.req.formData();
+    final name = form['name'];
     return c.json({'name': name});
   });
 
