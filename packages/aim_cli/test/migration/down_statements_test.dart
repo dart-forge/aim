@@ -70,5 +70,18 @@ DROP TABLE a;
       // comment, so nothing after it is a statement.
       expect(executableStatements('/*/ DROP TABLE a;'), isEmpty);
     });
+
+    test('finds the statement after a block comment whose text starts with '
+        'a slash', () {
+      // The slash right after `/*` belongs to the comment. Reading it as
+      // the comment's close would end the comment early, split at the
+      // semicolon inside it, and leave a dangling `*/` in front of the
+      // real statement.
+      final statements = executableStatements(
+        '/*/ DROP TABLE a; */ DROP TABLE b;',
+      );
+      expect(statements, hasLength(1));
+      expect(statements.single, '/*/ DROP TABLE a; */ DROP TABLE b');
+    });
   });
 }
