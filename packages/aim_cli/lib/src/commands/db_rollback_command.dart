@@ -155,6 +155,9 @@ class DbRollbackCommand extends Command<void> {
         }
 
         print('  ✅ Rolled back: $name');
+        for (final line in _noteLines(statements)) {
+          print('     $line');
+        }
       }
 
       print('');
@@ -219,6 +222,23 @@ class DbRollbackCommand extends Command<void> {
       'DELETE FROM _aim_migrations WHERE name = :name',
       params: {'name': name},
     );
+  }
+
+  /// The comment lines sitting above the statements that just ran.
+  ///
+  /// The generated DOWN section says in a comment where a statement brings
+  /// structure back without the data that was in it. That belongs in front
+  /// of the person who just rolled back, not only in the file they are
+  /// unlikely to open afterwards.
+  List<String> _noteLines(List<String> statements) {
+    final lines = <String>[];
+    for (final statement in statements) {
+      for (final line in statement.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.startsWith('--')) lines.add(trimmed);
+      }
+    }
+    return lines;
   }
 
   /// マイグレーションファイルをUP/DOWNセクションに分離
