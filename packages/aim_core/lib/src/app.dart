@@ -117,7 +117,7 @@ class Aim<E extends Variables> {
       Map<String, String>? pathParams;
 
       for (final route in _routes) {
-        if (route.method == request.method) {
+        if (route.method == request.method || route.method == '*') {
           final params = route.match(request.path);
           if (params != null) {
             matchingRoute = route;
@@ -267,6 +267,33 @@ class Aim<E extends Variables> {
         handler: handler,
         metadata: metadata,
       ),
+    );
+    return this;
+  }
+
+  /// Registers a single route that answers every HTTP method on [path].
+  ///
+  /// This registers one route with the sentinel method `'*'`, not one
+  /// route per known verb, so it also answers methods Aim has no named
+  /// method for (e.g. `TRACE`), and [routes] reports exactly one entry
+  /// for it.
+  ///
+  /// Precedence follows the same rule as every other route: the first
+  /// matching route in declaration order wins. A `get` (or any other
+  /// verb) declared before an `all` on the same path still handles its
+  /// own method; an `all` declared first handles everything, including
+  /// that verb.
+  ///
+  /// Example:
+  /// ```dart
+  /// app.all('/webhook', (c) async {
+  ///   final method = c.req.method;
+  ///   return c.json({'received': method});
+  /// });
+  /// ```
+  Aim<E> all(String path, Handler<E> handler, {Object? metadata}) {
+    _routes.add(
+      Route<E>(path: path, method: '*', handler: handler, metadata: metadata),
     );
     return this;
   }

@@ -213,7 +213,7 @@ app.notFound((c) async {
 
 ## All Methods
 
-Use `app.all()` to handle any HTTP method:
+Use `app.all()` to register a single handler for every HTTP method on a path:
 
 ```dart
 // Handle all methods for a specific path
@@ -230,6 +230,11 @@ app.notFound((c) async {
   }, statusCode: 404);
 });
 ```
+
+Like every other route, `app.all()` follows the declaration-order rule: the
+first matching route wins. An `all()` declared before a more specific `get()`
+on the same path handles GET too, while a `get()` declared first still wins
+for GET and leaves the rest to `all()`.
 
 ## Query Parameters
 
