@@ -58,7 +58,16 @@ some-parent-dir/
 dart pub get
 ```
 
-`../rig` が見つかれば `dependency_overrides` が解決し、各パッケージの統合テストが動く。
+`../rig` が見つかれば `dependency_overrides` が解決するが、これだけでは統合テストは
+**動かない**。統合テストは `dart_test.yaml` で既定スキップなので、素の `dart test` は
+1本も実行せずに成功したように見える(`aim_postgres` で `+131 ~8: All tests passed!`、`~8` が
+スキップされた統合テスト8ファイル)。実際に動かすには、パッケージごとに
+`-t integration --run-skipped` を付けて叩く。
+
+```bash
+cd packages/aim_postgres && dart test -t integration --run-skipped
+cd packages/aim_orm_codegen && dart test -t integration --run-skipped
+```
 
 ## テストを書く人にとって何が変わったか
 
