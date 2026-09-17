@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:aim_cli/src/migration/down_statements.dart';
 import 'package:aim_postgres/aim_postgres.dart';
 import 'package:args/command_runner.dart';
 import 'package:crypto/crypto.dart';
@@ -95,45 +96,41 @@ class DbMigrateCommand extends Command<void> {
 
         // UP/DOWNセクションを分離
         final sections = _parseMigrationSections(content);
-        final upSql = sections.up;
-        final downSql = sections.down;
+        final statements = executableStatements(sections.up);
 
         print('  Applying: $name');
 
+        if (statements.isEmpty) {
+          // Nothing the server would run. A generated migration ends up
+          // like this when a change could not be expressed in SQL — a
+          // default whose value the schema does not record, for instance —
+          // and recording it as applied would leave the schema snapshot
+          // claiming something the database does not have.
+          print('  ⚠️  This migration has no statements to run.');
+          print('  It was generated for a change that could not be written');
+          print('  as SQL. Edit db/migrations/$name.sql and run again.');
+          print('');
+          print('Migration stopped.');
+          exit(1);
+        }
+
         try {
-          // UP SQLを実行
-          final statements = _splitStatements(upSql);
-          for (final stmt in statements) {
-            if (stmt.trim().isNotEmpty) {
-              await db.execute(stmt);
+          // One transaction per migration: the statements and the history
+          // row go together, so a failure part way through leaves the
+          // database as it was. Postgres rolls DDL back too, which is why
+          // there is no hand-written undo here — there is nothing to undo.
+          await db.transaction((tx) async {
+            for (final stmt in statements) {
+              await tx.execute(stmt);
             }
-          }
-          await _recordMigration(db, name, checksum);
+            await _recordMigration(tx, name, checksum);
+          });
           print('  ✅ Applied: $name');
         } catch (e) {
           print('  ❌ Failed: $name');
           print('  Error: $e');
           print('');
-
-          // DOWN SQLでロールバックを試みる
-          if (downSql != null && downSql.trim().isNotEmpty) {
-            print('  🔄 Attempting rollback...');
-            try {
-              final downStatements = _splitStatements(downSql);
-              for (final stmt in downStatements) {
-                if (stmt.trim().isNotEmpty) {
-                  await db.execute(stmt);
-                }
-              }
-              print('  ✅ Rollback successful');
-            } catch (rollbackError) {
-              print('  ⚠️  Rollback failed: $rollbackError');
-              print('  Manual intervention may be required.');
-            }
-          } else {
-            print('  ⚠️  No DOWN section found for rollback.');
-          }
-
+          print('  Nothing from this migration was applied.');
           print('');
           print('Migration stopped. Please fix the error and retry.');
           exit(1);
@@ -177,67 +174,6 @@ class DbMigrateCommand extends Command<void> {
     return md5.convert(utf8.encode(content)).toString();
   }
 
-  /// SQL文を分割（セミコロンで区切る、ただしコメント内は無視）
-  List<String> _splitStatements(String sql) {
-    final statements = <String>[];
-    final buffer = StringBuffer();
-    bool inSingleLineComment = false;
-    bool inMultiLineComment = false;
-
-    for (var i = 0; i < sql.length; i++) {
-      final char = sql[i];
-      final nextChar = i + 1 < sql.length ? sql[i + 1] : '';
-
-      // 単一行コメント開始
-      if (!inMultiLineComment && char == '-' && nextChar == '-') {
-        inSingleLineComment = true;
-        buffer.write(char);
-        continue;
-      }
-
-      // 単一行コメント終了
-      if (inSingleLineComment && char == '\n') {
-        inSingleLineComment = false;
-        buffer.write(char);
-        continue;
-      }
-
-      // 複数行コメント開始
-      if (!inSingleLineComment && char == '/' && nextChar == '*') {
-        inMultiLineComment = true;
-        buffer.write(char);
-        continue;
-      }
-
-      // 複数行コメント終了
-      if (inMultiLineComment && char == '*' && nextChar == '/') {
-        inMultiLineComment = false;
-        buffer.write(char);
-        continue;
-      }
-
-      // セミコロンで文を分割（コメント外のみ）
-      if (char == ';' && !inSingleLineComment && !inMultiLineComment) {
-        final stmt = buffer.toString().trim();
-        if (stmt.isNotEmpty) {
-          statements.add(stmt);
-        }
-        buffer.clear();
-        continue;
-      }
-
-      buffer.write(char);
-    }
-
-    // 最後の文（セミコロンなし）
-    final lastStmt = buffer.toString().trim();
-    if (lastStmt.isNotEmpty) {
-      statements.add(lastStmt);
-    }
-
-    return statements;
-  }
-
   Future<void> _ensureMigrationsTable(PostgresDatabase db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS _aim_migrations (
@@ -257,11 +193,11 @@ class DbMigrateCommand extends Command<void> {
   }
 
   Future<void> _recordMigration(
-    PostgresDatabase db,
+    PostgresQueryable q,
     String name,
     String checksum,
   ) async {
-    await db.execute(
+    await q.execute(
       'INSERT INTO _aim_migrations (name, checksum) VALUES (:name, :checksum)',
       params: {'name': name, 'checksum': checksum},
     );
