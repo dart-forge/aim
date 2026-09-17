@@ -14,8 +14,10 @@ library;
 /// the schema stays exactly where it was, so a caller has to treat an
 /// empty result as "this one cannot be rolled back automatically".
 ///
-/// String literals are not tracked, so a `;` inside one splits the
-/// statement. Generated migrations do not contain such literals.
+/// Single-quoted strings are read as values, so a `;` or a `--` inside one
+/// does not end a statement or start a comment; two quotes in a row are one
+/// quote in the value. Dollar-quoted strings and backslash escapes are not
+/// recognised, and generated migrations do not use them.
 List<String> executableStatements(String sql) {
   final statements = <String>[];
   for (final fragment in _splitOnSemicolons(sql)) {
@@ -25,50 +27,73 @@ List<String> executableStatements(String sql) {
   return statements;
 }
 
-/// [sql] split on every `;` that is not inside a comment. Fragments are
-/// trimmed, and empty ones are left out.
+/// [sql] split on every `;` that is not inside a comment or a string
+/// literal. Fragments are trimmed, and empty ones are left out.
 List<String> _splitOnSemicolons(String sql) {
   final fragments = <String>[];
   final buffer = StringBuffer();
   var inLineComment = false;
   var inBlockComment = false;
+  var inString = false;
 
   for (var i = 0; i < sql.length; i++) {
     final char = sql[i];
     final next = i + 1 < sql.length ? sql[i + 1] : '';
 
+    if (inLineComment) {
+      buffer.write(char);
+      if (char == '\n') inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      buffer.write(char);
+      if (char == '*' && next == '/') {
+        buffer.write(next);
+        i++;
+        inBlockComment = false;
+      }
+      continue;
+    }
+    if (inString) {
+      buffer.write(char);
+      if (char == "'") {
+        // Two quotes in a row are one quote in the value, not the end of
+        // the string.
+        if (next == "'") {
+          buffer.write(next);
+          i++;
+        } else {
+          inString = false;
+        }
+      }
+      continue;
+    }
+
     // Both characters of a comment delimiter are consumed together, so the
     // middle character of `/*/` cannot close the comment it just opened.
-    // `_withoutComments` reads the text the same way, and the two have to
+    // [_withoutComments] reads the text the same way, and the two have to
     // agree: a fragment split out here and then found empty there would
     // take a real statement with it.
-    if (!inBlockComment && !inLineComment && char == '-' && next == '-') {
+    if (char == '-' && next == '-') {
       inLineComment = true;
       buffer.write(char);
       buffer.write(next);
       i++;
       continue;
     }
-    if (inLineComment && char == '\n') {
-      inLineComment = false;
-      buffer.write(char);
-      continue;
-    }
-    if (!inLineComment && !inBlockComment && char == '/' && next == '*') {
+    if (char == '/' && next == '*') {
       inBlockComment = true;
       buffer.write(char);
       buffer.write(next);
       i++;
       continue;
     }
-    if (inBlockComment && char == '*' && next == '/') {
-      inBlockComment = false;
+    if (char == "'") {
+      inString = true;
       buffer.write(char);
-      buffer.write(next);
-      i++;
       continue;
     }
-    if (char == ';' && !inLineComment && !inBlockComment) {
+    if (char == ';') {
       final fragment = buffer.toString().trim();
       if (fragment.isNotEmpty) fragments.add(fragment);
       buffer.clear();
@@ -83,11 +108,13 @@ List<String> _splitOnSemicolons(String sql) {
 }
 
 /// [sql] with `--` lines and `/* */` blocks removed, leaving whatever the
-/// server would actually be asked to run.
+/// server would actually be asked to run. String literals are kept whole,
+/// including anything inside them that looks like a comment.
 String _withoutComments(String sql) {
   final buffer = StringBuffer();
   var inLineComment = false;
   var inBlockComment = false;
+  var inString = false;
 
   for (var i = 0; i < sql.length; i++) {
     final char = sql[i];
@@ -104,6 +131,18 @@ String _withoutComments(String sql) {
       }
       continue;
     }
+    if (inString) {
+      buffer.write(char);
+      if (char == "'") {
+        if (next == "'") {
+          buffer.write(next);
+          i++;
+        } else {
+          inString = false;
+        }
+      }
+      continue;
+    }
     if (char == '-' && next == '-') {
       inLineComment = true;
       i++;
@@ -112,6 +151,11 @@ String _withoutComments(String sql) {
     if (char == '/' && next == '*') {
       inBlockComment = true;
       i++;
+      continue;
+    }
+    if (char == "'") {
+      inString = true;
+      buffer.write(char);
       continue;
     }
     buffer.write(char);

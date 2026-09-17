@@ -83,5 +83,32 @@ DROP TABLE a;
       expect(statements, hasLength(1));
       expect(statements.single, '/*/ DROP TABLE a; */ DROP TABLE b');
     });
+
+    test('does not split on a semicolon inside a string literal', () {
+      const sql = "ALTER TABLE notes ALTER COLUMN kind SET DEFAULT 'a;b';";
+      final statements = executableStatements(sql);
+      expect(statements, hasLength(1));
+      expect(
+        statements.single,
+        "ALTER TABLE notes ALTER COLUMN kind SET DEFAULT 'a;b'",
+      );
+    });
+
+    test('reads a doubled quote as one character inside the string', () {
+      const sql = "INSERT INTO notes (body) VALUES ('it''s; fine');";
+      final statements = executableStatements(sql);
+      expect(statements, hasLength(1));
+      expect(
+        statements.single,
+        "INSERT INTO notes (body) VALUES ('it''s; fine')",
+      );
+    });
+
+    test('does not read two dashes inside a string as a comment', () {
+      const sql = "UPDATE notes SET body = '-- not a comment';";
+      final statements = executableStatements(sql);
+      expect(statements, hasLength(1));
+      expect(statements.single, "UPDATE notes SET body = '-- not a comment'");
+    });
   });
 }
