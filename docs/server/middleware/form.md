@@ -9,7 +9,8 @@ head:
 
 # Form Data
 
-Parse `application/x-www-form-urlencoded` form data.
+Parse `application/x-www-form-urlencoded` form data, via an extension method
+on `Request` — no middleware to register.
 
 ## Installation
 
@@ -20,19 +21,17 @@ dart pub add aim_server_form
 ## Quick Start
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_form/aim_server_form.dart';
 
 void main() async {
-  final app = Aim<FormVariables>(
-    variablesFactory: () => FormVariables(),
-  );
-
-  app.use(form());
+  final app = Aim();
 
   app.post('/login', (c) async {
-    final username = c.variables.formData['username'];
-    final password = c.variables.formData['password'];
+    final form = await c.req.formData();
+    final username = form['username'];
+    final password = form['password'];
 
     return c.json({
       'username': username,
@@ -40,21 +39,26 @@ void main() async {
     });
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
+`formData()` is an extension method on `Request`. There is no `form()`
+middleware and nothing to add with `app.use()` — importing the package is
+enough to call it on any `c.req`.
+
 ## Form Data
 
-Access parsed form data through `c.variables.formData`:
+`await c.req.formData()` returns a `FormData` with the same field-access
+methods as a `Map`:
 
 ```dart
 app.post('/submit', (c) async {
-  final formData = c.variables.formData;
+  final form = await c.req.formData();
 
-  final name = formData['name'];
-  final email = formData['email'];
-  final message = formData['message'];
+  final name = form['name'];
+  final email = form['email'];
+  final message = form['message'];
 
   return c.json({
     'name': name,
@@ -64,18 +68,33 @@ app.post('/submit', (c) async {
 });
 ```
 
+`get` takes an optional default, `has` checks whether a key was submitted at
+all, and `keys`/`values`/`entries`/`toMap()` give you the whole thing:
+
+```dart
+app.post('/submit', (c) async {
+  final form = await c.req.formData();
+
+  final remember = form.get('remember', 'false');
+  final hasEmail = form.has('email');
+
+  return c.json({
+    'remember': remember,
+    'hasEmail': hasEmail,
+    'fields': form.toMap(),
+  });
+});
+```
+
 ## Complete Example
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_form/aim_server_form.dart';
 
 void main() async {
-  final app = Aim<FormVariables>(
-    variablesFactory: () => FormVariables(),
-  );
-
-  app.use(form());
+  final app = Aim();
 
   // Login form
   app.get('/login', (c) async {
@@ -95,8 +114,9 @@ void main() async {
 
   // Handle login
   app.post('/login', (c) async {
-    final username = c.variables.formData['username'];
-    final password = c.variables.formData['password'];
+    final form = await c.req.formData();
+    final username = form['username'];
+    final password = form['password'];
 
     // Validate credentials...
     if (username == 'admin' && password == 'password') {
@@ -108,9 +128,10 @@ void main() async {
 
   // Contact form
   app.post('/contact', (c) async {
-    final name = c.variables.formData['name'];
-    final email = c.variables.formData['email'];
-    final message = c.variables.formData['message'];
+    final form = await c.req.formData();
+    final name = form['name'];
+    final email = form['email'];
+    final message = form['message'];
 
     // Process form...
     print('Contact from $name ($email): $message');
@@ -121,7 +142,7 @@ void main() async {
     });
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   print('Server running on http://localhost:8080');
 }
 ```
@@ -146,10 +167,24 @@ curl -X POST http://localhost:8080/login \
 
 ## Content Type
 
-The middleware only processes requests with:
+`formData()` only parses requests with:
 
 ```
 Content-Type: application/x-www-form-urlencoded
+```
+
+Anything else — a missing header, `multipart/form-data`, JSON — throws a
+`FormatException`:
+
+```dart
+app.post('/submit', (c) async {
+  try {
+    final form = await c.req.formData();
+    return c.json(form.toMap());
+  } on FormatException catch (e) {
+    return c.json({'error': e.message}, statusCode: 400);
+  }
+});
 ```
 
 For file uploads, use the [Multipart middleware](/server/middleware/multipart) instead.

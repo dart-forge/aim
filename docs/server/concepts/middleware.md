@@ -30,6 +30,7 @@ typedef Middleware<E extends Variables> = Future<void> Function(
 Here's a simple logging middleware:
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 
 Future<void> simpleLogger(Context c, Next next) async {
@@ -46,7 +47,7 @@ void main() async {
 
   app.get('/', (c) async => c.text('Hello!'));
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -154,7 +155,7 @@ void main() async {
     });
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -199,7 +200,7 @@ void main() async {
     throw Exception('Something went wrong!');
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -244,7 +245,7 @@ void main() async {
   app.get('/profile', profileHandler);
   app.get('/dashboard', dashboardHandler);
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 
@@ -274,7 +275,7 @@ void main() async {
   app.get('/admin/dashboard', adminHandler);
   app.get('/admin/users', usersHandler);
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
 

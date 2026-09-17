@@ -93,20 +93,17 @@ app.post('/webhook', (c) async {
 
 #### Form Data
 
-Use the `aim_server_form` middleware:
+Use `aim_server_form`'s `formData()` extension method on `Request` — no
+middleware to register:
 
 ```dart
+import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_form/aim_server_form.dart';
 
-final app = Aim<FormVariables>(
-  variablesFactory: () => FormVariables(),
-);
-
-app.use(form());
-
 app.post('/login', (c) async {
-  final username = c.variables.formData['username'];
-  final password = c.variables.formData['password'];
+  final form = await c.req.formData();
+  final username = form['username'];
+  final password = form['password'];
 
   return c.json({'username': username});
 });

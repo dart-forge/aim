@@ -9,7 +9,8 @@ head:
 
 # Server-Sent Events (SSE)
 
-Real-time server-to-client event streaming using Server-Sent Events.
+Real-time server-to-client event streaming using Server-Sent Events, via an
+extension method on `Context` — no middleware to register.
 
 ## Installation
 
@@ -20,28 +21,30 @@ dart pub add aim_server_sse
 ## Quick Start
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_sse/aim_server_sse.dart';
 
 void main() async {
-  final app = Aim<SseVariables>(
-    variablesFactory: () => SseVariables(),
-  );
-
-  app.use(sse());
+  final app = Aim();
 
   app.get('/events', (c) async {
-    return c.sse((sink) async {
+    return c.sse((stream) async {
       for (var i = 0; i < 10; i++) {
         await Future.delayed(Duration(seconds: 1));
-        sink.sendEvent(data: 'Event $i');
+        stream.send('Event $i');
       }
     });
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
 ```
+
+`sse()` is an extension method on `Context` — there is no `sse()` middleware,
+nothing to add with `app.use()`, and no `Variables` subclass to type the app
+with. The connection closes automatically when the callback returns, throws,
+or the client disconnects.
 
 ## What is SSE?
 
@@ -65,8 +68,8 @@ Perfect for:
 
 ```dart
 app.get('/events', (c) async {
-  return c.sse((sink) async {
-    sink.sendEvent(data: 'Hello, SSE!');
+  return c.sse((stream) async {
+    stream.send('Hello, SSE!');
   });
 });
 ```
@@ -75,10 +78,10 @@ app.get('/events', (c) async {
 
 ```dart
 app.get('/events', (c) async {
-  return c.sse((sink) async {
+  return c.sse((stream) async {
     for (var i = 0; i < 5; i++) {
       await Future.delayed(Duration(seconds: 1));
-      sink.sendEvent(data: 'Event number $i');
+      stream.send('Event number $i');
     }
   });
 });
@@ -86,10 +89,12 @@ app.get('/events', (c) async {
 
 ### JSON Events
 
+`sendJson` encodes its argument with `jsonEncode` for you:
+
 ```dart
 app.get('/events', (c) async {
-  return c.sse((sink) async {
-    sink.sendEvent(data: {
+  return c.sse((stream) async {
+    stream.sendJson({
       'type': 'notification',
       'message': 'New message',
       'timestamp': DateTime.now().toIso8601String(),
@@ -102,17 +107,10 @@ app.get('/events', (c) async {
 
 ```dart
 app.get('/events', (c) async {
-  return c.sse((sink) async {
+  return c.sse((stream) async {
     // Different event types
-    sink.sendEvent(
-      event: 'notification',
-      data: {'message': 'New notification'},
-    );
-
-    sink.sendEvent(
-      event: 'update',
-      data: {'status': 'completed'},
-    );
+    stream.sendJson({'message': 'New notification'}, event: 'notification');
+    stream.sendJson({'status': 'completed'}, event: 'update');
   });
 });
 ```
@@ -121,14 +119,12 @@ app.get('/events', (c) async {
 
 ```dart
 app.get('/events', (c) async {
-  return c.sse((sink) async {
+  return c.sse((stream) async {
     var id = 0;
     while (true) {
       await Future.delayed(Duration(seconds: 1));
-      sink.sendEvent(
-        id: '${++id}',
-        data: 'Event $id',
-      );
+      id++;
+      stream.send('Event $id', id: '$id');
     }
   });
 });
@@ -136,25 +132,30 @@ app.get('/events', (c) async {
 
 ## Keep-Alive
 
-Send periodic keep-alive messages to prevent connection timeout:
+Send periodic keep-alive comments to prevent connection timeout — `keepAlive()`
+sends an empty comment for you:
 
 ```dart
+import 'dart:async';
+import 'package:aim_server/aim_server.dart';
+import 'package:aim_server_sse/aim_server_sse.dart';
+
 app.get('/events', (c) async {
-  return c.sse((sink) async {
+  return c.sse((stream) async {
     // Keep-alive every 30 seconds
-    final keepAlive = Timer.periodic(
+    final keepAliveTimer = Timer.periodic(
       Duration(seconds: 30),
-      (_) => sink.sendComment('keep-alive'),
+      (_) => stream.keepAlive(),
     );
 
     try {
       // Your event logic
       while (true) {
         await Future.delayed(Duration(minutes: 1));
-        sink.sendEvent(data: 'Update');
+        stream.send('Update');
       }
     } finally {
-      keepAlive.cancel();
+      keepAliveTimer.cancel();
     }
   });
 });
@@ -165,8 +166,12 @@ app.get('/events', (c) async {
 Send comments (not visible to client):
 
 ```dart
-sink.sendComment('This is a comment');
-sink.sendComment('Connection established at ${DateTime.now()}');
+app.get('/events', (c) async {
+  return c.sse((stream) async {
+    stream.comment('This is a comment');
+    stream.comment('Connection established at ${DateTime.now()}');
+  });
+});
 ```
 
 ## Client Side
@@ -199,6 +204,7 @@ eventSource.onerror = (error) => {
 ### Dart
 
 ```dart
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 final request = http.Request('GET', Uri.parse('http://localhost:8080/events'));
@@ -213,19 +219,28 @@ await for (final chunk in response.stream.transform(utf8.decoder)) {
 
 ### Live Counter
 
+There's no callback for "the client disconnected" — cleanup runs when your
+own callback decides to stop, so tie it to a `finally` block:
+
 ```dart
+import 'dart:async';
+import 'package:aim_server/aim_server.dart';
+import 'package:aim_server_sse/aim_server_sse.dart';
+
 app.get('/counter', (c) async {
-  return c.sse((sink) async {
+  return c.sse((stream) async {
     var count = 0;
     final timer = Timer.periodic(Duration(seconds: 1), (_) {
-      sink.sendEvent(data: {'count': ++count});
+      stream.sendJson({'count': ++count});
     });
 
-    // Clean up when client disconnects
-    sink.onClose = () {
+    try {
+      // Stop after a minute — there is no client-disconnect callback to
+      // hook cleanup into, so it's tied to your own stopping condition.
+      await Future.delayed(Duration(minutes: 1));
+    } finally {
       timer.cancel();
-      print('Client disconnected');
-    };
+    }
   });
 });
 ```
@@ -234,22 +249,16 @@ app.get('/counter', (c) async {
 
 ```dart
 app.get('/progress', (c) async {
-  return c.sse((sink) async {
+  return c.sse((stream) async {
     for (var i = 0; i <= 100; i += 10) {
       await Future.delayed(Duration(milliseconds: 500));
-      sink.sendEvent(
-        event: 'progress',
-        data: {
-          'percentage': i,
-          'message': 'Processing... $i%',
-        },
-      );
+      stream.sendJson({
+        'percentage': i,
+        'message': 'Processing... $i%',
+      }, event: 'progress');
     }
 
-    sink.sendEvent(
-      event: 'complete',
-      data: {'message': 'Done!'},
-    );
+    stream.sendJson({'message': 'Done!'}, event: 'complete');
   });
 });
 ```
@@ -257,61 +266,82 @@ app.get('/progress', (c) async {
 ### Live Feed
 
 ```dart
+import 'dart:async';
+import 'package:aim_server/aim_server.dart';
+import 'package:aim_server_sse/aim_server_sse.dart';
+
 app.get('/feed', (c) async {
-  return c.sse((sink) async {
-    // Keep-alive
-    final keepAlive = Timer.periodic(
+  return c.sse((stream) async {
+    // Keep-alive so proxies don't time out an idle connection
+    final keepAliveTimer = Timer.periodic(
       Duration(seconds: 30),
-      (_) => sink.sendComment('keep-alive'),
+      (_) => stream.keepAlive(),
     );
 
-    // Subscribe to real-time updates
-    final subscription = feedService.stream.listen((update) {
-      sink.sendEvent(
-        id: update.id,
-        event: update.type,
-        data: update.toJson(),
-      );
+    // Stand in for your own live-update source (a database change feed, a
+    // queue subscription, and so on)
+    final updates = Stream.periodic(
+      Duration(seconds: 5),
+      (i) => {'id': '$i', 'type': 'update', 'message': 'Update #$i'},
+    );
+
+    final subscription = updates.listen((update) {
+      stream.sendJson(update, id: update['id'], event: update['type']);
     });
 
-    sink.onClose = () {
-      keepAlive.cancel();
-      subscription.cancel();
-    };
+    try {
+      await Future.delayed(Duration(minutes: 5));
+    } finally {
+      keepAliveTimer.cancel();
+      await subscription.cancel();
+    }
   });
 });
 ```
 
-### Chat Notifications
+### User-Specific Notifications
+
+`sse()` works on any `Context<E>`, so it composes with a middleware that
+does need `Variables` — [JWT auth](/server/auth/jwt), say, to scope the feed
+to the signed-in user:
 
 ```dart
-class ChatVariables extends SseVariables {
-  String? userId;
-}
+import 'dart:io';
+import 'package:aim_server/aim_server.dart';
+import 'package:aim_server_jwt/aim_server_jwt.dart';
+import 'package:aim_server_sse/aim_server_sse.dart';
 
-final app = Aim<ChatVariables>(
-  variablesFactory: () => ChatVariables(),
+final app = Aim<JwtVariables>(
+  variablesFactory: () => JwtVariables.create(
+    JwtOptions(
+      algorithm: HS256(
+        secretKey: SecretKey(secret: 'your-secret-key-at-least-32-chars'),
+      ),
+    ),
+  ),
 );
 
-app.use(sse());
+app.use(jwt());
 
 app.get('/notifications', (c) async {
-  final userId = c.variables.userId; // Set by auth middleware
+  final userId = c.variables.jwtPayload['sub']; // Set by the JWT middleware
 
-  return c.sse((sink) async {
-    // Subscribe to user-specific notifications
-    final subscription = notificationService
-        .streamForUser(userId)
-        .listen((notification) {
-      sink.sendEvent(
-        event: 'notification',
-        data: notification.toJson(),
-      );
+  return c.sse((stream) async {
+    // Stand in for your own per-user notification source
+    final updates = Stream.periodic(
+      Duration(seconds: 10),
+      (i) => {'message': 'Notification #$i for $userId'},
+    );
+
+    final subscription = updates.listen((notification) {
+      stream.sendJson(notification, event: 'notification');
     });
 
-    sink.onClose = () {
-      subscription.cancel();
-    };
+    try {
+      await Future.delayed(Duration(minutes: 10));
+    } finally {
+      await subscription.cancel();
+    }
   });
 });
 ```
@@ -334,40 +364,68 @@ Multiple `data:` lines are concatenated with newlines.
 
 1. **Implement keep-alive**
    ```dart
-   Timer.periodic(Duration(seconds: 30), (_) {
-     sink.sendComment('keep-alive');
+   import 'dart:async';
+   import 'package:aim_server/aim_server.dart';
+   import 'package:aim_server_sse/aim_server_sse.dart';
+
+   app.get('/events', (c) async {
+     return c.sse((stream) async {
+       Timer.periodic(Duration(seconds: 30), (_) {
+         stream.keepAlive();
+       });
+     });
    });
    ```
 
-2. **Clean up resources**
+2. **Clean up in a `finally` block**
+
+   There is no callback for "the client disconnected" — the stream closes
+   automatically when your callback returns, throws, or the connection
+   drops, so cancel timers and subscriptions where you'd naturally stop:
    ```dart
-   sink.onClose = () {
-     timer.cancel();
-     subscription.cancel();
-   };
+   import 'dart:async';
+   import 'package:aim_server/aim_server.dart';
+   import 'package:aim_server_sse/aim_server_sse.dart';
+
+   app.get('/events', (c) async {
+     return c.sse((stream) async {
+       final timer = Timer.periodic(Duration(seconds: 30), (_) => stream.keepAlive());
+
+       try {
+         for (var i = 0; i < 5; i++) {
+           await Future.delayed(Duration(seconds: 1));
+           stream.send('tick $i');
+         }
+       } finally {
+         timer.cancel();
+       }
+     });
+   });
    ```
 
 3. **Use event IDs for resumption**
    ```dart
-   sink.sendEvent(
-     id: messageId,
-     data: message,
-   );
+   app.get('/events', (c) async {
+     return c.sse((stream) async {
+       var messageId = 0;
+       while (true) {
+         await Future.delayed(Duration(seconds: 1));
+         messageId++;
+         stream.send('Message $messageId', id: '$messageId');
+       }
+     });
+   });
    ```
 
-4. **Handle client disconnects**
+4. **Send JSON for structured data**
    ```dart
-   sink.onClose = () {
-     print('Client disconnected: ${c.req.path}');
-     // Clean up resources
-   };
-   ```
-
-5. **Send JSON for structured data**
-   ```dart
-   sink.sendEvent(data: {
-     'type': 'update',
-     'payload': {...},
+   app.get('/events', (c) async {
+     return c.sse((stream) async {
+       stream.sendJson({
+         'type': 'update',
+         'payload': {'progress': 42},
+       });
+     });
    });
    ```
 

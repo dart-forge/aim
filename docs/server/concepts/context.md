@@ -104,20 +104,17 @@ app.post('/webhook', (c) async {
 
 #### Form Data
 
-Use the `aim_server_form` middleware:
+Use `aim_server_form`'s `formData()` extension method on `Request` — no
+middleware to register:
 
 ```dart
+import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_form/aim_server_form.dart';
 
-final app = Aim<FormVariables>(
-  variablesFactory: () => FormVariables(),
-);
-
-app.use(form());
-
 app.post('/login', (c) async {
-  final username = c.variables.formData['username'];
-  final password = c.variables.formData['password'];
+  final form = await c.req.formData();
+  final username = form['username'];
+  final password = form['password'];
 
   return c.json({'username': username});
 });
@@ -125,23 +122,20 @@ app.post('/login', (c) async {
 
 #### Multipart/File Upload
 
-Use the `aim_server_multipart` middleware:
+Use `aim_server_multipart`'s `multipart()` extension method on `Request` —
+no middleware to register:
 
 ```dart
+import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_multipart/aim_server_multipart.dart';
-
-final app = Aim<MultipartVariables>(
-  variablesFactory: () => MultipartVariables(),
-);
-
-app.use(multipart());
+import 'package:aim_server_multipart/aim_server_multipart_io.dart';
 
 app.post('/upload', (c) async {
-  final files = c.variables.files;
-  final file = files['avatar'];
+  final form = await c.req.multipart();
+  final file = form.file('avatar');
 
   if (file != null) {
-    await File('uploads/${file.filename}').writeAsBytes(file.bytes);
+    await file.saveTo('uploads/${file.filename}');
   }
 
   return c.json({'uploaded': file?.filename});
@@ -260,22 +254,18 @@ app.get('/stream', (c) async {
 });
 ```
 
-For Server-Sent Events (SSE), use the `aim_server_sse` package:
+For Server-Sent Events (SSE), use `aim_server_sse`'s `sse()` extension
+method on `Context` — no middleware to register:
 
 ```dart
+import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_sse/aim_server_sse.dart';
 
-final app = Aim<SseVariables>(
-  variablesFactory: () => SseVariables(),
-);
-
-app.use(sse());
-
 app.get('/events', (c) async {
-  return c.sse((sink) async {
+  return c.sse((stream) async {
     for (var i = 0; i < 10; i++) {
       await Future.delayed(Duration(seconds: 1));
-      sink.sendEvent(data: 'Event $i');
+      stream.send('Event $i');
     }
   });
 });
@@ -444,6 +434,7 @@ app.get('/api', (c) async {
 ## Complete Example
 
 ```dart
+import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 
 class AppVariables extends Variables {
@@ -496,7 +487,7 @@ void main() async {
     }, statusCode: 201);
   });
 
-  await app.serve(port: 8080);
+  await app.serve(host: InternetAddress.anyIPv4, port: 8080);
   print('Server running on http://localhost:8080');
 }
 
