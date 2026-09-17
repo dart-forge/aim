@@ -1150,8 +1150,9 @@ bool _needsValueForExistingRows(ColumnSchema col) =>
 /// key or index — so the restoring statement can be written in full. What
 /// does not come back is the data, so those inversions carry a note that
 /// says as much.
-List<_SchemaDiff> _invertDiffs(List<_SchemaDiff> diffs) =>
-    [for (final diff in diffs) _invertDiff(diff)];
+List<_SchemaDiff> _invertDiffs(List<_SchemaDiff> diffs) => [
+  for (final diff in diffs) _invertDiff(diff),
+];
 
 /// The change that undoes [diff].
 _SchemaDiff _invertDiff(_SchemaDiff diff) {
