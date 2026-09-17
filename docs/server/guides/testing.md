@@ -235,7 +235,7 @@ test('Returns 404 for unknown routes', () async {
 
   app.get('/', (c) async => c.text('Home'));
 
-  app.all('*', (c) async {
+  app.notFound((c) async {
     return c.json({'error': 'Not Found'}, statusCode: 404);
   });
 
