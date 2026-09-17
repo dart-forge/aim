@@ -691,6 +691,119 @@ final posts = (
         );
       },
     );
+
+    test('a unique constraint is added before the new table whose foreign '
+        'key needs it', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('acct')
+final acct = (
+  id: integer('id').primaryKey(),
+  code: varchar('code', length: 20),
+);
+''');
+      await generate('first');
+
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('acct')
+final acct = (
+  id: integer('id').primaryKey(),
+  code: varchar('code', length: 20).unique(),
+);
+
+@PgTable('acct_log')
+final acct_log = (
+  id: integer('id').primaryKey(),
+  ref: varchar('ref', length: 20).references(() => acct.code),
+);
+''');
+      await generate('second');
+
+      final up = upOf('second');
+      final addUnique = up.indexOf('ADD CONSTRAINT uq_acct_code');
+      final createTable = up.indexOf('CREATE TABLE acct_log (');
+      expect(addUnique, isNonNegative);
+      expect(createTable, isNonNegative);
+      expect(
+        addUnique,
+        lessThan(createTable),
+        reason:
+            'CREATE TABLE writes its foreign key inline, and a foreign '
+            'key needs the unique index it points at to exist already',
+      );
+
+      final down = downOf('second');
+      final dropTable = down.indexOf('DROP TABLE IF EXISTS acct_log;');
+      final dropUnique = down.indexOf('DROP CONSTRAINT uq_acct_code;');
+      expect(dropTable, isNonNegative);
+      expect(dropUnique, isNonNegative);
+      expect(
+        dropTable,
+        lessThan(dropUnique),
+        reason:
+            'the table holds the foreign key that depends on the unique '
+            'index, so it has to go first',
+      );
+    });
+
+    test(
+      'a table is dropped before a column another table pointed at',
+      () async {
+        writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('parent')
+final parent = (
+  id: integer('id').primaryKey(),
+  code: varchar('code', length: 20).unique(),
+);
+
+@PgTable('child')
+final child = (
+  id: integer('id').primaryKey(),
+  ref: varchar('ref', length: 20).references(() => parent.code),
+);
+''');
+        await generate('first');
+
+        writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('parent')
+final parent = (
+  id: integer('id').primaryKey(),
+);
+''');
+        await generate('second');
+
+        final up = upOf('second');
+        final dropTable = up.indexOf('DROP TABLE IF EXISTS child;');
+        final dropColumn = up.indexOf('DROP COLUMN code;');
+        expect(dropTable, isNonNegative);
+        expect(dropColumn, isNonNegative);
+        expect(
+          dropTable,
+          lessThan(dropColumn),
+          reason: "the dropped table's foreign key depends on that column",
+        );
+
+        final down = downOf('second');
+        final addColumn = down.indexOf('ADD COLUMN code');
+        final createTable = down.indexOf('CREATE TABLE child (');
+        expect(addColumn, isNonNegative);
+        expect(createTable, isNonNegative);
+        expect(
+          addColumn,
+          lessThan(createTable),
+          reason:
+              'the restored table references that column, so it has to be '
+              'back first',
+        );
+      },
+    );
   });
 
   group('db:generate - UP statement order', () {

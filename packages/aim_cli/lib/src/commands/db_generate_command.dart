@@ -1330,24 +1330,26 @@ _SchemaDiff _invertDiff(_SchemaDiff diff) {
 /// When [type]'s statement has to run relative to the others.
 ///
 /// Statements go out from the lowest phase up. Things that depend on
-/// something else come off first and go back on last: a foreign key before
-/// the unique index that backs it, an index or constraint before the column
-/// it sits on, a column before its table. Read the table downwards and
-/// every statement finds what it needs already there.
+/// something else come off first and go back on last. A foreign key depends
+/// on the unique index it points at; a table's inline foreign key does too,
+/// which is why a whole table goes before the constraints on other tables;
+/// an index or constraint sits on a column; a column sits in a table. Read
+/// the table downwards and every statement finds what it needs already
+/// there.
 int _executionPhase(_DiffType type) => switch (type) {
   _DiffType.dropForeignKey => 0,
-  _DiffType.dropIndex || _DiffType.dropUnique => 1,
-  _DiffType.dropColumn => 2,
-  _DiffType.dropTable => 3,
-  _DiffType.createTable => 4,
-  _DiffType.addColumn => 5,
+  _DiffType.dropTable => 1,
+  _DiffType.dropIndex || _DiffType.dropUnique => 2,
+  _DiffType.dropColumn => 3,
+  _DiffType.addColumn => 4,
   _DiffType.alterColumnType ||
   _DiffType.alterColumnSetNotNull ||
   _DiffType.alterColumnDropNotNull ||
   _DiffType.alterColumnSetDefault ||
   _DiffType.alterColumnDropDefault ||
-  _DiffType.renameColumn => 6,
-  _DiffType.addUnique || _DiffType.addIndex => 7,
+  _DiffType.renameColumn => 5,
+  _DiffType.addUnique || _DiffType.addIndex => 6,
+  _DiffType.createTable => 7,
   _DiffType.addForeignKey => 8,
 };
 
