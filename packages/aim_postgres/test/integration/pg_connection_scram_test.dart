@@ -1,7 +1,7 @@
 @Tags(['integration'])
 library;
 
-import 'package:aim_postgres/aim_postgres.dart';
+import 'package:aim_postgres/src/pg_connection.dart';
 import 'package:rig_postgres/rig_postgres.dart';
 import 'package:test/test.dart';
 
