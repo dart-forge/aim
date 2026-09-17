@@ -28,9 +28,15 @@ aim 単体では `rig` の実体を用意する手段がまだ無い、という
 
 次のどちらかが成立するまで、このブランチはマージできない。
 
-- (a) `rig` / `rig_postgres` が pub.dev に公開され、`dependency_overrides` を外して
-  通常の hosted 依存(`pubspec.yaml` の `dependencies` に `rig: ^x.y.z` のように書くだけ)に
-  置き換えられること。
+- (a) `rig` / `rig_postgres` が pub.dev に公開され、ルートの `dependency_overrides` を外せる
+  ようになること。ただしそれだけでは `dart pub get` は通らない
+  (`packages/aim_postgres/pubspec.yaml` と `packages/aim_orm_codegen/pubspec.yaml` の
+  `dev_dependencies` に `rig_postgres: any` が残っているため、override を外すと
+  `depends on rig_postgres any which doesn't exist` で解決に失敗する)。この 2 か所の
+  `rig_postgres: any` を実在のバージョン制約(`rig_postgres: ^0.x.y` のような形)に差し替える
+  必要がある。足す先は `dependencies` ではなく `dev_dependencies`(aim のコードは `package:rig`
+  も `package:rig_postgres` も直接 import していない。使うのはテストだけ)。`rig` 自体を
+  aim のどのパッケージにも足す必要は無い。
 - (b) それまでの間、CI が aim をチェックアウトするのに合わせて `rig` も並びの位置に
   チェックアウトする手順を持つこと(`dart pub get` が通る配置を CI 側で再現する)。
 
