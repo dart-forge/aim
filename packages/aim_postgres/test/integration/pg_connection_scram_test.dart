@@ -271,8 +271,8 @@ void main() {
     });
 
     test('fails with wrong password', () async {
-      expect(
-        () => PostgresConnection.connect(
+      await expectLater(
+        PostgresConnection.connect(
           'postgresql://test:wrong_password@${pg.host}:${pg.port}/${pg.database}',
         ),
         throwsA(isA<Exception>()),
