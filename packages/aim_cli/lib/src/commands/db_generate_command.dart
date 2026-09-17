@@ -1150,9 +1150,8 @@ bool _needsValueForExistingRows(ColumnSchema col) =>
 /// key or index — so the restoring statement can be written in full. What
 /// does not come back is the data, so those inversions carry a note that
 /// says as much.
-List<_SchemaDiff> _invertDiffs(List<_SchemaDiff> diffs) => [
-  for (final diff in diffs) _invertDiff(diff),
-];
+List<_SchemaDiff> _invertDiffs(List<_SchemaDiff> diffs) =>
+    _orderForExecution([for (final diff in diffs) _invertDiff(diff)]);
 
 /// The change that undoes [diff].
 _SchemaDiff _invertDiff(_SchemaDiff diff) {
@@ -1271,6 +1270,84 @@ _SchemaDiff _invertDiff(_SchemaDiff diff) {
         oldColumn: diff.column,
       );
   }
+}
+
+/// When [type]'s statement has to run relative to the others.
+///
+/// Statements go out from the lowest phase up. Things that depend on
+/// something else come off first and go back on last: an index or
+/// constraint before the column it sits on, a column before its table.
+/// Read the table downwards and every statement finds what it needs
+/// already there.
+int _executionPhase(_DiffType type) => switch (type) {
+  _DiffType.dropIndex || _DiffType.dropForeignKey || _DiffType.dropUnique => 0,
+  _DiffType.dropColumn => 1,
+  _DiffType.dropTable => 2,
+  _DiffType.createTable => 3,
+  _DiffType.addColumn => 4,
+  _DiffType.alterColumnType ||
+  _DiffType.alterColumnSetNotNull ||
+  _DiffType.alterColumnDropNotNull ||
+  _DiffType.alterColumnSetDefault ||
+  _DiffType.alterColumnDropDefault ||
+  _DiffType.renameColumn => 5,
+  _DiffType.addUnique || _DiffType.addForeignKey || _DiffType.addIndex => 6,
+};
+
+/// [diffs] ordered so every statement can run.
+///
+/// Sorted by [_executionPhase], keeping the input order inside a phase,
+/// and with the CREATE TABLE phase ordered by foreign key reference.
+List<_SchemaDiff> _orderForExecution(List<_SchemaDiff> diffs) {
+  final byPhase = <int, List<_SchemaDiff>>{};
+  for (final diff in diffs) {
+    (byPhase[_executionPhase(diff.type)] ??= []).add(diff);
+  }
+
+  final createPhase = _executionPhase(_DiffType.createTable);
+  final result = <_SchemaDiff>[];
+  for (final phase in byPhase.keys.toList()..sort()) {
+    final group = byPhase[phase]!;
+    result.addAll(
+      phase == createPhase ? _orderTablesByReference(group) : group,
+    );
+  }
+  return result;
+}
+
+/// [creates] — all CREATE TABLE diffs — ordered so a table comes after the
+/// tables its foreign keys point at.
+///
+/// CREATE TABLE writes its foreign keys inline, so the referenced table
+/// has to exist already. References to tables outside [creates] need no
+/// ordering: those tables are not being created here, so they are already
+/// there. A table referencing itself is left alone. Tables in a reference
+/// cycle keep their input order — Postgres rejects that schema either way,
+/// and choosing an order would not help.
+List<_SchemaDiff> _orderTablesByReference(List<_SchemaDiff> creates) {
+  final byName = {for (final diff in creates) diff.table.name: diff};
+  final ordered = <_SchemaDiff>[];
+  final placed = <String>{};
+  final visiting = <String>{};
+
+  void place(_SchemaDiff diff) {
+    final name = diff.table.name;
+    if (placed.contains(name) || visiting.contains(name)) return;
+    visiting.add(name);
+    for (final fk in diff.table.foreignKeys) {
+      if (fk.referencesTable == name) continue;
+      final referenced = byName[fk.referencesTable];
+      if (referenced != null) place(referenced);
+    }
+    visiting.remove(name);
+    placed.add(name);
+    ordered.add(diff);
+  }
+
+  for (final diff in creates) {
+    place(diff);
+  }
+  return ordered;
 }
 
 /// Convert string to snake_case for migration file names

@@ -431,4 +431,168 @@ final users = (
       expect(up, isNot(contains('Values removed by the UP section')));
     });
   });
+
+  group('db:generate - DOWN statement order', () {
+    test('a dropped column is added back before its index', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  name: varchar('name').indexed(),
+);
+''');
+      await generate('first');
+
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+''');
+      await generate('second');
+
+      final down = downOf('second');
+      final addColumn = down.indexOf('ADD COLUMN name');
+      final createIndex = down.indexOf('CREATE INDEX idx_users_name');
+      expect(addColumn, isNonNegative);
+      expect(createIndex, isNonNegative);
+      expect(
+        addColumn,
+        lessThan(createIndex),
+        reason: 'an index cannot be created on a column that is not back yet',
+      );
+    });
+
+    test("an added column's index is dropped before the column", () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+''');
+      await generate('first');
+
+      // Nullable so db:generate does not stop to ask about a NOT NULL
+      // column with no default.
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  name: varchar('name').nullable().indexed(),
+);
+''');
+      await generate('second');
+
+      final down = downOf('second');
+      final dropIndex = down.indexOf('DROP INDEX idx_users_name');
+      final dropColumn = down.indexOf('DROP COLUMN name');
+      expect(dropIndex, isNonNegative);
+      expect(dropColumn, isNonNegative);
+      expect(dropIndex, lessThan(dropColumn));
+    });
+
+    test('a table a foreign key points at is created before the table '
+        'holding it', () async {
+      // posts is declared first on purpose: the table order of the
+      // snapshot follows declaration order, so restoring in snapshot order
+      // would create posts before the users row it references.
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(() => users.id),
+);
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+''');
+      await generate('first');
+
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+''');
+      await generate('second');
+
+      final down = downOf('second');
+      final createUsers = down.indexOf('CREATE TABLE users (');
+      final createPosts = down.indexOf('CREATE TABLE posts (');
+      expect(createUsers, isNonNegative);
+      expect(createPosts, isNonNegative);
+      expect(
+        createUsers,
+        lessThan(createPosts),
+        reason:
+            'CREATE TABLE writes its foreign keys inline, so the '
+            'referenced table has to exist first',
+      );
+    });
+
+    test('a self-referencing table still gets created', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('nodes')
+final nodes = (
+  id: integer('id').primaryKey(),
+  parent_id: integer('parent_id').references(() => nodes.id),
+);
+''');
+      await generate('first');
+
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+''');
+      await generate('second');
+
+      final down = downOf('second');
+      expect(down, contains('CREATE TABLE nodes ('));
+    });
+  });
+
+  group('db:generate - DOWN reverses an altered column type', () {
+    test('a column type change goes back to the old type', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  code: varchar('code', length: 10),
+);
+''');
+      await generate('first');
+
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  code: varchar('code', length: 40),
+);
+''');
+      await generate('second');
+
+      expect(
+        upOf('second'),
+        contains('ALTER TABLE users ALTER COLUMN code TYPE VARCHAR(40);'),
+      );
+      expect(
+        downOf('second'),
+        contains('ALTER TABLE users ALTER COLUMN code TYPE VARCHAR(10);'),
+      );
+    });
+  });
 }
