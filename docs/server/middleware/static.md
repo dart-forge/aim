@@ -28,7 +28,7 @@ void main() async {
   final app = Aim();
 
   // Serve files from 'public' directory
-  app.use(serveStatic(root: 'public'));
+  app.use(serveStatic('public'));
 
   await app.serve(host: InternetAddress.anyIPv4, port: 8080);
 }
@@ -54,8 +54,8 @@ Access files:
 ### Custom Root Directory
 
 ```dart
-app.use(serveStatic(root: 'assets'));
-app.use(serveStatic(root: 'dist'));
+app.use(serveStatic('assets'));
+app.use(serveStatic('dist'));
 ```
 
 ### Path Prefix
@@ -64,8 +64,8 @@ Serve static files under a specific path:
 
 ```dart
 app.use(serveStatic(
-  root: 'public',
-  prefix: '/static',
+  'public',
+  path: '/static',
 ));
 ```
 
@@ -77,7 +77,7 @@ Automatically serve index files:
 
 ```dart
 app.use(serveStatic(
-  root: 'public',
+  'public',
   index: 'index.html', // Default
 ));
 ```
@@ -96,7 +96,7 @@ void main() async {
 
   // Serve static files
   app.use(serveStatic(
-    root: 'public',
+    'public',
     index: 'index.html',
   ));
 
@@ -164,7 +164,7 @@ void main() async {
   final app = Aim();
 
   // Serve static assets
-  app.use(serveStatic(root: 'dist'));
+  app.use(serveStatic('dist'));
 
   // API routes
   app.get('/api/*', apiHandler);
@@ -184,9 +184,9 @@ void main() async {
 
 ```dart
 // Serve from multiple directories
-app.use(serveStatic(root: 'public'));
-app.use(serveStatic(root: 'assets', prefix: '/assets'));
-app.use(serveStatic(root: 'uploads', prefix: '/uploads'));
+app.use(serveStatic('public'));
+app.use(serveStatic('assets', path: '/assets'));
+app.use(serveStatic('uploads', path: '/uploads'));
 ```
 
 ## Caching
@@ -201,7 +201,7 @@ app.use((c, next) async {
   return next();
 });
 
-app.use(serveStatic(root: 'public', prefix: '/static'));
+app.use(serveStatic('public', path: '/static'));
 ```
 
 ## Example Project Structure
@@ -241,7 +241,7 @@ my_app/
 
 1. **Separate static and dynamic routes**
    ```dart
-   app.use(serveStatic(root: 'public', prefix: '/static'));
+   app.use(serveStatic('public', path: '/static'));
    app.get('/api/*', apiHandler);
    ```
 
@@ -277,10 +277,10 @@ curl -I http://localhost:8080/logo.png
 1. **Never serve source code**
    ```dart
    // Don't serve from project root
-   app.use(serveStatic(root: '.')); // ❌ Bad
+   app.use(serveStatic('.')); // ❌ Bad
 
    // Serve from specific directory
-   app.use(serveStatic(root: 'public')); // ✅ Good
+   app.use(serveStatic('public')); // ✅ Good
    ```
 
 2. **Block sensitive files**
