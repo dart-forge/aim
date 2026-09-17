@@ -9,7 +9,8 @@ head:
 
 # Multipart Form Data
 
-Handle file uploads and multipart form data (`multipart/form-data`).
+Handle file uploads and multipart form data (`multipart/form-data`), via an
+extension method on `Request` — no middleware to register.
 
 ## Installation
 
@@ -23,20 +24,17 @@ dart pub add aim_server_multipart
 import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_multipart/aim_server_multipart.dart';
+import 'package:aim_server_multipart/aim_server_multipart_io.dart';
 
 void main() async {
-  final app = Aim<MultipartVariables>(
-    variablesFactory: () => MultipartVariables(),
-  );
-
-  app.use(multipart());
+  final app = Aim();
 
   app.post('/upload', (c) async {
-    final files = c.variables.files;
-    final file = files['avatar'];
+    final form = await c.req.multipart();
+    final file = form.file('avatar');
 
     if (file != null) {
-      await File('uploads/${file.filename}').writeAsBytes(file.bytes);
+      await file.saveTo('uploads/${file.filename}');
       return c.json({'uploaded': file.filename});
     }
 
@@ -47,22 +45,29 @@ void main() async {
 }
 ```
 
+`multipart()` is an extension method on `Request` — there is no `multipart()`
+middleware, nothing to add with `app.use()`, and no `Variables` subclass to
+type the app with. `saveTo` lives in the separate
+`aim_server_multipart_io.dart` import because it touches the file system and
+isn't available when compiling to WebAssembly.
+
 ## File Upload
 
-Access uploaded files through `c.variables.files`:
+`await c.req.multipart()` returns a `MultipartFormData`. Get one file by its
+field name with `.file(name)`:
 
 ```dart
 app.post('/upload', (c) async {
-  final files = c.variables.files;
-  final file = files['document']; // Field name from form
+  final form = await c.req.multipart();
+  final file = form.file('document'); // Field name from the form
 
   if (file != null) {
     print('Filename: ${file.filename}');
     print('Content-Type: ${file.contentType}');
-    print('Size: ${file.bytes.length} bytes');
+    print('Size: ${file.size} bytes');
 
     // Save file
-    await File('uploads/${file.filename}').writeAsBytes(file.bytes);
+    await file.saveTo('uploads/${file.filename}');
   }
 
   return c.json({'success': true});
@@ -71,13 +76,14 @@ app.post('/upload', (c) async {
 
 ## Form Fields
 
-Access form fields through `c.variables.formData`:
+Text fields sent alongside files are read with `.field(name)`:
 
 ```dart
 app.post('/upload', (c) async {
-  final title = c.variables.formData['title'];
-  final description = c.variables.formData['description'];
-  final file = c.variables.files['document'];
+  final form = await c.req.multipart();
+  final title = form.field('title');
+  final description = form.field('description');
+  final file = form.file('document');
 
   return c.json({
     'title': title,
@@ -89,14 +95,17 @@ app.post('/upload', (c) async {
 
 ## Multiple Files
 
-Handle multiple file uploads:
+A single field name with several files (an `<input type="file" multiple>`,
+or several `-F` flags with the same name) comes back from `.files(name)` as a
+list:
 
 ```dart
 app.post('/gallery', (c) async {
-  final files = c.variables.files.values; // All uploaded files
+  final form = await c.req.multipart();
+  final files = form.files('images');
 
   for (final file in files) {
-    await File('uploads/${file.filename}').writeAsBytes(file.bytes);
+    await file.saveTo('uploads/${file.filename}');
   }
 
   return c.json({
@@ -108,22 +117,36 @@ app.post('/gallery', (c) async {
 
 ## Configuration
 
+`multipart()` takes its limits as arguments on the call itself, not as
+middleware configuration:
+
 ### Max File Size
 
 ```dart
-app.use(multipart(
-  maxFileSize: 10 * 1024 * 1024, // 10 MB
-));
+final form = await c.req.multipart(
+  maxFileSize: 10 * 1024 * 1024, // 10 MB per file
+);
 ```
 
-### Max Files
+### Max Total Size
 
 ```dart
-app.use(multipart(
-  maxFileSize: 5 * 1024 * 1024,  // 5 MB per file
-  maxFiles: 10,                   // Maximum 10 files
-));
+final form = await c.req.multipart(
+  maxFileSize: 5 * 1024 * 1024,   // 5 MB per file
+  maxTotalSize: 20 * 1024 * 1024, // 20 MB across all files and fields
+);
 ```
+
+### Allowed MIME Types
+
+```dart
+final form = await c.req.multipart(
+  allowedMimeTypes: ['image/*', 'application/pdf'],
+);
+```
+
+Wildcards like `image/*` match any subtype. Exceeding a limit or sending a
+disallowed type throws an `Exception`.
 
 ## Complete Example
 
@@ -131,16 +154,10 @@ app.use(multipart(
 import 'dart:io';
 import 'package:aim_server/aim_server.dart';
 import 'package:aim_server_multipart/aim_server_multipart.dart';
+import 'package:aim_server_multipart/aim_server_multipart_io.dart';
 
 void main() async {
-  final app = Aim<MultipartVariables>(
-    variablesFactory: () => MultipartVariables(),
-  );
-
-  // Configure multipart
-  app.use(multipart(
-    maxFileSize: 10 * 1024 * 1024, // 10 MB
-  ));
+  final app = Aim();
 
   // Upload form
   app.get('/upload', (c) async {
@@ -162,9 +179,10 @@ void main() async {
 
   // Handle upload
   app.post('/upload', (c) async {
-    final title = c.variables.formData['title'];
-    final description = c.variables.formData['description'];
-    final file = c.variables.files['document'];
+    final form = await c.req.multipart(maxFileSize: 10 * 1024 * 1024); // 10 MB
+    final title = form.field('title');
+    final description = form.field('description');
+    final file = form.file('document');
 
     if (file == null) {
       return c.json({'error': 'No file uploaded'}, statusCode: 400);
@@ -179,22 +197,22 @@ void main() async {
     await Directory('uploads').create(recursive: true);
 
     // Save file
-    final filepath = 'uploads/${DateTime.now().millisecondsSinceEpoch}_${file.filename}';
-    await File(filepath).writeAsBytes(file.bytes);
+    await file.saveTo('uploads/${file.filename}');
 
     return c.json({
       'success': true,
       'title': title,
       'description': description,
       'filename': file.filename,
-      'size': file.bytes.length,
+      'size': file.size,
       'type': file.contentType,
     });
   });
 
-  // Multiple files
+  // Multiple files under one field name
   app.post('/gallery', (c) async {
-    final files = c.variables.files.values;
+    final form = await c.req.multipart();
+    final files = form.files('images');
 
     if (files.isEmpty) {
       return c.json({'error': 'No files uploaded'}, statusCode: 400);
@@ -204,8 +222,7 @@ void main() async {
 
     final uploaded = <String>[];
     for (final file in files) {
-      final filepath = 'uploads/${DateTime.now().millisecondsSinceEpoch}_${file.filename}';
-      await File(filepath).writeAsBytes(file.bytes);
+      await file.saveTo('uploads/${file.filename}');
       uploaded.add(file.filename);
     }
 
@@ -237,9 +254,7 @@ void main() async {
 
 ```html
 <form method="POST" action="/gallery" enctype="multipart/form-data">
-  <input type="file" name="image1">
-  <input type="file" name="image2">
-  <input type="file" name="image3">
+  <input type="file" name="images" multiple>
   <button type="submit">Upload Gallery</button>
 </form>
 ```
@@ -258,32 +273,35 @@ curl -X POST http://localhost:8080/upload \
 
 ```bash
 curl -X POST http://localhost:8080/gallery \
-  -F "image1=@/path/to/photo1.jpg" \
-  -F "image2=@/path/to/photo2.jpg"
+  -F "images=@/path/to/photo1.jpg" \
+  -F "images=@/path/to/photo2.jpg"
 ```
 
 ## File Object
 
-The `MultipartFile` object contains:
+The `UploadedFile` object contains:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `filename` | `String` | Original filename |
+| `filename` | `String` | Generated, sanitized filename that's safe to use for storage |
+| `originalFilename` | `String?` | Original filename as sent by the client — untrusted, display-only |
 | `contentType` | `String` | MIME type (e.g., `image/jpeg`) |
 | `bytes` | `List<int>` | File contents |
+| `size` | `int` | File size in bytes (`bytes.length`) |
 
 ## Validation Example
 
 ```dart
 app.post('/upload', (c) async {
-  final file = c.variables.files['document'];
+  final form = await c.req.multipart();
+  final file = form.file('document');
 
   if (file == null) {
     return c.json({'error': 'No file'}, statusCode: 400);
   }
 
   // Check file size
-  if (file.bytes.length > 5 * 1024 * 1024) {
+  if (file.size > 5 * 1024 * 1024) {
     return c.json({'error': 'File too large'}, statusCode: 400);
   }
 
@@ -300,7 +318,7 @@ app.post('/upload', (c) async {
   }
 
   // Save file
-  await File('uploads/${file.filename}').writeAsBytes(file.bytes);
+  await file.saveTo('uploads/${file.filename}');
 
   return c.json({'success': true});
 });
@@ -310,29 +328,38 @@ app.post('/upload', (c) async {
 
 1. **Validate file types**
    ```dart
-   if (!file.contentType.startsWith('image/')) {
+   final form = await c.req.multipart();
+   final file = form.file('document');
+
+   if (file == null || !file.contentType.startsWith('image/')) {
      return c.json({'error': 'Only images'}, statusCode: 400);
    }
+
+   return c.json({'success': true});
    ```
 
-2. **Set max file size**
+2. **Set a max file size**
    ```dart
-   app.use(multipart(maxFileSize: 5 * 1024 * 1024));
+   final form = await c.req.multipart(maxFileSize: 5 * 1024 * 1024);
    ```
 
-3. **Sanitize filenames**
-   ```dart
-   final safeName = file.filename.replaceAll(RegExp(r'[^a-zA-Z0-9.]'), '_');
-   ```
+3. **Don't trust `originalFilename`**
 
-4. **Use unique filenames**
-   ```dart
-   final filename = '${DateTime.now().millisecondsSinceEpoch}_${file.filename}';
-   ```
+   `file.filename` is already sanitized and safe to use for storage — a
+   generated name like `file_1234567890_abc123de.jpg`, never the string the
+   client sent. Use `file.originalFilename` only for display, never to build
+   a file path.
 
-5. **Store outside web root**
+4. **Store outside web root**
    ```dart
-   await File('../uploads/${filename}').writeAsBytes(file.bytes);
+   final form = await c.req.multipart();
+   final file = form.file('document');
+
+   if (file != null) {
+     await file.saveTo('../uploads/${file.filename}');
+   }
+
+   return c.json({'success': true});
    ```
 
 ## Next Steps
