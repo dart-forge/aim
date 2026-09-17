@@ -1,5 +1,35 @@
-/// Reading a migration's DOWN section as statements to run.
+/// Reading a migration file: which statements it holds, and how they are
+/// allowed to run.
 library;
+
+/// Whether the migration whose text is [content] asks to run its statements
+/// outside a transaction.
+///
+/// A few statements cannot run inside a transaction block —
+/// `CREATE INDEX CONCURRENTLY` and `VACUUM` among them — and a migration
+/// that needs one says so with a line reading `-- aim: no-transaction`. The
+/// line may sit anywhere in the file and is not case-sensitive; it covers
+/// the whole file, so both the UP and the DOWN section of that migration
+/// run a statement at a time.
+///
+/// The cost of asking for this is that a failure part way through leaves
+/// the statements before it applied.
+bool runsOutsideTransaction(String content) =>
+    _noTransactionMarker.hasMatch(content);
+
+final _noTransactionMarker = RegExp(
+  r'^[ \t]*--\s*aim:\s*no-transaction\s*$',
+  multiLine: true,
+  caseSensitive: false,
+);
+
+/// Whether [line] is the marker asking to run outside a transaction.
+///
+/// It is a comment, so it travels with the statement under it and would
+/// otherwise be shown to the operator as if it were a note about that
+/// statement.
+bool isNoTransactionMarker(String line) =>
+    _noTransactionMarker.hasMatch(line.trim());
 
 /// The statements in [sql] that do something.
 ///

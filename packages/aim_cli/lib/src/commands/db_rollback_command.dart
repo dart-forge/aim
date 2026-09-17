@@ -143,20 +143,47 @@ class DbRollbackCommand extends Command<void> {
           await _removeMigration(db, name);
         } else {
           try {
-            // One transaction per migration: the statements and the
-            // history row go together, so a failure half way through
-            // leaves neither a half-rolled-back schema nor a history that
-            // disagrees with it. Postgres rolls DDL back too.
-            await db.transaction((tx) async {
+            if (runsOutsideTransaction(content)) {
+              print('  Running outside a transaction (the file asks for it).');
               for (final stmt in statements) {
-                await tx.execute(stmt);
+                await db.execute(stmt);
               }
-              await _removeMigration(tx, name);
-            });
+              await _removeMigration(db, name);
+            } else {
+              // One transaction per migration: the statements and the
+              // history row go together, so a failure half way through
+              // leaves neither a half-rolled-back schema nor a history that
+              // disagrees with it. Postgres rolls DDL back too.
+              await db.transaction((tx) async {
+                for (final stmt in statements) {
+                  await tx.execute(stmt);
+                }
+                await _removeMigration(tx, name);
+              });
+            }
           } catch (e) {
             print('  ❌ Failed: $name');
             print('  Error: $e');
             print('');
+            if (runsOutsideTransaction(content)) {
+              print('  This migration ran without a transaction, so the');
+              print('  statements before the failure are still applied.');
+              print('');
+            } else if (e.toString().contains(
+              'cannot run inside a transaction block',
+            )) {
+              // The server reports this as SQLSTATE 25001, but the driver
+              // keeps only the message, so the message is what there is to
+              // match on.
+              print('  This statement has to run on its own. Put this line in');
+              print('  the migration file to roll it back without a');
+              print('  transaction:');
+              print('');
+              print('    -- aim: no-transaction');
+              print('');
+              print('  Nothing was rolled back.');
+              print('');
+            }
             print('Rollback stopped. Please fix the error and retry.');
             exit(1);
           }
@@ -241,7 +268,11 @@ class DbRollbackCommand extends Command<void> {
     for (final statement in statements) {
       for (final line in statement.split('\n')) {
         final trimmed = line.trim();
-        if (trimmed.startsWith('--')) lines.add(trimmed);
+        if (!trimmed.startsWith('--')) continue;
+        // The marker asking to run outside a transaction is an instruction
+        // to this command, not something the author wrote to be read.
+        if (isNoTransactionMarker(trimmed)) continue;
+        lines.add(trimmed);
       }
     }
     return lines;

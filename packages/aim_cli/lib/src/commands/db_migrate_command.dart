@@ -114,7 +114,7 @@ class DbMigrateCommand extends Command<void> {
           exit(1);
         }
 
-        final runOutsideTransaction = _noTransactionMarker.hasMatch(content);
+        final runOutsideTransaction = runsOutsideTransaction(content);
 
         try {
           if (runOutsideTransaction) {
@@ -263,15 +263,3 @@ class _MigrationSections {
 
   _MigrationSections({required this.up, this.down});
 }
-
-/// Matches the line that asks for a migration's statements to run outside a
-/// transaction.
-///
-/// A few statements cannot run inside one — `CREATE INDEX CONCURRENTLY`,
-/// `VACUUM`, `ALTER TYPE ... ADD VALUE` — and a migration that needs one
-/// says so with this line anywhere in the file.
-final _noTransactionMarker = RegExp(
-  r'^--\s*aim:\s*no-transaction\s*$',
-  multiLine: true,
-  caseSensitive: false,
-);

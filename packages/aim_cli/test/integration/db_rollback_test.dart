@@ -227,4 +227,59 @@ CREATE TABLE widgets (id SERIAL PRIMARY KEY);
     );
     expect(await tableExists('widgets'), isTrue);
   });
+
+  test(
+    'a marked migration rolls back a statement a transaction forbids',
+    () async {
+      final dir = await project('''
+-- UP
+-- aim: no-transaction
+CREATE TABLE widgets (id SERIAL PRIMARY KEY, name TEXT NOT NULL);
+CREATE INDEX idx_widgets_name ON widgets (name);
+
+-- DOWN
+DROP INDEX CONCURRENTLY idx_widgets_name;
+DROP TABLE IF EXISTS widgets;
+''');
+
+      final migrate = await aim(['db:migrate'], dir);
+      expect(migrate.exitCode, 0, reason: '${migrate.stdout}${migrate.stderr}');
+
+      final rollback = await aim(['db:rollback'], dir);
+      expect(
+        rollback.exitCode,
+        0,
+        reason: '${rollback.stdout}${rollback.stderr}',
+      );
+      expect(await tableExists('widgets'), isFalse);
+      expect(await appliedMigrations(), isEmpty);
+      // The marker is an instruction to the command, not a note its author
+      // wrote to be read.
+      expect(rollback.stdout, isNot(contains('aim: no-transaction')));
+    },
+  );
+
+  test(
+    'an unmarked rollback refused by the transaction says how to run it',
+    () async {
+      final dir = await project('''
+-- UP
+CREATE TABLE widgets (id SERIAL PRIMARY KEY, name TEXT NOT NULL);
+CREATE INDEX idx_widgets_name ON widgets (name);
+
+-- DOWN
+DROP INDEX CONCURRENTLY idx_widgets_name;
+DROP TABLE IF EXISTS widgets;
+''');
+
+      final migrate = await aim(['db:migrate'], dir);
+      expect(migrate.exitCode, 0, reason: '${migrate.stdout}${migrate.stderr}');
+
+      final rollback = await aim(['db:rollback'], dir);
+      expect(rollback.exitCode, isNot(0));
+      expect(rollback.stdout, contains('-- aim: no-transaction'));
+      expect(await tableExists('widgets'), isTrue);
+      expect(await appliedMigrations(), hasLength(1));
+    },
+  );
 }
