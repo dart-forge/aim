@@ -96,8 +96,18 @@ rig prune
 | `pg_connection_scram_test.dart` | scram-sha-256 |
 | それ以外 | cleartext password（デフォルト） |
 
-いずれも `test_db` / `test` / `test`（データベース名・ユーザー・パスワード）です。ホストポートは
-rig が起動時に空いているものを割り当てるので、固定値はありません。
+ユーザーとパスワードはいずれも `test` / `test` です。データベース名は固定の `test_db` では
+ありません。上に書いたとおり rig がスイート毎に `test_<パッケージ名>_...` の形で発行するので、
+繋ぐときはテストコードと同じく `pg.url`（または `pg.database`）を使ってください。`test_db` は
+コンテナの管理用データベースで、テストはここには何も書きません（テーブルは常に 0 個です）。
+テスト実行中に実際のデータベース名を覗くには、対象コンテナに対して次を叩きます（テストが
+終わると消えるので、実行中だけ有効です）：
+
+```bash
+docker exec <コンテナID> psql -U test -d postgres -tAc "select datname from pg_database"
+```
+
+ホストポートは rig が起動時に空いているものを割り当てるので、固定値はありません。
 
 ## CI
 
