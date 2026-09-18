@@ -451,6 +451,7 @@ aim db:generate [options]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--name` | Migration name | Auto-generated timestamp |
+| `--path` | Path to table definitions | `aim.database.schema`, or `lib/schema` |
 
 **Example:**
 ```bash
@@ -545,7 +546,8 @@ Applied: 2 / Total: 3
 
 ### Database Configuration
 
-Configure database connection in `pubspec.yaml`:
+Configure database connection in `pubspec.yaml`. See
+[Configuration](/cli/configuration#database) for every key.
 
 ```yaml
 aim:
