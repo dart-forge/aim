@@ -1,10 +1,10 @@
 ---
 title: aim_database - Database Packages for Dart
-description: Database abstraction layer and drivers for Dart. PostgreSQL native driver, ORM, and more. Works independently of aim_server.
+description: Database abstraction layer and drivers for Dart. PostgreSQL and SQLite native drivers, ORM, and more. Works independently of aim_server.
 head:
   - - meta
     - name: keywords
-      content: Dart database, PostgreSQL Dart, Dart ORM, aim_database, aim_postgres
+      content: Dart database, PostgreSQL Dart, Dart SQLite, Dart ORM, aim_database, aim_postgres, aim_sqlite
 ---
 
 # Database
@@ -17,6 +17,7 @@ Database packages for Dart. **Works independently of aim_server.**
 |---------|-------------|---------|
 | aim_database | Database abstraction layer | 0.0.1 |
 | aim_postgres | PostgreSQL native driver | 0.0.1 |
+| aim_sqlite | SQLite native driver | 0.1.0 |
 | aim_orm | ORM abstraction layer | Coming Soon |
 | aim_orm_postgres | PostgreSQL ORM implementation | Coming Soon |
 
@@ -143,6 +144,14 @@ void main() async {
 - Named parameters (`:name`) and positional parameters (`$1`)
 - Transaction support
 
+### aim_sqlite
+
+- Native `dart:ffi` bindings to libsqlite3, run on worker isolates
+- One writer connection and, by default, four read-only reader connections, in WAL mode
+- Named parameters (`:name`) and positional parameters (`?`)
+- Transaction support
+- Raw SQL only for now -- the ORM and `aim db:*` migrations are PostgreSQL-only
+
 ### aim_orm + aim_orm_postgres (Coming Soon)
 
 - `aim_orm`: ORM abstraction layer
@@ -156,4 +165,5 @@ void main() async {
 
 - [Installation](/database/installation) - Setup guide
 - [PostgreSQL](/database/drivers/postgres) - PostgreSQL driver details
+- [SQLite](/database/drivers/sqlite) - SQLite driver details
 - [ORM](/database/orm/) - ORM documentation (Coming Soon)

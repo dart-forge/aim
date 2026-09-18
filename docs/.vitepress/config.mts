@@ -191,7 +191,8 @@ export default defineConfig({
           text: 'Drivers',
           collapsed: false,
           items: [
-            { text: 'PostgreSQL', link: '/database/drivers/postgres' }
+            { text: 'PostgreSQL', link: '/database/drivers/postgres' },
+            { text: 'SQLite', link: '/database/drivers/sqlite' }
           ]
         },
         {
