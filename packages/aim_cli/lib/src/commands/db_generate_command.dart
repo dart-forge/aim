@@ -711,12 +711,33 @@ class DbGenerateCommand extends Command<void> {
 
       // 追加外部キー
       for (final fk in currTable.foreignKeys) {
-        if (!prevFkMap.containsKey(fk.column)) {
-          diffs.add(_SchemaDiff(
-            type: _DiffType.addForeignKey,
-            table: currTable,
-            foreignKey: fk,
-          ));
+        final previous = prevFkMap[fk.column];
+        if (previous == null) {
+          diffs.add(
+            _SchemaDiff(
+              type: _DiffType.addForeignKey,
+              table: currTable,
+              foreignKey: fk,
+            ),
+          );
+        } else if (!_sameForeignKey(previous, fk)) {
+          // Postgres has no statement that repoints a foreign key, so the
+          // old constraint is dropped and the new one added. Both land in
+          // the phases that put the drop first.
+          diffs.add(
+            _SchemaDiff(
+              type: _DiffType.dropForeignKey,
+              table: currTable,
+              foreignKey: previous,
+            ),
+          );
+          diffs.add(
+            _SchemaDiff(
+              type: _DiffType.addForeignKey,
+              table: currTable,
+              foreignKey: fk,
+            ),
+          );
         }
       }
 
@@ -1635,6 +1656,17 @@ List<_SchemaDiff> _orderTablesByReference(List<_SchemaDiff> tables) {
 /// The name this generator gives a foreign key on [column] of [table].
 String _foreignKeyConstraintName(String table, String column) =>
     'fk_${table}_$column';
+
+/// Whether [a] and [b] describe the same foreign key.
+///
+/// The column the key sits on is how the two are paired up, so what is
+/// left to compare is where it points and what it does on a change there.
+/// Any difference needs the constraint replaced.
+bool _sameForeignKey(ForeignKeySchema a, ForeignKeySchema b) =>
+    a.referencesTable == b.referencesTable &&
+    a.referencesColumn == b.referencesColumn &&
+    a.onDelete == b.onDelete &&
+    a.onUpdate == b.onUpdate;
 
 /// The name this generator gives a unique constraint on [column] of
 /// [table].

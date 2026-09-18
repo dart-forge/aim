@@ -518,4 +518,145 @@ final posts = (
       );
     });
   });
+
+  group('db:generate - a changed foreign key is replaced', () {
+    test(
+      'repointing it at another column drops and adds the constraint',
+      () async {
+        writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('parent')
+final parent = (
+  id: integer('id').primaryKey(),
+  c1: varchar('c1', length: 20).unique(),
+  c2: varchar('c2', length: 20).unique(),
+);
+
+@PgTable('child')
+final child = (
+  id: integer('id').primaryKey(),
+  ref: varchar('ref', length: 20).references(() => parent.c1),
+);
+''');
+        await generate('first');
+
+        writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('parent')
+final parent = (
+  id: integer('id').primaryKey(),
+  c1: varchar('c1', length: 20).unique(),
+  c2: varchar('c2', length: 20).unique(),
+);
+
+@PgTable('child')
+final child = (
+  id: integer('id').primaryKey(),
+  ref: varchar('ref', length: 20).references(() => parent.c2),
+);
+''');
+        await generate('second');
+
+        final up = upOf('second');
+        final drop = up.indexOf(
+          'ALTER TABLE child DROP CONSTRAINT IF EXISTS fk_child_ref;',
+        );
+        final add = up.indexOf('ADD CONSTRAINT fk_child_ref');
+        expect(drop, isNonNegative);
+        expect(add, isNonNegative);
+        expect(
+          drop,
+          lessThan(add),
+          reason:
+              'Postgres has no statement that repoints a foreign key, so '
+              'the old one has to go before the new one arrives',
+        );
+        expect(up, contains('REFERENCES parent(c2)'));
+      },
+    );
+
+    test(
+      'changing only the referential action replaces the constraint too',
+      () async {
+        writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('parent')
+final parent = (
+  id: integer('id').primaryKey(),
+);
+
+@PgTable('child')
+final child = (
+  id: integer('id').primaryKey(),
+  parent_id: integer('parent_id').references(
+    () => parent.id,
+    onDelete: OnDeleteAction.cascade,
+  ),
+);
+''');
+        await generate('first');
+
+        writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('parent')
+final parent = (
+  id: integer('id').primaryKey(),
+);
+
+@PgTable('child')
+final child = (
+  id: integer('id').primaryKey(),
+  parent_id: integer('parent_id').references(
+    () => parent.id,
+    onDelete: OnDeleteAction.setNull,
+  ),
+);
+''');
+        await generate('second');
+
+        final up = upOf('second');
+        expect(up, contains('DROP CONSTRAINT IF EXISTS fk_child_parent_id;'));
+        expect(up, contains('ON DELETE SET NULL'));
+        expect(up, isNot(contains('ON DELETE CASCADE')));
+      },
+    );
+
+    test('an unchanged foreign key produces no migration', () async {
+      const schema = '''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('parent')
+final parent = (
+  id: integer('id').primaryKey(),
+);
+
+@PgTable('child')
+final child = (
+  id: integer('id').primaryKey(),
+  parent_id: integer('parent_id').references(
+    () => parent.id,
+    onDelete: OnDeleteAction.cascade,
+  ),
+);
+''';
+      writeSchema(schema);
+      await generate('first');
+      writeSchema(schema);
+      await generate('second');
+
+      final files = Directory(p.join(tmp.path, 'db', 'migrations'))
+          .listSync()
+          .whereType<File>()
+          .toList();
+      expect(
+        files,
+        hasLength(1),
+        reason: 'nothing changed, so there is nothing to migrate',
+      );
+    });
+  });
 }
