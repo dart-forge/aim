@@ -20,6 +20,44 @@ enum AimTarget {
       };
 }
 
+/// The `aim.database:` subsection of a project's pubspec.yaml.
+class AimDatabaseConfig {
+  /// `aim.database.url` with `${VAR:default}` expanded, or `null` when it is
+  /// absent or expands to nothing.
+  final String? url;
+
+  /// `aim.database.schema` with `${VAR:default}` expanded, or `null` when not
+  /// configured.
+  final String? configuredSchema;
+
+  const AimDatabaseConfig({this.url, this.configuredSchema});
+
+  /// Schema path used when neither `--path` nor `aim.database.schema` is given.
+  static const defaultSchema = 'lib/schema';
+
+  /// `--path` beats `aim.database.schema`, which beats [defaultSchema].
+  String resolveSchema(String? cliOverride) =>
+      cliOverride ?? configuredSchema ?? defaultSchema;
+
+  /// A missing or non-map `aim.database:` yields defaults.
+  static AimDatabaseConfig parse(Object? section) {
+    if (section is! YamlMap) return const AimDatabaseConfig();
+    return AimDatabaseConfig(
+      url: _expand(section['url']),
+      configuredSchema: _expand(section['schema']),
+    );
+  }
+
+  /// Expands `${VAR}` and reads an empty result as "not configured", so an
+  /// unset variable stops the command with "Database URL not found" instead
+  /// of dialling an empty address.
+  static String? _expand(Object? value) {
+    if (value == null) return null;
+    final expanded = EnvExpander.expand(value.toString());
+    return expanded.isEmpty ? null : expanded;
+  }
+}
+
 /// The `aim:` section of a project's pubspec.yaml.
 class AimConfig {
   final AimTarget target;
@@ -30,10 +68,14 @@ class AimConfig {
   /// `aim.env` with `${VAR:default}` / `${VAR}` / `$VAR` expanded.
   final Map<String, String> env;
 
+  /// The `aim.database:` subsection.
+  final AimDatabaseConfig database;
+
   const AimConfig({
     this.target = AimTarget.server,
     this.configuredEntry,
     this.env = const {},
+    this.database = const AimDatabaseConfig(),
   });
 
   /// Entry point used when neither `--entry` nor `aim.entry` is given.
@@ -70,11 +112,25 @@ class AimConfig {
       });
     }
 
-    return AimConfig(target: target, configuredEntry: entry, env: env);
+    return AimConfig(
+      target: target,
+      configuredEntry: entry,
+      env: env,
+      database: AimDatabaseConfig.parse(aim['database']),
+    );
   }
 
   /// Reads and parses [pubspecPath] (default `pubspec.yaml` in the CWD).
   static Future<AimConfig> load([String pubspecPath = 'pubspec.yaml']) async {
     return parse(await File(pubspecPath).readAsString());
+  }
+
+  /// Like [load], but yields defaults when [pubspecPath] does not exist, for
+  /// callers that report a missing setting rather than a missing file.
+  static Future<AimConfig> loadOrDefault(
+      [String pubspecPath = 'pubspec.yaml']) async {
+    final file = File(pubspecPath);
+    if (!await file.exists()) return const AimConfig();
+    return parse(await file.readAsString());
   }
 }

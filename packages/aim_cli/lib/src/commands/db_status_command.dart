@@ -1,8 +1,8 @@
 import 'dart:io';
 
+import 'package:aim_cli/src/config/aim_config.dart';
 import 'package:aim_postgres/aim_postgres.dart';
 import 'package:args/command_runner.dart';
-import 'package:yaml/yaml.dart';
 
 class DbStatusCommand extends Command<void> {
   @override
@@ -14,7 +14,7 @@ class DbStatusCommand extends Command<void> {
   @override
   Future<void> run() async {
     // 1. DB接続情報を取得
-    final dbUrl = await _getDatabaseUrl();
+    final dbUrl = (await AimConfig.loadOrDefault()).database.url;
     if (dbUrl == null) {
       print('Error: Database URL not found');
       print('Set aim.database.url in pubspec.yaml');
@@ -80,22 +80,6 @@ class DbStatusCommand extends Command<void> {
     } finally {
       await db.close();
     }
-  }
-
-  Future<String?> _getDatabaseUrl() async {
-    final pubspecFile = File('pubspec.yaml');
-    if (!await pubspecFile.exists()) return null;
-
-    final content = await pubspecFile.readAsString();
-    final yaml = loadYaml(content);
-
-    if (yaml is! YamlMap) return null;
-    final aim = yaml['aim'];
-    if (aim is! YamlMap) return null;
-    final database = aim['database'];
-    if (database is! YamlMap) return null;
-
-    return database['url'] as String?;
   }
 
   String _fileName(File file) {
