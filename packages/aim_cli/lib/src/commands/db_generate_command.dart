@@ -187,11 +187,9 @@ class DbGenerateCommand extends Command<void> {
   }
 
   Future<Schema> _analyzeSchema(String tablesPath) async {
-    final tables = <TableSchema>[];
+    final scanned = <_ScannedTable>[];
 
-    final collection = AnalysisContextCollection(
-      includedPaths: [tablesPath],
-    );
+    final collection = AnalysisContextCollection(includedPaths: [tablesPath]);
 
     for (final context in collection.contexts) {
       for (final filePath in context.contextRoot.analyzedFiles()) {
@@ -225,7 +223,8 @@ class DbGenerateCommand extends Command<void> {
 
               final columns = <ColumnSchema>[];
               final indexes = <IndexSchema>[];
-              final foreignKeys = <ForeignKeySchema>[];
+              final foreignKeys = <_PendingForeignKey>[];
+              final fieldToColumn = <String, String>{};
 
               for (final field in initializer.fields) {
                 if (field is! RecordLiteralNamedField) continue;
@@ -238,6 +237,7 @@ class DbGenerateCommand extends Command<void> {
                 );
 
                 columns.add(columnInfo.column);
+                fieldToColumn[fieldName] = columnInfo.column.name;
                 if (columnInfo.isIndexed) {
                   indexes.add(IndexSchema(columns: [columnInfo.column.name]));
                 }
@@ -246,19 +246,96 @@ class DbGenerateCommand extends Command<void> {
                 }
               }
 
-              tables.add(TableSchema(
-                name: tableName,
-                columns: columns,
-                indexes: indexes,
-                foreignKeys: foreignKeys,
-              ));
+              scanned.add(
+                _ScannedTable(
+                  variableName: variable.name.lexeme,
+                  filePath: filePath,
+                  table: TableSchema(
+                    name: tableName,
+                    columns: columns,
+                    indexes: indexes,
+                  ),
+                  fieldToColumn: fieldToColumn,
+                  pendingForeignKeys: foreignKeys,
+                ),
+              );
             }
           }
         }
       }
     }
 
-    return Schema(tables: tables);
+    return Schema(tables: _resolveReferences(scanned));
+  }
+
+  /// [scanned] with every foreign key's Dart names replaced by the names
+  /// the database uses.
+  ///
+  /// A reference names a Dart variable and a record field. The table name
+  /// comes from that variable's annotation and the column name from its
+  /// column definition, so this can only run once every table has been
+  /// read.
+  List<TableSchema> _resolveReferences(List<_ScannedTable> scanned) {
+    final byVariable = {for (final t in scanned) t.variableName: t};
+    return [
+      for (final scannedTable in scanned)
+        TableSchema(
+          name: scannedTable.table.name,
+          columns: scannedTable.table.columns,
+          indexes: scannedTable.table.indexes,
+          foreignKeys: [
+            for (final pending in scannedTable.pendingForeignKeys)
+              _resolveForeignKey(pending, scannedTable, byVariable),
+          ],
+        ),
+    ];
+  }
+
+  /// [pending] with its table and column names resolved.
+  ///
+  /// Throws a [FormatException] naming the file and the reference when
+  /// either cannot be resolved. An unresolvable reference is a mistake in
+  /// the schema, and carrying the Dart name through would produce SQL
+  /// naming a table or column the database does not have — which only
+  /// surfaces when the migration is applied.
+  ForeignKeySchema _resolveForeignKey(
+    _PendingForeignKey pending,
+    _ScannedTable owner,
+    Map<String, _ScannedTable> byVariable,
+  ) {
+    final written =
+        'references(() => ${pending.referencesVariable}.'
+        '${pending.referencesField})';
+    final where =
+        'Cannot resolve the reference on '
+        '"${owner.table.name}.${pending.column}" in ${owner.filePath}:\n'
+        '  $written\n';
+
+    final target = byVariable[pending.referencesVariable];
+    if (target == null) {
+      throw FormatException(
+        '${where}No table annotated @PgTable was found for '
+        '"${pending.referencesVariable}" in the scanned path. Check the '
+        'name, or add the file holding it to the schema path.',
+      );
+    }
+
+    final column = target.fieldToColumn[pending.referencesField];
+    if (column == null) {
+      throw FormatException(
+        '$where"${pending.referencesVariable}" has no field named '
+        '"${pending.referencesField}". Its fields are: '
+        '${target.fieldToColumn.keys.join(', ')}.',
+      );
+    }
+
+    return ForeignKeySchema(
+      column: pending.column,
+      referencesTable: target.table.name,
+      referencesColumn: column,
+      onDelete: pending.onDelete,
+      onUpdate: pending.onUpdate,
+    );
   }
 
   _ColumnAnalysisResult _analyzeColumn(
@@ -274,7 +351,7 @@ class DbGenerateCommand extends Command<void> {
     bool isIndexed = false;
     int? varcharLength;
     String? defaultValue;
-    ForeignKeySchema? foreignKey;
+    _PendingForeignKey? foreignKey;
 
     // メソッドチェーンを収集
     final methods = <MethodInvocation>[];
@@ -335,26 +412,26 @@ class DbGenerateCommand extends Command<void> {
               final body = firstArg.body;
               if (body is ExpressionFunctionBody) {
                 final refExpr = body.expression;
-                String? refTable;
-                String? refColumn;
+                String? refVariable;
+                String? refField;
                 // PropertyAccess: users.id
                 if (refExpr is PropertyAccess) {
                   final target = refExpr.target;
                   if (target is SimpleIdentifier) {
-                    refTable = target.name;
+                    refVariable = target.name;
                   }
-                  refColumn = refExpr.propertyName.name;
+                  refField = refExpr.propertyName.name;
                 }
                 // PrefixedIdentifier: users.id (fallback)
                 if (refExpr is PrefixedIdentifier) {
-                  refTable = refExpr.prefix.name;
-                  refColumn = refExpr.identifier.name;
+                  refVariable = refExpr.prefix.name;
+                  refField = refExpr.identifier.name;
                 }
-                if (refTable != null && refColumn != null) {
-                  foreignKey = ForeignKeySchema(
+                if (refVariable != null && refField != null) {
+                  foreignKey = _PendingForeignKey(
                     column: columnName ?? fieldName,
-                    referencesTable: refTable,
-                    referencesColumn: refColumn,
+                    referencesVariable: refVariable,
+                    referencesField: refField,
                     onDelete: _extractOnDelete(args, filePath),
                     onUpdate: _extractOnUpdate(args, filePath),
                   );
@@ -1146,10 +1223,62 @@ class ForeignKeySchema {
       };
 }
 
+/// A foreign key as it was written in Dart, before the names in it have
+/// been resolved to the names the database uses.
+///
+/// `references(() => users.id)` names a Dart variable and a record field.
+/// Neither is necessarily the name of the table or the column: the table
+/// name comes from the `@PgTable` annotation and the column name from the
+/// column definition. Resolving them needs every table in the schema, so
+/// it cannot happen while one table is still being read.
+class _PendingForeignKey {
+  final String column;
+  final String referencesVariable;
+  final String referencesField;
+  final String? onDelete;
+  final String? onUpdate;
+
+  _PendingForeignKey({
+    required this.column,
+    required this.referencesVariable,
+    required this.referencesField,
+    this.onDelete,
+    this.onUpdate,
+  });
+}
+
+/// One table as the scan found it: the schema without its foreign keys,
+/// plus what resolving those keys needs.
+class _ScannedTable {
+  /// Name of the Dart variable holding the record, which is what a
+  /// reference from another table names.
+  final String variableName;
+
+  /// File the declaration was read from, so an unresolvable reference can
+  /// say where to look.
+  final String filePath;
+
+  final TableSchema table;
+
+  /// Record field name to column name, for resolving the field a reference
+  /// names.
+  final Map<String, String> fieldToColumn;
+
+  final List<_PendingForeignKey> pendingForeignKeys;
+
+  _ScannedTable({
+    required this.variableName,
+    required this.filePath,
+    required this.table,
+    required this.fieldToColumn,
+    required this.pendingForeignKeys,
+  });
+}
+
 class _ColumnAnalysisResult {
   final ColumnSchema column;
   final bool isIndexed;
-  final ForeignKeySchema? foreignKey;
+  final _PendingForeignKey? foreignKey;
 
   _ColumnAnalysisResult({
     required this.column,

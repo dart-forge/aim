@@ -275,4 +275,116 @@ final posts = (
       );
     });
   });
+
+  group('db:generate - a reference names the table and column in SQL', () {
+    test('uses the table name, not the Dart variable name', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('ord_users')
+final ordUsers = (
+  id: integer('id').primaryKey(),
+);
+
+@PgTable('ord_posts')
+final ordPosts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(() => ordUsers.id),
+);
+''');
+      await generate('first');
+
+      final up = upOf('first');
+      expect(up, contains('REFERENCES ord_users(id)'));
+      expect(up, isNot(contains('REFERENCES ordUsers')));
+    });
+
+    test('uses the column name, not the record field name', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  key: integer('user_key').primaryKey(),
+);
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  owner: integer('owner_key').references(() => users.key),
+);
+''');
+      await generate('first');
+
+      final up = upOf('first');
+      expect(up, contains('REFERENCES users(user_key)'));
+      expect(up, isNot(contains('REFERENCES users(key)')));
+    });
+
+    test('resolves a table that references itself', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('nodes')
+final nodes = (
+  id: integer('id').primaryKey(),
+  parent_id: integer('parent_id').nullable().references(() => nodes.id),
+);
+''');
+      await generate('first');
+
+      expect(upOf('first'), contains('REFERENCES nodes(id)'));
+    });
+
+    test('stops when the referenced variable is not a table, naming the '
+        'file and the reference', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(() => missingTable.id),
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('missingTable'))
+              .having((e) => e.message, 'message', contains('posts.user_id'))
+              .having((e) => e.message, 'message', contains('schema.dart')),
+        ),
+      );
+    });
+
+    test('stops when the referenced field does not exist, listing the '
+        'fields that do', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  email: varchar('email', length: 255).nullable(),
+);
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(() => users.nope),
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('nope'))
+              .having((e) => e.message, 'message', contains('id, email')),
+        ),
+      );
+    });
+  });
 }
