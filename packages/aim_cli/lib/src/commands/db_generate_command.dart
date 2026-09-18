@@ -114,6 +114,53 @@ class DbGenerateCommand extends Command<void> {
       print('');
     }
 
+    // A default whose Dart expression is not a literal is recorded as a
+    // marker, not a value, so no DEFAULT clause can be written for it. The
+    // migration says so in a comment, but a comment cannot be executed: the
+    // change is silently absent from the database while the schema snapshot
+    // records that the column has a default. Name the columns here so the
+    // person generating the migration is the one who finds out.
+    final unreadableDefaults = <String>[];
+    for (final diff in renamedDiffs) {
+      switch (diff.type) {
+        case _DiffType.createTable:
+          for (final col in diff.table.columns) {
+            if (col.defaultValue == _hasDefaultSentinel) {
+              unreadableDefaults.add('${diff.table.name}.${col.name}');
+            }
+          }
+        case _DiffType.addColumn:
+        case _DiffType.alterColumnSetDefault:
+          final col = diff.column!;
+          if (col.defaultValue == _hasDefaultSentinel) {
+            unreadableDefaults.add('${diff.table.name}.${col.name}');
+          }
+        default:
+          break;
+      }
+    }
+
+    if (unreadableDefaults.isNotEmpty) {
+      print('');
+      print(
+        '⚠️  The default for these columns could not be read, so no '
+        'value is written:',
+      );
+      for (final name in unreadableDefaults) {
+        print('   - $name');
+      }
+      print('');
+      print(
+        'withDefault() was given something other than a literal, so the '
+        'schema records that a default exists but not what it is.',
+      );
+      print(
+        'The migration says so in a comment. Write the value by hand '
+        'before applying it.',
+      );
+      print('');
+    }
+
     // 4. マイグレーション SQL を生成
     final timestamp = DateTime.now()
         .toIso8601String()
@@ -355,7 +402,7 @@ class DbGenerateCommand extends Command<void> {
       return expr.value ? 'TRUE' : 'FALSE';
     }
     // それ以外は「デフォルトがある」ことだけ記録
-    return '__HAS_DEFAULT__';
+    return _hasDefaultSentinel;
   }
 
   String? _extractOnDelete(NodeList<Argument> args, String filePath) {
@@ -513,12 +560,14 @@ class DbGenerateCommand extends Command<void> {
               type: _DiffType.alterColumnDropDefault,
               table: currTable,
               column: currCol,
+              oldColumn: prevCol,
             ));
           } else {
             diffs.add(_SchemaDiff(
               type: _DiffType.alterColumnSetDefault,
               table: currTable,
               column: currCol,
+              oldColumn: prevCol,
             ));
           }
         }
@@ -678,7 +727,15 @@ class DbGenerateCommand extends Command<void> {
   String _generateUpSql(List<_SchemaDiff> diffs) {
     final buffer = StringBuffer();
 
-    for (final diff in diffs) {
+    // Both sections come through here, so ordering once at this point
+    // covers UP and DOWN alike. The schema comparison emits diffs in the
+    // order it walks the definitions, which is not an order the statements
+    // can run in: it puts a column's DROP before the DROP of the index on
+    // it, and it creates tables in declaration order regardless of which
+    // one's foreign key points at which.
+    for (final diff in _orderForExecution(diffs)) {
+      final note = diff.note;
+      if (note != null) buffer.writeln(note);
       switch (diff.type) {
         case _DiffType.createTable:
           buffer.writeln(_generateCreateTable(diff.table));
@@ -737,9 +794,21 @@ class DbGenerateCommand extends Command<void> {
           );
         case _DiffType.alterColumnSetDefault:
           final col = diff.column!;
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} ALTER COLUMN ${col.name} SET DEFAULT ${col.defaultValue};',
-          );
+          if (col.defaultValue == _hasDefaultSentinel) {
+            // The recorded schema says this column has a default but not
+            // what it is, so there is no value to write. Putting the
+            // marker into the statement would hand Postgres SQL it
+            // rejects, which is worse than saying nothing can be done.
+            buffer.writeln(
+              '-- Cannot set the default for "${col.name}": the recorded '
+              'schema says it has one, but not its value.',
+            );
+          } else {
+            buffer.writeln(
+              'ALTER TABLE ${diff.table.name} ALTER COLUMN ${col.name} '
+              'SET DEFAULT ${col.defaultValue};',
+            );
+          }
         case _DiffType.alterColumnDropDefault:
           buffer.writeln(
             'ALTER TABLE ${diff.table.name} ALTER COLUMN ${diff.column!.name} DROP DEFAULT;',
@@ -769,110 +838,10 @@ class DbGenerateCommand extends Command<void> {
     return buffer.toString();
   }
 
-  String _generateDownSql(List<_SchemaDiff> diffs) {
-    final buffer = StringBuffer();
-
-    // DOWN SQLは逆順で実行
-    for (final diff in diffs.reversed) {
-      switch (diff.type) {
-        case _DiffType.createTable:
-          // CREATE TABLE → DROP TABLE
-          // まずインデックスを削除
-          for (final idx in diff.table.indexes) {
-            final indexName =
-                'idx_${diff.table.name}_${idx.columns.join('_')}';
-            buffer.writeln('DROP INDEX IF EXISTS $indexName;');
-          }
-          buffer.writeln('DROP TABLE IF EXISTS ${diff.table.name};');
-        case _DiffType.dropTable:
-          // DROP TABLE → CREATE TABLE (元のスキーマが必要なのでTODO)
-          buffer.writeln(
-            '-- TODO: Cannot restore dropped table "${diff.table.name}" without schema backup',
-          );
-        case _DiffType.addColumn:
-          // ADD COLUMN → DROP COLUMN
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} DROP COLUMN ${diff.column!.name};',
-          );
-        case _DiffType.dropColumn:
-          // DROP COLUMN → ADD COLUMN (元の定義が必要なのでTODO)
-          buffer.writeln(
-            '-- TODO: Cannot restore dropped column "${diff.column!.name}" without schema backup',
-          );
-        case _DiffType.addForeignKey:
-          // ADD FK → DROP CONSTRAINT
-          final fk = diff.foreignKey!;
-          final constraintName = 'fk_${diff.table.name}_${fk.column}';
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} DROP CONSTRAINT $constraintName;',
-          );
-        case _DiffType.dropForeignKey:
-          // DROP FK → ADD FK (元の定義が必要なのでTODO)
-          final fk = diff.foreignKey!;
-          buffer.writeln(
-            '-- TODO: Cannot restore dropped foreign key on column "${fk.column}" without schema backup',
-          );
-        case _DiffType.addIndex:
-          // ADD INDEX → DROP INDEX
-          final idx = diff.index!;
-          final indexName = 'idx_${diff.table.name}_${idx.columns.join('_')}';
-          buffer.writeln('DROP INDEX $indexName;');
-        case _DiffType.dropIndex:
-          // DROP INDEX → CREATE INDEX (元の定義が必要なのでTODO)
-          buffer.writeln(
-            '-- TODO: Cannot restore dropped index without schema backup',
-          );
-        case _DiffType.alterColumnType:
-          // ALTER TYPE → ALTER TYPE (元の型へ)
-          final oldCol = diff.oldColumn!;
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} ALTER COLUMN ${oldCol.name} TYPE ${_columnTypeToSql(oldCol)};',
-          );
-        case _DiffType.alterColumnSetNotNull:
-          // SET NOT NULL → DROP NOT NULL
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} ALTER COLUMN ${diff.column!.name} DROP NOT NULL;',
-          );
-        case _DiffType.alterColumnDropNotNull:
-          // DROP NOT NULL → SET NOT NULL
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} ALTER COLUMN ${diff.column!.name} SET NOT NULL;',
-          );
-        case _DiffType.alterColumnSetDefault:
-          // SET DEFAULT → DROP DEFAULT
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} ALTER COLUMN ${diff.column!.name} DROP DEFAULT;',
-          );
-        case _DiffType.alterColumnDropDefault:
-          // DROP DEFAULT → SET DEFAULT (元の値が必要なのでTODO)
-          buffer.writeln(
-            '-- TODO: Cannot restore dropped default for column "${diff.column!.name}" without previous value',
-          );
-        case _DiffType.addUnique:
-          // ADD UNIQUE → DROP CONSTRAINT
-          final col = diff.column!;
-          final constraintName = 'uq_${diff.table.name}_${col.name}';
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} DROP CONSTRAINT $constraintName;',
-          );
-        case _DiffType.dropUnique:
-          // DROP UNIQUE → ADD UNIQUE (元の定義が必要なのでTODO)
-          buffer.writeln(
-            '-- TODO: Cannot restore dropped unique constraint on column "${diff.column!.name}" without schema backup',
-          );
-        case _DiffType.renameColumn:
-          // RENAME → RENAME (逆方向)
-          final oldName = diff.oldColumn!.name;
-          final newName = diff.column!.name;
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} RENAME COLUMN $newName TO $oldName;',
-          );
-      }
-      buffer.writeln();
-    }
-
-    return buffer.toString();
-  }
+  /// The DOWN section: every diff inverted and run back through the UP
+  /// generator, so both sections come from one set of SQL templates.
+  String _generateDownSql(List<_SchemaDiff> diffs) =>
+      _generateUpSql(_invertDiffs(diffs));
 
   /// カラム型のシグネチャ（型変更検出用）
   String _columnTypeSignature(ColumnSchema col) {
@@ -974,7 +943,7 @@ class DbGenerateCommand extends Command<void> {
     if (col.isPrimaryKey) parts.add('PRIMARY KEY');
     if (col.isUnique) parts.add('UNIQUE');
     if (!col.isNullable && !col.isPrimaryKey) parts.add('NOT NULL');
-    if (col.defaultValue != null && col.defaultValue != '__HAS_DEFAULT__') {
+    if (col.defaultValue != null && col.defaultValue != _hasDefaultSentinel) {
       parts.add('DEFAULT ${col.defaultValue}');
     }
 
@@ -1172,6 +1141,13 @@ class _SchemaDiff {
   final ForeignKeySchema? foreignKey; // ADD/DROP FOREIGN KEY 用
   final IndexSchema? index; // ADD/DROP INDEX 用
 
+  /// Comment lines written immediately above this diff's statement.
+  ///
+  /// Set when inverting a diff for the DOWN section and the statement
+  /// cannot put everything back, so the file says what will not return.
+  /// Diffs coming from the schema comparison never carry one.
+  final String? note;
+
   _SchemaDiff({
     required this.type,
     required this.table,
@@ -1179,7 +1155,268 @@ class _SchemaDiff {
     this.oldColumn,
     this.foreignKey,
     this.index,
+    this.note,
   });
+}
+
+/// Stored in [ColumnSchema.defaultValue] when the schema declares a default
+/// whose Dart expression is not a literal. The analyzer can record that the
+/// column has a default, but not a value that could be written into SQL.
+const _hasDefaultSentinel = '__HAS_DEFAULT__';
+
+/// Written above a statement that brings a dropped table back. The
+/// structure returns; the rows do not.
+const _tableDataLostNote =
+    '-- Restores the table structure only. Rows removed by the UP section\n'
+    '-- are not recovered.';
+
+/// Written above a statement that brings a dropped column back.
+const _columnDataLostNote =
+    '-- Restores the column only. Values removed by the UP section are not\n'
+    '-- recovered.';
+
+/// Added below [_columnDataLostNote] when the column cannot be added back
+/// to a table that still has rows.
+const _notNullAddNote =
+    '-- This statement fails if the table already has rows: the column is\n'
+    '-- NOT NULL with no default.';
+
+/// Whether adding [col] to a table that already has rows would fail.
+///
+/// Postgres has to put something in the new column for every existing row.
+/// It can do that from a default; with no default and no NULLs allowed
+/// there is nothing it can write. A column whose recorded default is the
+/// marker counts as having none, because no DEFAULT clause is rendered for
+/// it.
+bool _needsValueForExistingRows(ColumnSchema col) =>
+    !col.isNullable &&
+    (col.defaultValue == null || col.defaultValue == _hasDefaultSentinel);
+
+/// Every diff in [diffs] replaced by the change that undoes it.
+///
+/// The DOWN section is generated by handing this list to [_generateUpSql],
+/// so UP and DOWN share one set of SQL templates: a statement added to the
+/// generator cannot be forgotten on the DOWN side. That generator also
+/// puts the statements in a runnable order, so this only has to invert.
+///
+/// This works because every diff that removes something carries the
+/// removed object itself — the previous schema's table, column, foreign
+/// key or index — so the restoring statement can be written in full. What
+/// does not come back is the data, so those inversions carry a note that
+/// says as much.
+List<_SchemaDiff> _invertDiffs(List<_SchemaDiff> diffs) => [
+  for (final diff in diffs) _invertDiff(diff),
+];
+
+/// The change that undoes [diff].
+_SchemaDiff _invertDiff(_SchemaDiff diff) {
+  switch (diff.type) {
+    case _DiffType.createTable:
+      return _SchemaDiff(type: _DiffType.dropTable, table: diff.table);
+    case _DiffType.dropTable:
+      return _SchemaDiff(
+        type: _DiffType.createTable,
+        table: diff.table,
+        note: _tableDataLostNote,
+      );
+    case _DiffType.addColumn:
+      return _SchemaDiff(
+        type: _DiffType.dropColumn,
+        table: diff.table,
+        column: diff.column,
+      );
+    case _DiffType.dropColumn:
+      final col = diff.column!;
+      return _SchemaDiff(
+        type: _DiffType.addColumn,
+        table: diff.table,
+        column: col,
+        note: _needsValueForExistingRows(col)
+            ? '$_columnDataLostNote\n$_notNullAddNote'
+            : _columnDataLostNote,
+      );
+    case _DiffType.addForeignKey:
+      return _SchemaDiff(
+        type: _DiffType.dropForeignKey,
+        table: diff.table,
+        foreignKey: diff.foreignKey,
+      );
+    case _DiffType.dropForeignKey:
+      return _SchemaDiff(
+        type: _DiffType.addForeignKey,
+        table: diff.table,
+        foreignKey: diff.foreignKey,
+      );
+    case _DiffType.addIndex:
+      return _SchemaDiff(
+        type: _DiffType.dropIndex,
+        table: diff.table,
+        index: diff.index,
+      );
+    case _DiffType.dropIndex:
+      return _SchemaDiff(
+        type: _DiffType.addIndex,
+        table: diff.table,
+        index: diff.index,
+      );
+    case _DiffType.addUnique:
+      return _SchemaDiff(
+        type: _DiffType.dropUnique,
+        table: diff.table,
+        column: diff.column,
+      );
+    case _DiffType.dropUnique:
+      return _SchemaDiff(
+        type: _DiffType.addUnique,
+        table: diff.table,
+        column: diff.column,
+      );
+    case _DiffType.alterColumnType:
+      return _SchemaDiff(
+        type: _DiffType.alterColumnType,
+        table: diff.table,
+        column: diff.oldColumn,
+        oldColumn: diff.column,
+      );
+    case _DiffType.alterColumnSetNotNull:
+      return _SchemaDiff(
+        type: _DiffType.alterColumnDropNotNull,
+        table: diff.table,
+        column: diff.column,
+      );
+    case _DiffType.alterColumnDropNotNull:
+      return _SchemaDiff(
+        type: _DiffType.alterColumnSetNotNull,
+        table: diff.table,
+        column: diff.column,
+      );
+    case _DiffType.alterColumnSetDefault:
+      // The schema comparison records the previous column on every default
+      // change, so the value to go back to is known. Where there was no
+      // default before, going back means dropping this one.
+      final old = diff.oldColumn!;
+      if (old.defaultValue == null) {
+        return _SchemaDiff(
+          type: _DiffType.alterColumnDropDefault,
+          table: diff.table,
+          column: diff.column,
+        );
+      }
+      return _SchemaDiff(
+        type: _DiffType.alterColumnSetDefault,
+        table: diff.table,
+        column: old,
+        oldColumn: diff.column,
+      );
+    case _DiffType.alterColumnDropDefault:
+      // A default was dropped, so the previous column had one: putting the
+      // old column in `column` is what makes the generator write its value.
+      return _SchemaDiff(
+        type: _DiffType.alterColumnSetDefault,
+        table: diff.table,
+        column: diff.oldColumn!,
+        oldColumn: diff.column,
+      );
+    case _DiffType.renameColumn:
+      return _SchemaDiff(
+        type: _DiffType.renameColumn,
+        table: diff.table,
+        column: diff.oldColumn,
+        oldColumn: diff.column,
+      );
+  }
+}
+
+/// When [type]'s statement has to run relative to the others.
+///
+/// Statements go out from the lowest phase up. Things that depend on
+/// something else come off first and go back on last. A foreign key depends
+/// on the unique index it points at; a table's inline foreign key does too,
+/// which is why a whole table goes before the constraints on other tables;
+/// an index or constraint sits on a column; a column sits in a table. Read
+/// the table downwards and every statement finds what it needs already
+/// there.
+int _executionPhase(_DiffType type) => switch (type) {
+  _DiffType.dropForeignKey => 0,
+  _DiffType.dropTable => 1,
+  _DiffType.dropIndex || _DiffType.dropUnique => 2,
+  _DiffType.dropColumn => 3,
+  _DiffType.addColumn => 4,
+  _DiffType.alterColumnType ||
+  _DiffType.alterColumnSetNotNull ||
+  _DiffType.alterColumnDropNotNull ||
+  _DiffType.alterColumnSetDefault ||
+  _DiffType.alterColumnDropDefault ||
+  _DiffType.renameColumn => 5,
+  _DiffType.addUnique || _DiffType.addIndex => 6,
+  _DiffType.createTable => 7,
+  _DiffType.addForeignKey => 8,
+};
+
+/// [diffs] ordered so every statement can run.
+///
+/// Sorted by [_executionPhase], keeping the input order inside a phase,
+/// and with the CREATE TABLE phase ordered by foreign key reference.
+List<_SchemaDiff> _orderForExecution(List<_SchemaDiff> diffs) {
+  final byPhase = <int, List<_SchemaDiff>>{};
+  for (final diff in diffs) {
+    (byPhase[_executionPhase(diff.type)] ??= []).add(diff);
+  }
+
+  final createPhase = _executionPhase(_DiffType.createTable);
+  final dropPhase = _executionPhase(_DiffType.dropTable);
+  final result = <_SchemaDiff>[];
+  for (final phase in byPhase.keys.toList()..sort()) {
+    final group = byPhase[phase]!;
+    if (phase == createPhase) {
+      result.addAll(_orderTablesByReference(group));
+    } else if (phase == dropPhase) {
+      // Dropping runs the other way round: a table cannot go while
+      // another table's foreign key still points at it, and the
+      // generated DROP TABLE carries no CASCADE.
+      result.addAll(_orderTablesByReference(group).reversed);
+    } else {
+      result.addAll(group);
+    }
+  }
+  return result;
+}
+
+/// [tables] — whole-table diffs, all of one kind — ordered so a table comes
+/// after the tables its foreign keys point at.
+///
+/// CREATE TABLE writes its foreign keys inline, so the referenced table has
+/// to exist already. Dropping needs the opposite order, which the caller
+/// gets by reversing this. References to tables outside [tables] need no
+/// ordering: those tables are not part of this group, so they are already
+/// where they need to be. A table referencing itself is left alone. Tables
+/// in a reference cycle come out in whatever order the traversal reaches
+/// them — Postgres rejects that schema whatever the order, so no ordering
+/// would help.
+List<_SchemaDiff> _orderTablesByReference(List<_SchemaDiff> tables) {
+  final byName = {for (final diff in tables) diff.table.name: diff};
+  final ordered = <_SchemaDiff>[];
+  final placed = <String>{};
+  final visiting = <String>{};
+
+  void place(_SchemaDiff diff) {
+    final name = diff.table.name;
+    if (placed.contains(name) || visiting.contains(name)) return;
+    visiting.add(name);
+    for (final fk in diff.table.foreignKeys) {
+      if (fk.referencesTable == name) continue;
+      final referenced = byName[fk.referencesTable];
+      if (referenced != null) place(referenced);
+    }
+    visiting.remove(name);
+    placed.add(name);
+    ordered.add(diff);
+  }
+
+  for (final diff in tables) {
+    place(diff);
+  }
+  return ordered;
 }
 
 /// Convert string to snake_case for migration file names

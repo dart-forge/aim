@@ -44,7 +44,7 @@ aim:
 | Option | Description | Default |
 |--------|-------------|---------|
 | `url` | Database connection URL | Required |
-| `schema` | Path to schema definitions | `lib/schema.dart` |
+| `schema` | Path to schema definitions, a file or a directory | `lib/schema` |
 
 Or set database URL via environment variable:
 
@@ -225,11 +225,33 @@ aim db:migrate --target 20250121_110000_add_posts_table
 
 1. Checks `_aim_migrations` table for applied migrations
 2. Finds pending migrations (not yet applied)
-3. Executes each migration's UP section in order
+3. Executes each migration's UP section in one transaction, together with
+   the record of having applied it, so a statement that fails leaves the
+   database as it was
 4. Records migration in `_aim_migrations` with:
    - Filename
    - Checksum (to detect modifications)
    - Applied timestamp
+
+### Statements a Transaction Forbids
+
+A few statements cannot run inside a transaction block — `CREATE INDEX
+CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, `REINDEX CONCURRENTLY` and
+`VACUUM` among them. Put this line in the migration file to run that
+migration's statements one at a time instead:
+
+```sql
+-- aim: no-transaction
+CREATE INDEX CONCURRENTLY idx_posts_slug ON posts (slug);
+```
+
+The line may sit anywhere in the file and covers the whole of it, so the
+DOWN section runs the same way when `aim db:rollback` reaches it. It applies
+only to the migration whose file carries it.
+
+The cost is that a failure part way through leaves the statements before it
+applied, and both commands say so when they stop. A statement the database
+refuses for this reason is told which line to add.
 
 ### Migration Table
 
@@ -267,11 +289,17 @@ aim db:rollback --target 20250121_100000_initial
 ### How It Works
 
 1. Finds the most recently applied migration(s)
-2. Executes the DOWN section of each migration
-3. Removes the record from `_aim_migrations`
+2. Prints any comments sitting above the statements — the generated DOWN
+   section uses them to say where structure comes back without the rows
+   that were in it
+3. Executes the DOWN section of each migration and removes the record from
+   `_aim_migrations`, both in one transaction
 
 ::: warning
-If a migration file has no DOWN section, rollback will display a warning and skip that migration.
+A migration whose DOWN section has nothing to run — it is missing, or it
+holds only comments — cannot be rolled back automatically. `aim db:rollback`
+asks whether to drop it from the history without touching the schema, and
+stops if the answer is no.
 :::
 
 ## Checking Migration Status
@@ -299,7 +327,7 @@ Always review the generated migration before applying:
 
 ```bash
 aim db:generate --name add_feature
-cat migrations/20250121_*_add_feature.sql
+cat db/migrations/20250121_*_add_feature.sql
 aim db:migrate
 ```
 
@@ -320,7 +348,7 @@ aim db:rollback
 Migration files should be committed to version control:
 
 ```bash
-git add migrations/
+git add db/migrations/
 git commit -m "Add posts table migration"
 ```
 
@@ -341,6 +369,9 @@ Migrations run within a transaction by default. If a migration fails:
 - The migration is not recorded as applied
 - You can fix the issue and retry
 
+A migration carrying the `-- aim: no-transaction` line is the exception, and
+gives this up for the statements that need it.
+
 ## Workflow Example
 
 ### Initial Setup
@@ -353,7 +384,7 @@ vim lib/schema.dart
 aim db:generate --name initial
 
 # Review
-cat migrations/*_initial.sql
+cat db/migrations/*_initial.sql
 
 # Apply
 aim db:migrate

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:aim_cli/src/migration/down_statements.dart';
 import 'package:aim_postgres/aim_postgres.dart';
 import 'package:args/command_runner.dart';
 import 'package:yaml/yaml.dart';
@@ -109,12 +110,28 @@ class DbRollbackCommand extends Command<void> {
 
         final content = await file.readAsString();
         final sections = _parseMigrationSections(content);
-        final downSql = sections.down;
+        final statements = executableStatements(sections.down ?? '');
 
         print('  Rolling back: $name');
 
-        if (downSql == null || downSql.trim().isEmpty) {
-          print('  ⚠️  No DOWN section found');
+        final notes = _noteLines(statements);
+        if (notes.isNotEmpty) {
+          print('  Notes in this migration:');
+          for (final line in notes) {
+            print('     $line');
+          }
+        }
+
+        if (statements.isEmpty) {
+          if (sections.down == null || sections.down!.trim().isEmpty) {
+            print('  ⚠️  No DOWN section found');
+          } else {
+            // A DOWN section that is only comments — migrations generated
+            // before the generator could write these statements say in a
+            // comment that the old schema was unavailable. Running it
+            // would change nothing while reporting success.
+            print('  ⚠️  The DOWN section has no statements, only comments');
+          }
           print('  Cannot rollback this migration automatically.');
           print('');
           stdout.write('  Continue anyway (remove from history only)? [y/N]: ');
@@ -123,25 +140,55 @@ class DbRollbackCommand extends Command<void> {
             print('  Rollback stopped.');
             exit(1);
           }
+          await _removeMigration(db, name);
         } else {
           try {
-            final statements = _splitStatements(downSql);
-            for (final stmt in statements) {
-              if (stmt.trim().isNotEmpty) {
+            if (runsOutsideTransaction(content)) {
+              print('  Running outside a transaction (the file asks for it).');
+              for (final stmt in statements) {
                 await db.execute(stmt);
               }
+              await _removeMigration(db, name);
+            } else {
+              // One transaction per migration: the statements and the
+              // history row go together, so a failure half way through
+              // leaves neither a half-rolled-back schema nor a history that
+              // disagrees with it. Postgres rolls DDL back too.
+              await db.transaction((tx) async {
+                for (final stmt in statements) {
+                  await tx.execute(stmt);
+                }
+                await _removeMigration(tx, name);
+              });
             }
           } catch (e) {
             print('  ❌ Failed: $name');
             print('  Error: $e');
             print('');
+            if (runsOutsideTransaction(content)) {
+              print('  This migration ran without a transaction, so the');
+              print('  statements before the failure are still applied.');
+              print('');
+            } else if (e.toString().contains(
+              'cannot run inside a transaction block',
+            )) {
+              // The server reports this as SQLSTATE 25001, but the driver
+              // keeps only the message, so the message is what there is to
+              // match on.
+              print('  This statement has to run on its own. Put this line in');
+              print('  the migration file to roll it back without a');
+              print('  transaction:');
+              print('');
+              print('    -- aim: no-transaction');
+              print('');
+              print('  Nothing was rolled back.');
+              print('');
+            }
             print('Rollback stopped. Please fix the error and retry.');
             exit(1);
           }
         }
 
-        // マイグレーション履歴から削除
-        await _removeMigration(db, name);
         print('  ✅ Rolled back: $name');
       }
 
@@ -177,67 +224,6 @@ class DbRollbackCommand extends Command<void> {
     return name.endsWith('.sql') ? name.substring(0, name.length - 4) : name;
   }
 
-  /// SQL文を分割（セミコロンで区切る、ただしコメント内は無視）
-  List<String> _splitStatements(String sql) {
-    final statements = <String>[];
-    final buffer = StringBuffer();
-    bool inSingleLineComment = false;
-    bool inMultiLineComment = false;
-
-    for (var i = 0; i < sql.length; i++) {
-      final char = sql[i];
-      final nextChar = i + 1 < sql.length ? sql[i + 1] : '';
-
-      // 単一行コメント開始
-      if (!inMultiLineComment && char == '-' && nextChar == '-') {
-        inSingleLineComment = true;
-        buffer.write(char);
-        continue;
-      }
-
-      // 単一行コメント終了
-      if (inSingleLineComment && char == '\n') {
-        inSingleLineComment = false;
-        buffer.write(char);
-        continue;
-      }
-
-      // 複数行コメント開始
-      if (!inSingleLineComment && char == '/' && nextChar == '*') {
-        inMultiLineComment = true;
-        buffer.write(char);
-        continue;
-      }
-
-      // 複数行コメント終了
-      if (inMultiLineComment && char == '*' && nextChar == '/') {
-        inMultiLineComment = false;
-        buffer.write(char);
-        continue;
-      }
-
-      // セミコロンで文を分割（コメント外のみ）
-      if (char == ';' && !inSingleLineComment && !inMultiLineComment) {
-        final stmt = buffer.toString().trim();
-        if (stmt.isNotEmpty) {
-          statements.add(stmt);
-        }
-        buffer.clear();
-        continue;
-      }
-
-      buffer.write(char);
-    }
-
-    // 最後の文（セミコロンなし）
-    final lastStmt = buffer.toString().trim();
-    if (lastStmt.isNotEmpty) {
-      statements.add(lastStmt);
-    }
-
-    return statements;
-  }
-
   /// 適用済みマイグレーションを取得（新しい順）
   Future<List<String>> _getAppliedMigrations(PostgresDatabase db) async {
     // テーブルが存在するか確認
@@ -263,11 +249,33 @@ class DbRollbackCommand extends Command<void> {
     return result.map((row) => row['name'] as String).toList();
   }
 
-  Future<void> _removeMigration(PostgresDatabase db, String name) async {
-    await db.execute(
+  Future<void> _removeMigration(PostgresQueryable q, String name) async {
+    await q.execute(
       'DELETE FROM _aim_migrations WHERE name = :name',
       params: {'name': name},
     );
+  }
+
+  /// The comment lines sitting above the statements about to run.
+  ///
+  /// The generated DOWN section says in a comment where a statement brings
+  /// structure back without the data that was in it, and a hand-written one
+  /// may say anything its author wanted read. Printing them before the
+  /// statements run puts them where a precondition is still useful, and
+  /// keeps them out of the slot where they would read as an outcome.
+  List<String> _noteLines(List<String> statements) {
+    final lines = <String>[];
+    for (final statement in statements) {
+      for (final line in statement.split('\n')) {
+        final trimmed = line.trim();
+        if (!trimmed.startsWith('--')) continue;
+        // The marker asking to run outside a transaction is an instruction
+        // to this command, not something the author wrote to be read.
+        if (isNoTransactionMarker(trimmed)) continue;
+        lines.add(trimmed);
+      }
+    }
+    return lines;
   }
 
   /// マイグレーションファイルをUP/DOWNセクションに分離

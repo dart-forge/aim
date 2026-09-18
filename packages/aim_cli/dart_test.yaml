@@ -6,3 +6,9 @@
 # execution keeps each test's working directory change from leaking into
 # another running test.
 concurrency: 1
+
+tags:
+  # Needs Docker and a Postgres container. Run it with
+  # `dart test -t integration --run-skipped`.
+  integration:
+    skip: "needs Docker; run with -t integration --run-skipped"
