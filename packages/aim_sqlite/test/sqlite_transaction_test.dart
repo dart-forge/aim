@@ -231,6 +231,34 @@ void main() {
     },
   );
 
+  test(
+    'a call the body scheduled runs after the transaction, not refused',
+    () async {
+      // A zone value travels with everything the body ever scheduled, not
+      // only with its synchronous extent, so a timer set up inside the body
+      // still finds the marker when it fires. By then the transaction is
+      // over and the writer is idle, so refusing the call would leave it
+      // waiting for nothing, with no way around it.
+      await db.execute('CREATE TABLE t (a INTEGER)');
+
+      final scheduled = Completer<int>();
+      await db.transaction((tx) async {
+        await tx.execute('INSERT INTO t VALUES (1)');
+        Timer.run(() {
+          // Forwards the refusal as well as the result, so a StateError
+          // here surfaces below rather than going unhandled.
+          scheduled.complete(db.execute('INSERT INTO t VALUES (2)'));
+        });
+      });
+
+      expect(await scheduled.future, 1);
+      expect(await db.query('SELECT a FROM t ORDER BY a'), [
+        {'a': 1},
+        {'a': 2},
+      ]);
+    },
+  );
+
   test('a concurrent transaction from outside the body still queues', () async {
     // The refusal above must be scoped to the body, not to "a transaction is
     // open" -- another request handler running concurrently is the normal

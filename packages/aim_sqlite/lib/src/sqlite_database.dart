@@ -10,10 +10,10 @@ import 'package:aim_sqlite/src/worker/protocol.dart';
 /// Marks the zone a transaction body runs in, so that a call which would
 /// wait for that very transaction can be refused instead of hanging.
 ///
-/// The value is the transaction itself, which is how a call reaching a
-/// different database -- one with its own writer and its own queue, that
-/// cannot be waiting on this transaction -- is told apart from a call that
-/// would wait for itself.
+/// The value is the transaction itself rather than a bare flag, because
+/// the zone is broader than the calls that have to be refused: it reaches
+/// other databases, and it outlives the body. Both are narrowed down by
+/// asking the transaction, in [SqliteDatabase._insideOwnTransactionBody].
 final Object _txKey = Object();
 
 /// A SQLite database, reached over dart:ffi from worker isolates.
@@ -173,14 +173,26 @@ class SqliteDatabase extends Database {
   }
 
   /// True while the calling code is inside the body of a transaction of
-  /// this database's.
+  /// this database's that has not finished yet.
   ///
-  /// Scoped to this database on purpose: the queue a body is holding is
-  /// this database's queue, so a call on another one cannot deadlock on it
-  /// and must not be refused.
+  /// Both halves of that narrow it down from what the zone alone says, and
+  /// a call refused on either count would be refused with nothing to wait
+  /// for and no way around it:
+  ///
+  /// - Scoped to this database, because the queue a body is holding is
+  ///   this database's queue, so a call on another one cannot deadlock on
+  ///   it.
+  /// - Scoped to a transaction still running, because a zone value travels
+  ///   with everything the body ever scheduled and not only with its
+  ///   synchronous extent. A timer or a stream listener set up inside the
+  ///   body still finds the marker when it fires, long after the commit.
+  ///   [SqliteTransaction._done] is set before the commit, so this still
+  ///   covers the whole body.
   bool get _insideOwnTransactionBody {
     final marker = Zone.current[_txKey];
-    return marker is SqliteTransaction && identical(marker._database, this);
+    return marker is SqliteTransaction &&
+        identical(marker._database, this) &&
+        !marker._done;
   }
 
   /// Refuses a call that would queue behind the transaction the calling
@@ -204,8 +216,10 @@ class SqliteDatabase extends Database {
     try {
       // The zone marker is the only thing that can tell a call made from
       // inside the body from one made by other code running concurrently:
-      // it travels with the body's own asynchronous continuations and with
-      // nothing else.
+      // it travels with the body's own asynchronous continuations, and a
+      // concurrent caller has no way to end up holding it. It outlives the
+      // body as well, which is why reading it also asks whether the
+      // transaction is still open.
       final result = await runZoned(() => fn(tx), zoneValues: {_txKey: tx});
       tx._done = true;
       await _control(SqliteCommitRequest(_nextRequestId++));
@@ -331,6 +345,10 @@ class SqliteTransaction implements Transaction {
   /// Set once the body has returned. The writer goes back to whoever was
   /// waiting for it then, so a statement sent after that would run outside
   /// the transaction -- committed on its own, or swept into the next one.
+  ///
+  /// Also what bounds the refusal in
+  /// [SqliteDatabase._insideOwnTransactionBody], so moving when this is
+  /// set moves how long a call the body scheduled stays refused.
   bool _done = false;
 
   @override
