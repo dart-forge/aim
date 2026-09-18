@@ -742,16 +742,29 @@ class DbGenerateCommand extends Command<void> {
         case _DiffType.dropTable:
           buffer.writeln('DROP TABLE IF EXISTS ${diff.table.name};');
         case _DiffType.addColumn:
+          final col = diff.column!;
           buffer.writeln(
-            'ALTER TABLE ${diff.table.name} ADD COLUMN ${_columnToSql(diff.column!)};',
+            'ALTER TABLE ${diff.table.name} ADD COLUMN ${_columnToSql(col)};',
           );
+          if (col.isUnique && !col.isPrimaryKey) {
+            // The column definition leaves UNIQUE out so that the
+            // constraint can carry a name this generator can drop later.
+            buffer.writeln(
+              'ALTER TABLE ${diff.table.name} ADD CONSTRAINT '
+              '${_uniqueConstraintName(diff.table.name, col.name)} '
+              'UNIQUE (${col.name});',
+            );
+          }
         case _DiffType.dropColumn:
           buffer.writeln(
             'ALTER TABLE ${diff.table.name} DROP COLUMN ${diff.column!.name};',
           );
         case _DiffType.addForeignKey:
           final fk = diff.foreignKey!;
-          final constraintName = 'fk_${diff.table.name}_${fk.column}';
+          final constraintName = _foreignKeyConstraintName(
+            diff.table.name,
+            fk.column,
+          );
           var sql =
               'ALTER TABLE ${diff.table.name} ADD CONSTRAINT $constraintName '
               'FOREIGN KEY (${fk.column}) REFERENCES ${fk.referencesTable}(${fk.referencesColumn})';
@@ -764,10 +777,19 @@ class DbGenerateCommand extends Command<void> {
           buffer.writeln('$sql;');
         case _DiffType.dropForeignKey:
           final fk = diff.foreignKey!;
-          final constraintName = 'fk_${diff.table.name}_${fk.column}';
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} DROP CONSTRAINT $constraintName;',
-          );
+          // Two names are tried: the one this generator writes, and the one
+          // Postgres gives a constraint created without a name. A table
+          // created before the generator started naming them carries the
+          // second, so whichever exists is the one that gets dropped.
+          for (final constraintName in [
+            _foreignKeyConstraintName(diff.table.name, fk.column),
+            _postgresForeignKeyName(diff.table.name, fk.column),
+          ]) {
+            buffer.writeln(
+              'ALTER TABLE ${diff.table.name} '
+              'DROP CONSTRAINT IF EXISTS $constraintName;',
+            );
+          }
         case _DiffType.addIndex:
           final idx = diff.index!;
           final indexName = 'idx_${diff.table.name}_${idx.columns.join('_')}';
@@ -815,16 +837,24 @@ class DbGenerateCommand extends Command<void> {
           );
         case _DiffType.addUnique:
           final col = diff.column!;
-          final constraintName = 'uq_${diff.table.name}_${col.name}';
+          final constraintName = _uniqueConstraintName(
+            diff.table.name,
+            col.name,
+          );
           buffer.writeln(
             'ALTER TABLE ${diff.table.name} ADD CONSTRAINT $constraintName UNIQUE (${col.name});',
           );
         case _DiffType.dropUnique:
           final col = diff.column!;
-          final constraintName = 'uq_${diff.table.name}_${col.name}';
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} DROP CONSTRAINT $constraintName;',
-          );
+          for (final constraintName in [
+            _uniqueConstraintName(diff.table.name, col.name),
+            _postgresUniqueName(diff.table.name, col.name),
+          ]) {
+            buffer.writeln(
+              'ALTER TABLE ${diff.table.name} '
+              'DROP CONSTRAINT IF EXISTS $constraintName;',
+            );
+          }
         case _DiffType.renameColumn:
           final oldName = diff.oldColumn!.name;
           final newName = diff.column!.name;
@@ -886,10 +916,25 @@ class DbGenerateCommand extends Command<void> {
       columnDefs.add('  ${_columnToSql(col)}');
     }
 
+    // Unique constraints are written here as named table constraints
+    // rather than as a keyword after the column. Postgres names an unnamed
+    // constraint itself, and the statement that drops it later is written
+    // from this generator's own naming. A primary key is already unique,
+    // so it gets no second constraint.
+    for (final col in table.columns) {
+      if (!col.isUnique || col.isPrimaryKey) continue;
+      columnDefs.add(
+        '  CONSTRAINT ${_uniqueConstraintName(table.name, col.name)} '
+        'UNIQUE (${col.name})',
+      );
+    }
+
     // 外部キー制約
     for (final fk in table.foreignKeys) {
       var fkDef =
-          '  FOREIGN KEY (${fk.column}) REFERENCES ${fk.referencesTable}(${fk.referencesColumn})';
+          '  CONSTRAINT ${_foreignKeyConstraintName(table.name, fk.column)} '
+          'FOREIGN KEY (${fk.column}) '
+          'REFERENCES ${fk.referencesTable}(${fk.referencesColumn})';
       if (fk.onDelete != null) {
         fkDef += ' ON DELETE ${_onDeleteKeyword(fk.onDelete!)}';
       }
@@ -941,7 +986,6 @@ class DbGenerateCommand extends Command<void> {
     }
 
     if (col.isPrimaryKey) parts.add('PRIMARY KEY');
-    if (col.isUnique) parts.add('UNIQUE');
     if (!col.isNullable && !col.isPrimaryKey) parts.add('NOT NULL');
     if (col.defaultValue != null && col.defaultValue != _hasDefaultSentinel) {
       parts.add('DEFAULT ${col.defaultValue}');
@@ -1418,6 +1462,28 @@ List<_SchemaDiff> _orderTablesByReference(List<_SchemaDiff> tables) {
   }
   return ordered;
 }
+
+/// The name this generator gives a foreign key on [column] of [table].
+String _foreignKeyConstraintName(String table, String column) =>
+    'fk_${table}_$column';
+
+/// The name this generator gives a unique constraint on [column] of
+/// [table].
+String _uniqueConstraintName(String table, String column) =>
+    'uq_${table}_$column';
+
+/// The name Postgres gives a single-column foreign key that was created
+/// without one.
+///
+/// Tables created before this generator started naming its constraints
+/// carry this instead, and a migration has to be able to drop either.
+String _postgresForeignKeyName(String table, String column) =>
+    '${table}_${column}_fkey';
+
+/// The name Postgres gives a single-column unique constraint that was
+/// created without one.
+String _postgresUniqueName(String table, String column) =>
+    '${table}_${column}_key';
 
 /// Convert string to snake_case for migration file names
 String _toSnakeCase(String input) {
