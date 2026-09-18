@@ -4,28 +4,37 @@ Run an [Aim](https://pub.dev/packages/aim_core) application as a
 [Cloud Functions for Firebase](https://pub.dev/packages/firebase_functions)
 `onRequest` HTTP function.
 
-The package's only runtime dependency is `shelf`. `serveFunction()` returns
-a plain `shelf.Handler`; `firebase_functions` is what your own entry point
-(`runFunctions`, `firebase.https.onRequest`) depends on to turn that
-handler into a deployable Cloud Function, not something this package needs
-itself. That is why `test/serve_functions_test.dart` never imports
-`firebase_functions` at all.
+Its only runtime dependency besides `aim_core` is `shelf`.
+`serveFunction()` returns a plain `shelf.Handler`; `firebase_functions` is
+what your own entry point (`runFunctions`, `firebase.https.onRequest`)
+depends on to turn that handler into a deployable Cloud Function, not
+something this package needs itself. That is why
+`test/serve_functions_test.dart` never imports `firebase_functions` at
+all.
 
 **Not yet published to pub.dev.** This README describes the intended
 interface; a `pub.dev` badge will be added once it ships.
 
 ```dart
 import 'package:aim_functions/aim_functions.dart';
-import 'package:firebase_functions/firebase_functions.dart';
+import 'package:firebase_functions/firebase_functions.dart' as ff;
 
 void main(List<String> args) {
   final app = Aim()..get('/', (c) async => c.text('Hello from Dart!'));
 
-  runFunctions((firebase) {
+  ff.runFunctions((firebase) {
     firebase.https.onRequest(name: 'api', app.serveFunction());
   });
 }
 ```
+
+The `firebase_functions` import is prefixed on purpose: it re-exports
+shelf's `Request`/`Response` (`export 'package:shelf/shelf.dart' show
+Request, Response;`), which are also `aim_core`'s own `Request`/`Response`
+names reaching this file through the `aim_functions` barrel. Import both
+unprefixed and the names collide — not in this snippet, which never
+spells either name out, but the moment a caller reaches for
+`Response.text(...)` instead of `c.text(...)`.
 
 See `examples/functions-sample` in the repository for a runnable version,
 including how to try it locally without a real Firebase project.
@@ -54,7 +63,7 @@ name a real Firebase project; see `examples/functions-sample/README.md`.
 ## Routes are written without the function name prefix
 
 Registering a function with `name: 'api'` and calling it through the
-shared local dev process (the "Try it locally" section above) makes
+shared local dev process (the example's "Try it locally" section) makes
 clients address it at `/api/...`. Write your Aim routes without that
 prefix regardless — `/`, not `/api/`; `/users/:id`, not `/api/users/:id`
 — because the *mechanism* that makes this work is different locally than
@@ -103,8 +112,9 @@ large body through and observing it arrive. Verified for request bodies
 
 That is a property of the translation functions in isolation, not of
 every path a request can take before reaching them — and the difference
-matters on exactly the path "Try it locally" above tells you to run.
-`firebase_functions`'s local dev routing reads any `application/json`
+matters on exactly the path the example's "Try it locally" section
+tells you to run. `firebase_functions`'s local dev routing reads any
+`application/json`
 POST body into a `String` in full (to check whether it's a CloudEvent)
 *before* dispatching to the handler at all. Measured: a JSON body sent in
 three chunks with pauses between them arrives at the handler as a single
@@ -116,8 +126,8 @@ before the body is complete, and reading it there advances only as the
 client sends more.
 
 So streaming is real end-to-end once deployed, and false for a JSON
-`POST` on the local dev path this README's own "Try it locally" section
-runs. A `GET` (as in the example above) has no body to buffer either way,
+`POST` on the local dev path the example's "Try it locally" section runs.
+A `GET` (as in the example above) has no body to buffer either way,
 which is why that section's own local test doesn't surface this.
 
 ## Logging
