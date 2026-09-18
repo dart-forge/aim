@@ -1,10 +1,11 @@
 /// Cloud Functions for Firebase adapter for the Aim framework.
 ///
-/// This is Task 1 of the adapter: the shelf ↔ aim translation that Cloud
-/// Functions' `onRequest` handler will be built on in a later task.
+/// Runs an [Aim] application as a Cloud Functions `onRequest` HTTP function.
+/// See [AimFunctions.serveFunction] for usage.
 library;
 
 export 'package:aim_core/aim_core.dart';
 
 export 'src/functions_request.dart' show toAimRequest;
 export 'src/functions_response.dart' show toShelfResponse;
+export 'src/serve_functions.dart' show AimFunctions;

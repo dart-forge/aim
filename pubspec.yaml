@@ -26,6 +26,7 @@ workspace:
   - examples/basic-sample
   - examples/orm-sample
   - examples/edge-sample
+  - examples/functions-sample
   - tools/release
   - packages/aim_orm_codegen/test/golden/fixtures/simple_table
   - packages/aim_orm_codegen/test/golden/fixtures/nullable_columns
