@@ -396,7 +396,15 @@ class DbGenerateCommand extends Command<void> {
     // メソッドチェーンを収集
     final methods = <MethodInvocation>[];
     Expression? current = expr;
-    while (current is MethodInvocation) {
+    while (current != null) {
+      // Brackets do not change what the expression means, so the chain
+      // continues through them. Without this the walk stops and the column
+      // loses its type.
+      if (current is ParenthesizedExpression) {
+        current = current.expression;
+        continue;
+      }
+      if (current is! MethodInvocation) break;
       methods.add(current);
       current = current.target;
     }
@@ -478,8 +486,10 @@ class DbGenerateCommand extends Command<void> {
             throw FormatException(
               'Cannot read the reference on "$fieldName" in $filePath:\n'
               '  ${method.toSource()}\n'
-              'Write it as a closure naming a table variable and one of '
-              'its fields, as in `references(() => users.id)`.',
+              'Write it as a single-expression closure naming a table '
+              'variable and one of its fields, as in '
+              '`references(() => users.id)`. A block body, or a reference '
+              'to a function defined elsewhere, cannot be read here.',
             );
           }
           foreignKey = _PendingForeignKey(
@@ -488,6 +498,12 @@ class DbGenerateCommand extends Command<void> {
             referencesField: refField,
             onDelete: _extractOnDelete(args, filePath),
             onUpdate: _extractOnUpdate(args, filePath),
+          );
+        case 'copyWith':
+          throw FormatException(
+            'copyWith() on "$fieldName" in $filePath cannot be read as a '
+            'schema definition. Use the modifier for what it sets: '
+            'primaryKey(), nullable(), unique() or withDefault().',
           );
         default:
           // Ignoring it would drop whatever the method was meant to
@@ -498,6 +514,18 @@ class DbGenerateCommand extends Command<void> {
             'cannot write the column.',
           );
       }
+    }
+
+    if (columnType == 'unknown') {
+      // No type builder was found in the expression at all: a bare
+      // identifier, a conditional, a nested record. Writing the column as
+      // TEXT would put a column in the database that the schema never
+      // asked for.
+      throw FormatException(
+        'Cannot read "$fieldName" in $filePath as a column. A field of a '
+        'table record starts with a type: integer, varchar, text, '
+        'timestamp, uuid, serial or jsonb.',
+      );
     }
 
     return _ColumnAnalysisResult(
@@ -517,13 +545,19 @@ class DbGenerateCommand extends Command<void> {
 
   /// The expression a `references(...)` call points at, or null when the
   /// call is not the closure form this reader understands.
+  ///
+  /// The closure is the call's first positional argument, which is not
+  /// necessarily the first argument: Dart allows `references(onDelete: ...,
+  /// () => users.id)`.
   Expression? _referencedExpression(NodeList<Argument> args) {
-    if (args.isEmpty) return null;
-    final first = args.first;
-    if (first is! FunctionExpression) return null;
-    final body = first.body;
-    if (body is! ExpressionFunctionBody) return null;
-    return body.expression;
+    for (final arg in args) {
+      if (arg is NamedArgument) continue;
+      if (arg is! FunctionExpression) return null;
+      final body = arg.body;
+      if (body is! ExpressionFunctionBody) return null;
+      return body.expression;
+    }
+    return null;
   }
 
   String? _extractDefaultValue(Expression expr) {

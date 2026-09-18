@@ -839,5 +839,116 @@ final renUsers = (
         reason: 'the new constraint is named after the new column',
       );
     });
+
+    test('a reference with its action written first is read', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(
+    onDelete: OnDeleteAction.cascade,
+    () => users.id,
+  ),
+);
+''');
+      await generate('first');
+
+      expect(
+        upOf('first'),
+        contains(
+          'CONSTRAINT fk_posts_user_id FOREIGN KEY (user_id) '
+          'REFERENCES users(id) ON DELETE CASCADE',
+        ),
+      );
+    });
+
+    test('a chain wrapped in brackets keeps its type', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: (integer('id')).primaryKey(),
+);
+''');
+      await generate('first');
+
+      final up = upOf('first');
+      expect(up, contains('id INTEGER PRIMARY KEY'));
+      expect(up, isNot(contains('id TEXT')));
+    });
+
+    test('copyWith points at the modifier to use instead', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').copyWith(isPrimaryKey: true),
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('copyWith'))
+              .having((e) => e.message, 'message', contains('primaryKey()')),
+        ),
+      );
+    });
+
+    test('a field that is not a column definition stops the command', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+const shared = 1;
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  count: shared,
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('count'))
+              .having((e) => e.message, 'message', contains('schema.dart')),
+        ),
+      );
+    });
+
+    test('a nested record stops the command too', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  nested: (a: integer('a'), b: integer('b')),
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('nested'),
+          ),
+        ),
+      );
+    });
   });
 }
