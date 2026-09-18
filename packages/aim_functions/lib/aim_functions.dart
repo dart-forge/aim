@@ -6,6 +6,5 @@ library;
 
 export 'package:aim_core/aim_core.dart';
 
-export 'src/functions_request.dart' show toAimRequest;
-export 'src/functions_response.dart' show toShelfResponse;
+export 'src/functions_request.dart' show ShelfRequestAccess;
 export 'src/serve_functions.dart' show AimFunctions;

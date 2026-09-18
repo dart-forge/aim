@@ -1,6 +1,17 @@
 import 'package:aim_core/aim_core.dart';
 import 'package:shelf/shelf.dart' as shelf;
 
+/// Typed access to the underlying shelf request.
+extension ShelfRequestAccess on Request {
+  /// The [shelf.Request] this request was created from, or `null` when the
+  /// request was not produced by `serveFunction()` (for example in tests
+  /// that construct a [Request] directly).
+  shelf.Request? get shelfRequest {
+    final r = raw;
+    return r is shelf.Request ? r : null;
+  }
+}
+
 /// Translates a shelf request — what Cloud Functions hands a handler — into
 /// the request `aim_core` routes on.
 ///

@@ -51,11 +51,11 @@ void main() {
     expect(await response.readAsString(), contains('Internal Server Error'));
   });
 
-  test('c.req.raw is the shelf Request', () async {
-    shelf.Request? capturedRaw;
+  test('c.req.shelfRequest is the underlying shelf Request', () async {
+    shelf.Request? captured;
     final app = Aim()
       ..get('/', (c) async {
-        capturedRaw = c.req.raw as shelf.Request?;
+        captured = c.req.shelfRequest;
         return c.text('ok');
       });
 
@@ -63,6 +63,6 @@ void main() {
     final request = shelf.Request('GET', Uri.parse('https://example.com/'));
     await handler(request);
 
-    expect(capturedRaw, same(request));
+    expect(captured, same(request));
   });
 }
