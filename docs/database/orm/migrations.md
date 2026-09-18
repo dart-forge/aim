@@ -116,9 +116,10 @@ Each migration file contains both UP and DOWN sections:
 -- UP
 CREATE TABLE users (
   id UUID PRIMARY KEY,
-  email VARCHAR(255) NOT NULL UNIQUE,
+  email VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_users_email UNIQUE (email)
 );
 
 CREATE TABLE posts (
@@ -127,7 +128,7 @@ CREATE TABLE posts (
   title VARCHAR(255) NOT NULL,
   content TEXT,
   published_at TIMESTAMP,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- DOWN
@@ -155,6 +156,63 @@ DROP TABLE users;
 - **ADD/DROP UNIQUE** - Unique constraints
 - **ADD/DROP INDEX** - Indexes
 - **ADD/DROP FOREIGN KEY** - Foreign key constraints
+
+### Constraint Names
+
+Foreign keys and unique constraints are created with a name this tool
+chooses: `fk_<table>_<column>` and `uq_<table>_<column>`. The migration
+that removes one later looks for that name, and also for the name Postgres
+gives a constraint created without one (`<table>_<column>_fkey` and
+`<table>_<column>_key`), so a database created before this naming existed
+can still be migrated.
+
+Primary keys stay on the column and are never dropped by a generated
+migration.
+
+Rolling back a drop against a database created before this naming restores
+the constraint under the name above, not the name it had. It is the same
+constraint; only its name converges on what this tool writes.
+
+### How a Reference Is Read
+
+`references(() => users.id)` names a Dart variable and a record field. The
+table name comes from the `@PgTable` annotation on that variable, and the
+column name from the column definition, so neither has to match what the
+Dart code calls it:
+
+```dart
+@PgTable('ord_users')
+final ordUsers = (
+  key: integer('user_key').primaryKey(),
+);
+
+@PgTable('ord_posts')
+final ordPosts = (
+  id: integer('id').primaryKey(),
+  owner: integer('owner_key').references(() => ordUsers.key),
+);
+```
+
+generates `REFERENCES ord_users(user_key)`.
+
+::: warning
+A reference whose variable is not an `@PgTable` in the scanned schema path,
+or whose field does not exist on the table it names, stops `aim db:generate`
+with an error naming the file, the column and what was written. Carrying
+the Dart name through would produce SQL naming a relation the database does
+not have, and that only surfaces when the migration is applied.
+
+The same is true when that variable is declared in more than one file and
+none of the declarations sits in the file that wrote the reference: with
+nothing to choose between them, the command stops rather than guess which
+one was meant. A schema where two records carry the same `@PgTable` name
+stops it as well, since a reference to that name could not say which one it
+meant either.
+:::
+
+Changing where a reference points, or its `onDelete` or `onUpdate`, drops
+the constraint and adds it back: Postgres has no statement that repoints a
+foreign key.
 
 ### Example: Adding a Column
 
@@ -261,8 +319,8 @@ Aim automatically creates and manages the `_aim_migrations` table:
 CREATE TABLE _aim_migrations (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL UNIQUE,
-  checksum VARCHAR(64) NOT NULL,
-  applied_at TIMESTAMP NOT NULL DEFAULT NOW()
+  checksum VARCHAR(32) NOT NULL,
+  applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
 

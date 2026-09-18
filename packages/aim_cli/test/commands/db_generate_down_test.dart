@@ -667,8 +667,12 @@ final posts = (
         await generate('second');
 
         final down = downOf('second');
-        final dropForeignKey = down.indexOf('DROP CONSTRAINT fk_posts_ref;');
-        final dropUnique = down.indexOf('DROP CONSTRAINT uq_users_code;');
+        final dropForeignKey = down.indexOf(
+          'DROP CONSTRAINT IF EXISTS fk_posts_ref;',
+        );
+        final dropUnique = down.indexOf(
+          'DROP CONSTRAINT IF EXISTS uq_users_code;',
+        );
         expect(dropForeignKey, isNonNegative);
         expect(dropUnique, isNonNegative);
         expect(
@@ -737,7 +741,9 @@ final acct_log = (
 
       final down = downOf('second');
       final dropTable = down.indexOf('DROP TABLE IF EXISTS acct_log;');
-      final dropUnique = down.indexOf('DROP CONSTRAINT uq_acct_code;');
+      final dropUnique = down.indexOf(
+        'DROP CONSTRAINT IF EXISTS uq_acct_code;',
+      );
       expect(dropTable, isNonNegative);
       expect(dropUnique, isNonNegative);
       expect(
