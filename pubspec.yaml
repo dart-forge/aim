@@ -32,11 +32,3 @@ workspace:
   - packages/aim_orm_codegen/test/golden/fixtures/multiple_fk
   - packages/aim_orm_codegen/test/golden/fixtures/nullable_fk
 
-# rig はまだ pub.dev に無い。path 依存で隣のチェックアウトを指す。
-# rig_postgres は rig への依存を hosted で宣言しているので、path 依存だけでは
-# 解決しない(pub が pub.dev に rig を探しに行って失敗する)。override が要る。
-dependency_overrides:
-  rig:
-    path: ../rig/packages/rig
-  rig_postgres:
-    path: ../rig/packages/rig_postgres

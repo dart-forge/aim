@@ -75,16 +75,18 @@ dart test --name "SELECT with parameters"
 統合テストが起動したコンテナは、テストが終わっても**意図的に落としません**（次回の実行が
 コンテナの再利用で速くなるため）。溜まったコンテナは `rig` コマンド（`rig_cli`）の `prune` で
 削除できます。`rig` はこのリポジトリのどのパッケージにも依存として入っていないので、まず
-入れる必要があります。rig のチェックアウトがこのリポジトリの隣にある前提（`RIG_MIGRATION.md`
-と同じ）で：
+入れる必要があります：
 
 ```bash
-dart pub global activate -s path ../rig/packages/rig_cli
+dart pub global activate rig_cli
 ```
 
-素の `rig prune` が消すのは、**共有コンテナのうち作成から 7 日以上経ったもの**だけです
-(`--older-than` の既定値)。テスト直後や当日のコンテナは対象にならず、`Nothing to remove.` が
-返ります：
+素の `rig prune` が消すのは、**共有コンテナで作成から 7 日以上経ったもの**と、**専用コンテナで
+1 時間以上経ったもの**です。年齢の意味が違うので閾値も違います — 共有コンテナの年齢は
+「実行をまたいだ再利用がどれだけ効いているか」ですが、専用コンテナはスイートごとに作られて
+終了時に消えるので、その年齢はスイートの実行時間とほぼ等しく、1 時間より古ければ
+teardown が走らずに漏れたものと見なせます。ここのテストは共有コンテナを使うので、
+テスト直後に叩けば `Nothing to remove.` が返ります：
 
 ```bash
 rig prune
@@ -135,8 +137,13 @@ docker exec <コンテナID> psql -U test -d postgres -tAc "select datname from 
 
 ## CI
 
-これらの統合テストはCIでは実行されません（Dockerを必要とするため）。`dart analyze` と
-ユニットテストだけがCI対象です。統合テストはローカルで上記の通り実行してください。
+**これらの統合テストは CI でも実行されます。** 以前は `docker compose up` を先に叩く必要が
+あったので CI では回せませんでしたが、各スイートが自分で必要なコンテナを起動するように
+なったので、`ubuntu-latest` の Docker でそのまま動きます（`.github/workflows/test.yml` の
+`Test aim_postgres integration` 以降）。
+
+CI のランナーは毎回新品なので、**イメージの pull と initdb を含む初回の経路を通るのは CI だけ**
+です。手元では前回のコンテナを再利用するので、そこは飛ばされます。
 
 ## トラブルシューティング
 

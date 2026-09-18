@@ -78,7 +78,31 @@ jobs:
           exit $fail
 
       - name: Test aim_edge integration (wrangler dev)
-        # The one tagged suite CI is equipped for: Node is set up and
-        # wrangler is already warmed above.
+        # Node is set up and wrangler is already warmed above.
         working-directory: packages/aim_edge
         run: dart test -t integration --run-skipped
+
+      - name: Docker is reachable
+        # The Postgres suites below start their own containers. Fail here,
+        # with docker's own diagnosis, rather than inside a setUpAll where it
+        # reads as a test failure.
+        run: docker info
+
+      # These used to need `docker compose up` before anything, which is why
+      # they never ran here. They now start what they need themselves, and a
+      # runner is a cold machine — so this is also the only place the image
+      # pull and initdb get exercised, paths a developer's machine skips by
+      # reusing containers from the last run.
+      - name: Test aim_postgres integration (Postgres via rig)
+        working-directory: packages/aim_postgres
+        run: dart test -t integration --run-skipped
+
+      - name: Test aim_orm_codegen integration (Postgres via rig)
+        working-directory: packages/aim_orm_codegen
+        run: dart test -t integration --run-skipped
+
+      - name: Containers left behind
+        # rig leaves containers running on purpose; on a throwaway runner that
+        # costs nothing. Printed so a failing run shows what was up.
+        if: always()
+        run: docker ps -a --filter label=dev.dart-forge.rig
