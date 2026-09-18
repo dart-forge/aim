@@ -93,10 +93,12 @@ class SqliteConnection {
       library.extendedResultCodes(handle, 1);
       library.busyTimeout(handle, busyTimeout.inMilliseconds);
       // SQLite leaves foreign keys off for backwards compatibility.
-      connection._pragma('PRAGMA foreign_keys = ON');
+      connection._driverStatement('PRAGMA foreign_keys = ON');
       if (!readOnly) {
         connection._enableWal();
-        connection._pragma('PRAGMA synchronous = ${synchronous.pragmaValue}');
+        connection._driverStatement(
+          'PRAGMA synchronous = ${synchronous.pragmaValue}',
+        );
       }
     } on Object {
       connection.close();
@@ -152,6 +154,21 @@ class SqliteConnection {
       _library.freeUtf8(buffer);
     }
   }
+
+  /// Opens a transaction and takes the write lock straight away.
+  ///
+  /// IMMEDIATE rather than SQLite's default DEFERRED: a deferred
+  /// transaction starts as a read and only asks for the write lock at its
+  /// first write, and that request is refused with SQLITE_BUSY when
+  /// another connection wrote in between -- halfway through the caller's
+  /// work, where there is nothing useful left to do about it.
+  void begin() => _driverStatement('BEGIN IMMEDIATE');
+
+  /// Makes the transaction's writes permanent.
+  void commit() => _driverStatement('COMMIT');
+
+  /// Discards the transaction's writes.
+  void rollback() => _driverStatement('ROLLBACK');
 
   /// Closes the connection. Safe to call twice.
   void close() {
@@ -562,7 +579,7 @@ class SqliteConnection {
   void _enableWal() {
     const sql = 'PRAGMA journal_mode = WAL';
     // The pragma answers with the mode it actually reached.
-    final rows = _pragma(sql, wantRows: true).rows;
+    final rows = _driverStatement(sql, wantRows: true).rows;
     final mode = rows.length == 1 ? rows.single.values.single : null;
     // A :memory: or temporary database answers 'memory': it has no file to
     // share, so there was never anything WAL could give it. Any other answer
@@ -578,15 +595,17 @@ class SqliteConnection {
     }
   }
 
-  /// Runs one of the driver's own settings statements. None of them takes a
-  /// parameter, and none of them is ever refused as a write.
-  StatementBatchResult _pragma(String sql, {bool wantRows = false}) => run(
-    sql,
-    positional: const [],
-    named: const {},
-    wantRows: wantRows,
-    requireReadOnly: false,
-  )!;
+  /// Runs one of the driver's own statements -- a pragma, or one of the
+  /// transaction control statements. None of them takes a parameter, and
+  /// none of them is ever refused as a write.
+  StatementBatchResult _driverStatement(String sql, {bool wantRows = false}) =>
+      run(
+        sql,
+        positional: const [],
+        named: const {},
+        wantRows: wantRows,
+        requireReadOnly: false,
+      )!;
 
   SqliteException _exception(String sql) => SqliteException(
     extendedResultCode: _library.extendedErrcode(_handle),

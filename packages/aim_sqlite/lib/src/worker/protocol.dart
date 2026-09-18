@@ -32,6 +32,21 @@ class SqliteRunRequest extends SqliteRequest {
   final bool requireReadOnly;
 }
 
+/// Opens a transaction, which stays open until a commit or a rollback
+/// arrives. Nothing else may be sent in between: a statement that reached
+/// the connection first would be committed or rolled back along with it.
+class SqliteBeginRequest extends SqliteRequest {
+  const SqliteBeginRequest(super.id);
+}
+
+class SqliteCommitRequest extends SqliteRequest {
+  const SqliteCommitRequest(super.id);
+}
+
+class SqliteRollbackRequest extends SqliteRequest {
+  const SqliteRollbackRequest(super.id);
+}
+
 class SqliteCloseRequest extends SqliteRequest {
   const SqliteCloseRequest(super.id);
 }

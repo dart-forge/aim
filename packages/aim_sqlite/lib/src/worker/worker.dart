@@ -61,12 +61,31 @@ Future<void> sqliteWorkerMain(SqliteWorkerConfig config) async {
     switch (request) {
       case SqliteRunRequest():
         config.ready.send(_answer(connection, request));
+      case SqliteBeginRequest():
+        config.ready.send(_control(request, connection.begin));
+      case SqliteCommitRequest():
+        config.ready.send(_control(request, connection.commit));
+      case SqliteRollbackRequest():
+        config.ready.send(_control(request, connection.rollback));
       case SqliteCloseRequest():
         connection.close();
         // Nothing is listening any more, so the isolate runs out of work and
         // exits; Isolate.spawn's onExit is what tells the parent it is gone.
         requests.close();
     }
+  }
+}
+
+/// Runs one of the transaction control statements. They have no rows and no
+/// row count to report, so the answer only says whether it worked.
+SqliteResponse _control(SqliteRequest request, void Function() statement) {
+  try {
+    statement();
+    return SqliteRowsResponse(request.id, const [], 0);
+  } on Object catch (error) {
+    // Same reason as _answer: the caller has to hear how it went, and an
+    // error thrown out of here would take the isolate down with it.
+    return SqliteErrorResponse(request.id, error);
   }
 }
 
