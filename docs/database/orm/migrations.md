@@ -116,9 +116,10 @@ Each migration file contains both UP and DOWN sections:
 -- UP
 CREATE TABLE users (
   id UUID PRIMARY KEY,
-  email VARCHAR(255) NOT NULL UNIQUE,
+  email VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_users_email UNIQUE (email)
 );
 
 CREATE TABLE posts (
@@ -167,6 +168,10 @@ can still be migrated.
 
 Primary keys stay on the column and are never dropped by a generated
 migration.
+
+Rolling back a drop against a database created before this naming restores
+the constraint under the name above, not the name it had. It is the same
+constraint; only its name converges on what this tool writes.
 
 ### How a Reference Is Read
 
