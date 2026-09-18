@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:aim_database/aim_database.dart';
+import 'package:aim_sqlite/src/reader_pool.dart';
+import 'package:aim_sqlite/src/routing.dart';
 import 'package:aim_sqlite/src/sqlite_exception.dart';
 import 'package:aim_sqlite/src/sqlite_options.dart';
+import 'package:aim_sqlite/src/sqlite_stats.dart';
 import 'package:aim_sqlite/src/types/value_encoder.dart';
 import 'package:aim_sqlite/src/worker/handle.dart';
 import 'package:aim_sqlite/src/worker/protocol.dart';
@@ -16,10 +19,24 @@ import 'package:aim_sqlite/src/worker/protocol.dart';
 /// asking the transaction, in [SqliteDatabase._insideOwnTransactionBody].
 final Object _txKey = Object();
 
+/// The id of the one request the driver makes on its own account, before the
+/// caller's first. Negative like the worker handle's own close request, which
+/// is what keeps it clear of a caller's: those are numbered from zero up.
+const int _walIndexRequestId = -2;
+
 /// A SQLite database, reached over dart:ffi from worker isolates.
 ///
 /// SQLite's C API blocks the thread it is called on, so every statement runs
 /// on an isolate of its own rather than on the one serving requests.
+///
+/// Writes go to a single writer, because SQLite allows one at a time. Reads
+/// go to one of [SqliteOptions.readers] connections opened read-only, each on
+/// its own isolate, so they run alongside each other and alongside the
+/// writer: in WAL mode a write never blocks a read, which sees the snapshot
+/// from before it instead. Which connection a statement lands on is decided
+/// by its leading keyword and then checked again on the connection itself,
+/// so a write that the keyword did not give away is still never stepped by a
+/// reader.
 ///
 /// One call may run several statements, and the counts and rows are reported
 /// as [Database] describes. Parameters, though, only reach the first
@@ -32,11 +49,15 @@ final Object _txKey = Object();
 /// them a second time. Wrap a batch that must be all or nothing in a
 /// [transaction].
 class SqliteDatabase extends Database {
-  SqliteDatabase._(this._writer);
+  SqliteDatabase._(this._writer, this._readers);
 
   /// The one connection that may write. SQLite allows exactly one writer at
   /// a time, so serialising through a single isolate is not a limitation.
   final SqliteWorkerHandle _writer;
+
+  /// The read-only connections. Empty when there is no second connection to
+  /// be had, and then reads go to the writer as well.
+  final ReaderPool _readers;
 
   /// Numbered from zero up, which is what pairs a response with its request.
   int _nextRequestId = 0;
@@ -78,7 +99,51 @@ class SqliteDatabase extends Database {
       readOnly: false,
       options: options,
     );
-    return SqliteDatabase._(writer);
+    // The readers come up only once the writer has the database ready for
+    // them, because a read-only connection can neither create a database nor
+    // put one in WAL mode, and fails with SQLITE_CANTOPEN rather than making
+    // do.
+    final ReaderPool readerPool;
+    try {
+      if (options.readers > 0) await _createWalIndex(writer);
+      readerPool = await ReaderPool.spawn(
+        path,
+        count: options.readers,
+        options: options,
+      );
+    } on Object {
+      // Otherwise a database that could not finish opening leaves its writer
+      // isolate running with nobody left holding it.
+      await writer.close();
+      rethrow;
+    }
+    return SqliteDatabase._(writer, readerPool);
+  }
+
+  /// Reads the schema on [writer], which is what makes the WAL index exist.
+  ///
+  /// A read-only connection cannot read a WAL database without the WAL index
+  /// -- the `-shm` file -- and cannot create one: it is shared, mutable
+  /// state, so only a connection that may write the database may write it.
+  /// Nothing has created it at this point, because putting the database in
+  /// WAL mode writes the header and never reads a page; what brings the
+  /// index into being is the first connection to touch the database. So the
+  /// writer touches it here. Without that, every read on a database nothing
+  /// had yet written to would fail with SQLITE_CANTOPEN.
+  static Future<void> _createWalIndex(SqliteWorkerHandle writer) async {
+    final response = await writer.send(
+      const SqliteRunRequest(
+        _walIndexRequestId,
+        'SELECT count(*) FROM sqlite_schema',
+        positional: [],
+        named: {},
+        wantRows: false,
+        requireReadOnly: false,
+      ),
+    );
+    // Rethrown so that a database the writer cannot even read the schema of
+    // fails to open, rather than opening with readers that cannot read.
+    if (response case SqliteErrorResponse(:final error)) throw error;
   }
 
   @override
@@ -87,11 +152,13 @@ class SqliteDatabase extends Database {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   }) {
+    // Ahead of the routing, because a call made from inside a transaction
+    // body has to be refused whichever connection it would have landed on.
     if (_insideOwnTransactionBody) return _refuseCallOnDatabase();
-    return _serialized(() async {
-      final result = await _run(sql, params, args, wantRows: true);
-      return result.rows;
-    });
+    if (_readers.size == 0 || routeFor(sql) == SqliteRoute.writer) {
+      return _queryOnWriter(sql, params, args);
+    }
+    return _queryOnReader(sql, params, args);
   }
 
   @override
@@ -101,8 +168,11 @@ class SqliteDatabase extends Database {
     List<dynamic>? args,
   }) {
     if (_insideOwnTransactionBody) return _refuseCallOnDatabase();
+    // Straight to the writer without asking [routeFor]. Nobody sends a read
+    // through execute(), which reports a row count and no rows, and putting
+    // one on a reader would buy nothing.
     return _serialized(() async {
-      final result = await _run(sql, params, args, wantRows: false);
+      final result = await _runOnWriter(sql, params, args, wantRows: false);
       return result.affected;
     });
   }
@@ -136,13 +206,23 @@ class SqliteDatabase extends Database {
     return _serialized(() => _runTransaction(fn));
   }
 
+  /// How busy the connections are, for a caller that wants to watch it.
+  SqliteStats get stats => SqliteStats(
+    readers: _readers.size,
+    busyReaders: _readers.busy,
+    queued: _readers.queued,
+    writerBusy: _writer.busy,
+  );
+
   @override
   Future<void> close() {
     _closed = true;
-    // The handle hands the same future back every time, so a second close
-    // still waits for the isolate to actually be gone rather than returning
-    // while the first one is mid-flight.
-    return _writer.close();
+    // Everything is asked to stop before any of it is waited for, so the
+    // readers are not left sitting idle while the writer finishes what it
+    // was running. Each handle hands the same future back every time, so a
+    // second close still waits for the isolates to actually be gone rather
+    // than returning while the first one is mid-flight.
+    return Future.wait([_writer.close(), _readers.close()]);
   }
 
   /// Runs [action] once everything already queued has finished, and keeps
@@ -289,37 +369,81 @@ class SqliteDatabase extends Database {
     }
   }
 
-  Future<SqliteRowsResponse> _run(
+  /// Runs a read on the writer, queueing for it like anything else does.
+  Future<List<Map<String, dynamic>>> _queryOnWriter(
+    String sql,
+    Map<String, dynamic>? params,
+    List<dynamic>? args,
+  ) => _serialized(() async {
+    final result = await _runOnWriter(sql, params, args, wantRows: true);
+    return result.rows;
+  });
+
+  /// Runs a read on one of the read-only connections.
+  ///
+  /// The leading keyword saying this reads is only the first of the two
+  /// stages. The reader prepares the whole batch and checks
+  /// sqlite3_stmt_readonly on every statement in it before stepping any of
+  /// them, so a write that got this far -- a `WITH ... INSERT`, or a batch
+  /// led by a SELECT with an INSERT further along -- comes back unrun and is
+  /// sent to the writer instead.
+  ///
+  /// Preparing the batch up front has a cost that comes with the property:
+  /// a statement that only makes sense once an earlier one in the same batch
+  /// has run cannot be prepared at all, so `SELECT 1; CREATE TEMP TABLE t AS
+  /// SELECT 1; SELECT * FROM t` fails here with "no such table" rather than
+  /// being handed to the writer, which would have managed it. Preparing them
+  /// one at a time instead would mean stepping a statement before knowing
+  /// whether the batch writes, which is the whole thing being bought.
+  ///
+  /// Not queued through [_serialized]. A read on a reader never touches the
+  /// writer, so waiting for the queue would make it wait for a transaction
+  /// that cannot block it: in WAL mode it reads the snapshot from before
+  /// that transaction. The hand-off to the writer does queue, because by
+  /// then it is a write like any other.
+  Future<List<Map<String, dynamic>>> _queryOnReader(
+    String sql,
+    Map<String, dynamic>? params,
+    List<dynamic>? args,
+  ) async {
+    if (_closed) throw StateError('SqliteDatabase is closed');
+    final request = _request(
+      sql,
+      params,
+      args,
+      wantRows: true,
+      requireReadOnly: true,
+    );
+    // The pool lends a free reader where it stands, so the statement is on
+    // the isolate's port before this returns rather than a microtask later.
+    final response = await _readers.withReader(
+      (reader) => reader.send(request),
+    );
+    switch (response) {
+      case SqliteRowsResponse(:final rows):
+        return rows;
+      case SqliteErrorResponse(:final error):
+        throw error;
+      case SqliteNotReadOnlyResponse():
+        // Nothing ran, so this is not a half-run batch being retried. The
+        // writer is sent it without requireReadOnly, which is also what lets
+        // it go back to preparing the batch a statement at a time.
+        return _queryOnWriter(sql, params, args);
+    }
+  }
+
+  /// Sends one statement request to the writer. Its connection is open
+  /// read-write, so nothing there is ever handed back as a write.
+  Future<SqliteRowsResponse> _runOnWriter(
     String sql,
     Map<String, dynamic>? params,
     List<dynamic>? args, {
     required bool wantRows,
   }) async {
     if (_closed) throw StateError('SqliteDatabase is closed');
-    final request = SqliteRunRequest(
-      _nextRequestId++,
-      sql,
-      // Encoded here so a value with no SQLite representation is rejected in
-      // the caller's own stack rather than inside an isolate.
-      positional: [
-        for (var i = 0; i < (args?.length ?? 0); i++)
-          encodeValue(args![i], parameter: 'args[$i]'),
-      ],
-      named: {
-        if (params != null)
-          for (final entry in params.entries)
-            entry.key: encodeValue(
-              entry.value,
-              parameter: 'params["${entry.key}"]',
-            ),
-      },
-      wantRows: wantRows,
-      // Everything goes to the writer for now; routing arrives with the
-      // read-only isolates.
-      requireReadOnly: false,
+    final response = await _writer.send(
+      _request(sql, params, args, wantRows: wantRows, requireReadOnly: false),
     );
-
-    final response = await _writer.send(request);
     switch (response) {
       case SqliteRowsResponse():
         return response;
@@ -332,6 +456,35 @@ class SqliteDatabase extends Database {
         );
     }
   }
+
+  /// Builds one statement request.
+  ///
+  /// Parameters are encoded here, in the caller's own stack, so a value with
+  /// no SQLite representation is rejected before it reaches an isolate.
+  SqliteRunRequest _request(
+    String sql,
+    Map<String, dynamic>? params,
+    List<dynamic>? args, {
+    required bool wantRows,
+    required bool requireReadOnly,
+  }) => SqliteRunRequest(
+    _nextRequestId++,
+    sql,
+    positional: [
+      for (var i = 0; i < (args?.length ?? 0); i++)
+        encodeValue(args![i], parameter: 'args[$i]'),
+    ],
+    named: {
+      if (params != null)
+        for (final entry in params.entries)
+          entry.key: encodeValue(
+            entry.value,
+            parameter: 'params["${entry.key}"]',
+          ),
+    },
+    wantRows: wantRows,
+    requireReadOnly: requireReadOnly,
+  );
 }
 
 /// Statements bound to one open transaction, and so to the writer isolate
@@ -360,7 +513,12 @@ class SqliteTransaction implements Transaction {
     _checkOpen();
     // Straight to the connection, past the queue this transaction holds:
     // joining the queue here would mean waiting for itself.
-    final result = await _database._run(sql, params, args, wantRows: true);
+    final result = await _database._runOnWriter(
+      sql,
+      params,
+      args,
+      wantRows: true,
+    );
     return result.rows;
   }
 
@@ -371,7 +529,12 @@ class SqliteTransaction implements Transaction {
     List<dynamic>? args,
   }) async {
     _checkOpen();
-    final result = await _database._run(sql, params, args, wantRows: false);
+    final result = await _database._runOnWriter(
+      sql,
+      params,
+      args,
+      wantRows: false,
+    );
     return result.affected;
   }
 
@@ -385,8 +548,22 @@ class SqliteTransaction implements Transaction {
   }
 }
 
-/// True for a database that lives only in memory: `:memory:`, or a `file:`
-/// URI asking for `mode=memory`.
-bool _isMemoryPath(String path) =>
-    path == ':memory:' ||
-    (path.startsWith('file:') && path.contains('mode=memory'));
+/// True for a database that lives only in memory: `:memory:`, or either of
+/// the `file:` URI spellings of one.
+///
+/// Such a database is private to the connection that opened it, so a reader
+/// would not be sharing it -- it would open an empty one of its own.
+bool _isMemoryPath(String path) {
+  if (path == ':memory:') return true;
+  if (!path.startsWith('file:')) return false;
+  // What SQLite compares against ":memory:" is the filename, which is what
+  // is left of the URI once the query and the fragment are cut off: it reads
+  // `file::memory:` as a memory database, and a file that happens to be
+  // named ":memory:" inside some directory as a file.
+  final rest = path.substring('file:'.length);
+  if (rest.split('?').first.split('#').first == ':memory:') return true;
+  // `mode` is read as a parameter of its own rather than searched for as a
+  // substring, which would call `file:x?other_mode=memory_foo` -- an
+  // ordinary file -- a memory database and leave it with no readers.
+  return Uri.tryParse(path)?.queryParameters['mode'] == 'memory';
+}
