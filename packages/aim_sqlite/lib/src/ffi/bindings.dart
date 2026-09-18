@@ -137,6 +137,9 @@ typedef BusyTimeoutDart = int Function(Pointer<Void>, int);
 typedef StmtReadonlyNative = Int Function(Pointer<Void>);
 typedef StmtReadonlyDart = int Function(Pointer<Void>);
 
+typedef GetAutocommitNative = Int Function(Pointer<Void>);
+typedef GetAutocommitDart = int Function(Pointer<Void>);
+
 typedef Malloc64Native = Pointer<Void> Function(Uint64);
 typedef Malloc64Dart = Pointer<Void> Function(int);
 
@@ -168,7 +171,7 @@ class SqliteLibraryNotFoundException implements Exception {
 /// [SendPort]. Every isolate that talks to SQLite opens its own; dlopen is
 /// reference counted, so the second open is cheap.
 class SqliteLibrary {
-  // All 31 symbols are looked up here, eagerly, instead of behind `late
+  // All 32 symbols are looked up here, eagerly, instead of behind `late
   // final` getters: a missing symbol must fail loudly from open() rather
   // than the first time some unrelated code happens to touch that field.
   SqliteLibrary._(this._library)
@@ -262,6 +265,10 @@ class SqliteLibrary {
       stmtReadonly = _library
           .lookupFunction<StmtReadonlyNative, StmtReadonlyDart>(
             'sqlite3_stmt_readonly',
+          ),
+      getAutocommit = _library
+          .lookupFunction<GetAutocommitNative, GetAutocommitDart>(
+            'sqlite3_get_autocommit',
           ),
       malloc64 = _library.lookupFunction<Malloc64Native, Malloc64Dart>(
         'sqlite3_malloc64',
@@ -369,6 +376,11 @@ class SqliteLibrary {
 
   /// sqlite3_stmt_readonly.
   final StmtReadonlyDart stmtReadonly;
+
+  /// sqlite3_get_autocommit. Non-zero when no transaction is open, which
+  /// is what tells a ROLLBACK that had nothing left to roll back apart
+  /// from one that was refused with a transaction still open.
+  final GetAutocommitDart getAutocommit;
 
   /// sqlite3_malloc64.
   final Malloc64Dart malloc64;

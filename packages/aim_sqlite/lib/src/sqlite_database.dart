@@ -7,6 +7,15 @@ import 'package:aim_sqlite/src/types/value_encoder.dart';
 import 'package:aim_sqlite/src/worker/handle.dart';
 import 'package:aim_sqlite/src/worker/protocol.dart';
 
+/// Marks the zone a transaction body runs in, so that a call which would
+/// wait for that very transaction can be refused instead of hanging.
+///
+/// The value is the transaction itself, which is how a call reaching a
+/// different database -- one with its own writer and its own queue, that
+/// cannot be waiting on this transaction -- is told apart from a call that
+/// would wait for itself.
+final Object _txKey = Object();
+
 /// A SQLite database, reached over dart:ffi from worker isolates.
 ///
 /// SQLite's C API blocks the thread it is called on, so every statement runs
@@ -77,39 +86,55 @@ class SqliteDatabase extends Database {
     String sql, {
     Map<String, dynamic>? params,
     List<dynamic>? args,
-  }) => _serialized(() async {
-    final result = await _run(sql, params, args, wantRows: true);
-    return result.rows;
-  });
+  }) {
+    if (_insideOwnTransactionBody) return _refuseCallOnDatabase();
+    return _serialized(() async {
+      final result = await _run(sql, params, args, wantRows: true);
+      return result.rows;
+    });
+  }
 
   @override
   Future<int> execute(
     String sql, {
     Map<String, dynamic>? params,
     List<dynamic>? args,
-  }) => _serialized(() async {
-    final result = await _run(sql, params, args, wantRows: false);
-    return result.affected;
-  });
+  }) {
+    if (_insideOwnTransactionBody) return _refuseCallOnDatabase();
+    return _serialized(() async {
+      final result = await _run(sql, params, args, wantRows: false);
+      return result.affected;
+    });
+  }
 
   /// Runs [fn] inside a transaction, holding the writer for as long as it
   /// takes, and commits when [fn] returns or rolls back when it throws.
   ///
   /// `BEGIN IMMEDIATE`: the write lock is taken up front rather than at the
-  /// transaction's first write, where SQLite could still refuse it.
+  /// transaction's first write, where SQLite could still refuse it. A
+  /// transaction that cannot have the lock therefore fails before [fn]
+  /// runs at all.
   ///
-  /// A [query] or [execute] on the database while [fn] is running waits and
-  /// goes through after the commit or the rollback. It never joins the
-  /// transaction, so a rollback cannot take it along. Statements on the
-  /// [Transaction] itself go to the same connection whether they read or
+  /// **[fn] must go through the [Transaction] it is handed, not through the
+  /// database.** [query], [execute] and [transaction] called on the
+  /// database from inside [fn] would each wait for the transaction they are
+  /// running inside, which cannot finish until [fn] returns; they are
+  /// refused with a [StateError] rather than left to hang. Statements on
+  /// the [Transaction] go to the same connection whether they read or
   /// write, because a read inside a transaction has to see the
   /// transaction's own uncommitted writes.
+  ///
+  /// A call from anywhere else -- another request served while [fn] runs --
+  /// waits its turn and goes through after the commit or the rollback. It
+  /// never joins the transaction, so a rollback cannot take it along.
   ///
   /// The [Transaction] stops working as soon as [fn] returns: by then the
   /// writer belongs to whoever was waiting for it.
   @override
-  Future<T> transaction<T>(Future<T> Function(Transaction tx) fn) =>
-      _serialized(() => _runTransaction(fn));
+  Future<T> transaction<T>(Future<T> Function(Transaction tx) fn) {
+    if (_insideOwnTransactionBody) return _refuseCallOnDatabase();
+    return _serialized(() => _runTransaction(fn));
+  }
 
   @override
   Future<void> close() {
@@ -147,6 +172,29 @@ class SqliteDatabase extends Database {
     return previous.then((_) => action()).whenComplete(release);
   }
 
+  /// True while the calling code is inside the body of a transaction of
+  /// this database's.
+  ///
+  /// Scoped to this database on purpose: the queue a body is holding is
+  /// this database's queue, so a call on another one cannot deadlock on it
+  /// and must not be refused.
+  bool get _insideOwnTransactionBody {
+    final marker = Zone.current[_txKey];
+    return marker is SqliteTransaction && identical(marker._database, this);
+  }
+
+  /// Refuses a call that would queue behind the transaction the calling
+  /// code is itself inside. Queuing it would wait for a lease that cannot
+  /// come free until the body returns -- with no timeout, and nothing in
+  /// the stack to say why. Delivered as a failed future, the way [_run]
+  /// delivers its refusal on a closed database.
+  Future<T> _refuseCallOnDatabase<T>() => Future.error(
+    StateError(
+      'use tx inside a transaction: this call on the database would wait '
+      'for the transaction it is running inside to finish',
+    ),
+  );
+
   /// Runs one transaction. Called with the queue held, so nothing else can
   /// reach the connection between the BEGIN and the COMMIT.
   Future<T> _runTransaction<T>(Future<T> Function(Transaction tx) fn) async {
@@ -154,15 +202,20 @@ class SqliteDatabase extends Database {
     await _control(SqliteBeginRequest(_nextRequestId++));
     final tx = SqliteTransaction._(this);
     try {
-      final result = await fn(tx);
+      // The zone marker is the only thing that can tell a call made from
+      // inside the body from one made by other code running concurrently:
+      // it travels with the body's own asynchronous continuations and with
+      // nothing else.
+      final result = await runZoned(() => fn(tx), zoneValues: {_txKey: tx});
       tx._done = true;
       await _control(SqliteCommitRequest(_nextRequestId++));
       return result;
     } on Object catch (error) {
       tx._done = true;
-      // A failed COMMIT comes through here too: SQLite leaves the
-      // transaction open when it cannot commit one, so that still has to be
-      // rolled back.
+      // A failed COMMIT comes through here too. SQLite sometimes leaves the
+      // transaction open when it cannot commit one and sometimes rolls it
+      // back itself first; the rollback below tells those apart instead of
+      // this having to guess.
       await _rollback(error);
       rethrow;
     }
@@ -170,36 +223,56 @@ class SqliteDatabase extends Database {
 
   /// Rolls back the transaction that [cause] stopped.
   ///
-  /// Returns normally when the rollback worked, leaving the caller to
-  /// rethrow [cause] with the stack trace it was thrown with.
+  /// Returns normally when the rollback worked, and also when SQLite
+  /// refused it because there was nothing left to roll back -- the worker
+  /// sorts that case out for itself, since it is the ordinary aftermath of
+  /// a COMMIT that SQLite gave up on. The caller then rethrows [cause]
+  /// with the stack trace it was thrown with.
   ///
-  /// A ROLLBACK that SQLite itself refuses is the worse of the two
-  /// failures: the connection is left inside an open transaction, and
-  /// nothing says so until the next BEGIN IMMEDIATE is refused too. So that
-  /// is what gets thrown, in [cause]'s place -- carrying [cause]'s text,
-  /// because "the rollback failed" never says what was being rolled back.
-  ///
-  /// A rollback that could not even be sent is left to throw on its own:
-  /// the isolate is gone, which is what [cause] will say as well, and its
-  /// connection went with it, so no transaction is left open to warn about.
+  /// What is left is a rollback that really failed, and [cause] is folded
+  /// into its message rather than dropped: it is the only record of why
+  /// anything was being rolled back. A refusal that left the transaction
+  /// open stays a [SqliteException], so its extended result code still
+  /// describes the rollback; a rollback that never reached the connection
+  /// at all -- the isolate is gone, the database was closed -- has no
+  /// result code to keep.
   Future<void> _rollback(Object cause) async {
     try {
       await _control(SqliteRollbackRequest(_nextRequestId++));
     } on SqliteException catch (error) {
       throw SqliteException(
         extendedResultCode: error.extendedResultCode,
-        message: '${error.message} (while rolling back after: $cause)',
+        message: '${error.message} (rolling back after: $cause)',
         sql: error.sql,
+      );
+    } on Object catch (error) {
+      // A StateError reads better by its message than by its toString once
+      // it is quoted inside another one, and StateError is what both the
+      // worker handle and the closed-database check throw here.
+      throw StateError(
+        '${error is StateError ? error.message : error} '
+        '(rolling back after: $cause)',
       );
     }
   }
 
-  /// Sends one of the transaction control requests and throws whatever the
-  /// worker reported. There is nothing to hand back: none of them produces
-  /// rows or reports a row count.
+  /// Sends one of the transaction control requests and throws unless the
+  /// worker reports that it ran. There is nothing to hand back: none of
+  /// them produces rows or reports a row count.
+  ///
+  /// Anything other than a rows response is refused rather than taken for
+  /// success. A BEGIN counted as run without having run would leave a
+  /// "transaction" that commits statement by statement, and a ROLLBACK
+  /// that rolls nothing back.
   Future<void> _control(SqliteRequest request) async {
     final response = await _writer.send(request);
     if (response case SqliteErrorResponse(:final error)) throw error;
+    if (response is! SqliteRowsResponse) {
+      throw StateError(
+        'the SQLite worker answered ${request.runtimeType} with '
+        '${response.runtimeType}, so it cannot be taken to have run',
+      );
+    }
   }
 
   Future<SqliteRowsResponse> _run(

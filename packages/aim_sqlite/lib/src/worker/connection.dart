@@ -168,7 +168,22 @@ class SqliteConnection {
   void commit() => _driverStatement('COMMIT');
 
   /// Discards the transaction's writes.
-  void rollback() => _driverStatement('ROLLBACK');
+  ///
+  /// SQLite refuses a ROLLBACK whenever there is nothing left to roll
+  /// back, and that is the normal state after a COMMIT it gave up on
+  /// itself: a full disk or an I/O error rolls the transaction back before
+  /// reporting. Passing that refusal on would put SQLITE_ERROR and "no
+  /// transaction is active" in front of the failure that actually
+  /// mattered, so sqlite3_get_autocommit is asked which case this is --
+  /// with autocommit back on there is no transaction left and nothing went
+  /// wrong here. Only a refusal that leaves one open is reported.
+  void rollback() {
+    try {
+      _driverStatement('ROLLBACK');
+    } on SqliteException {
+      if (_library.getAutocommit(_handle) == 0) rethrow;
+    }
+  }
 
   /// Closes the connection. Safe to call twice.
   void close() {
