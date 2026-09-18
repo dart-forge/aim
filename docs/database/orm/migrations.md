@@ -128,7 +128,7 @@ CREATE TABLE posts (
   title VARCHAR(255) NOT NULL,
   content TEXT,
   published_at TIMESTAMP,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- DOWN
@@ -319,8 +319,8 @@ Aim automatically creates and manages the `_aim_migrations` table:
 CREATE TABLE _aim_migrations (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL UNIQUE,
-  checksum VARCHAR(64) NOT NULL,
-  applied_at TIMESTAMP NOT NULL DEFAULT NOW()
+  checksum VARCHAR(32) NOT NULL,
+  applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
