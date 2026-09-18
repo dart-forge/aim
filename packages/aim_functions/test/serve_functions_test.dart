@@ -1,7 +1,7 @@
-// Deliberately does not import `firebase_functions` — see A-067 in the
-// design. `serveFunction()` only needs shelf and `aim_core`; `firebase_functions`
-// is required for `runFunctions`/`onRequest`, but that lives in the
-// application's own entry point, not in this adapter.
+// Deliberately does not import `firebase_functions`. That package only
+// registers a handler; everything this adapter does is a shelf handler, so
+// the whole of it can be tested without Firebase. If that ever stops being
+// true, the translation and the entry point have grown into each other.
 import 'package:aim_functions/aim_functions.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:test/test.dart';

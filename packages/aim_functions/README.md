@@ -70,6 +70,17 @@ confirmed by actually running `examples/functions-sample` locally and
 `curl`ing it: `GET /api/` and `GET /api/users/42` reached the app's `/` and
 `/users/:id` routes.
 
+One half of that is measured and the other is read, and the difference is
+worth knowing before you deploy. **The local path was run**: the emulator's
+routing strips the prefix, and curl confirmed it. **The production path was
+not** — it could not be, without a Firebase project. There, the reasoning is
+that a deployed function is one Cloud Run service of its own, so the function
+name lives in the service's address rather than in the request path, and the
+request arrives at `/` already. That follows from the SDK's source, but it is
+an inference from reading rather than something anyone here observed. If a
+deployed function turns out to see `/api/...`, this section is what is wrong,
+not your routes.
+
 ## Streaming
 
 Both directions pass the request/response body through without
