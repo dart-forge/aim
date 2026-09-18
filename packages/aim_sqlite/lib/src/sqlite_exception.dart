@@ -50,3 +50,28 @@ class SqliteDecodeException implements Exception {
       'SqliteDecodeException: $message (column "$column", declared '
       '${declType ?? "nothing"}, stored $rawValue)';
 }
+
+/// A statement gave up waiting for a connection to run on.
+///
+/// The read-only connections take one statement at a time, so a read that
+/// arrives while they are all busy waits for one to come free -- and is
+/// failed with this once it has waited the `acquireTimeout` it was opened
+/// with, rather than queueing without end behind however much work is
+/// already in front of it.
+///
+/// Nothing ran. The statement never reached a connection, so there is no
+/// half-applied batch behind this and running it again repeats nothing.
+class SqliteTimeoutException implements Exception {
+  SqliteTimeoutException({required this.timeout, required this.sql});
+
+  /// How long it waited: the `acquireTimeout` the database was opened with.
+  final Duration timeout;
+
+  /// The statement that never got a connection.
+  final String sql;
+
+  @override
+  String toString() =>
+      'SqliteTimeoutException: no SQLite connection came free within '
+      '${timeout.inMilliseconds}ms\nSQL: $sql';
+}

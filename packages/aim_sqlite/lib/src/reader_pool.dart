@@ -1,8 +1,18 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:aim_sqlite/src/sqlite_exception.dart';
 import 'package:aim_sqlite/src/sqlite_options.dart';
 import 'package:aim_sqlite/src/worker/handle.dart';
+
+/// What a read is failed with once the pool is closing, whether it was
+/// already queued or arrives afterwards.
+///
+/// Deliberately the same words SqliteDatabase refuses a call on a closed
+/// database with: which of the two a read gets depends only on how far it
+/// had got when close came, and that is not a difference a caller can act
+/// on.
+const _closedMessage = 'SqliteDatabase is closed';
 
 /// The read-only connections, one worker isolate each, and the reads waiting
 /// for one of them.
@@ -10,9 +20,10 @@ import 'package:aim_sqlite/src/worker/handle.dart';
 /// Every reader is spawned when the database is opened and lives until it is
 /// closed, so there is nothing here about evicting an idle connection, about
 /// a maximum lifetime, or about checking a connection before lending it: the
-/// only question this answers is which reader is free.
+/// only questions this answers are which reader is free and how long a read
+/// waits for one.
 class ReaderPool {
-  ReaderPool._(List<SqliteWorkerHandle> readers)
+  ReaderPool._(List<SqliteWorkerHandle> readers, this._acquireTimeout)
     : _readers = readers,
       _idle = List.of(readers);
 
@@ -52,7 +63,7 @@ class ReaderPool {
       await Future.wait(readers.map((reader) => reader.close()));
       Error.throwWithStackTrace(failure, trace!);
     }
-    return ReaderPool._(readers);
+    return ReaderPool._(readers, options.acquireTimeout);
   }
 
   final List<SqliteWorkerHandle> _readers;
@@ -70,6 +81,11 @@ class ReaderPool {
 
   final Queue<Completer<SqliteWorkerHandle>> _waiting = Queue();
 
+  /// How long a read waits here before it is given up on.
+  /// [SqliteOptions.acquireTimeout] is where the reason it bounds this wait
+  /// and no other one is written down.
+  final Duration _acquireTimeout;
+
   /// Set by [close], and what tells a later [withReader] that waiting for a
   /// reader would mean waiting forever.
   Future<void>? _closing;
@@ -84,28 +100,29 @@ class ReaderPool {
   /// How many reads are waiting for one to come free.
   int get queued => _waiting.length;
 
-  /// Runs [fn] on a free reader, and waits for one when they are all busy.
+  /// Runs [fn] on a free reader, waiting up to [_acquireTimeout] for one
+  /// when they are all busy.
   ///
   /// [fn] is called before this returns whenever a reader is free, so by
   /// then the statement is on that isolate's port rather than a microtask
   /// away -- which is what lets [close] wait for a statement the caller had
   /// only just handed over.
   ///
+  /// [sql] is carried for the failure alone: a read that never got a reader
+  /// has to be able to say which statement it was.
+  ///
   /// Not to be called on a pool of no readers: there would be nothing to
   /// wait for, so the wait would never end. A caller asks [size] first and
   /// sends the read to the writer instead.
-  Future<T> withReader<T>(Future<T> Function(SqliteWorkerHandle reader) fn) {
+  Future<T> withReader<T>(
+    Future<T> Function(SqliteWorkerHandle reader) fn, {
+    required String sql,
+  }) {
     // Says so rather than hanging, which is what breaking that precondition
     // would otherwise look like from the outside.
     assert(size > 0, 'a read cannot wait for a reader when there are none');
-    if (_closing != null) {
-      return Future.error(StateError('the SQLite readers are closed'));
-    }
-    if (_idle.isEmpty) {
-      final waiting = Completer<SqliteWorkerHandle>();
-      _waiting.add(waiting);
-      return waiting.future.then((reader) => _lend(reader, fn));
-    }
+    if (_closing != null) return Future.error(StateError(_closedMessage));
+    if (_idle.isEmpty) return _lendWhenFree(fn, sql);
     return _lend(_idle.removeLast(), fn);
   }
 
@@ -120,11 +137,43 @@ class ReaderPool {
     final waiting = _waiting.toList();
     _waiting.clear();
     for (final completer in waiting) {
-      completer.completeError(StateError('the SQLite readers are closed'));
+      completer.completeError(StateError(_closedMessage));
     }
     // Each handle waits for the statement its isolate is running, because an
     // FFI call cannot be interrupted.
     return _closing = Future.wait(_readers.map((reader) => reader.close()));
+  }
+
+  /// Queues for a reader, and gives up once [_acquireTimeout] has passed.
+  ///
+  /// The only wait in the driver that is bounded, and the only one worth
+  /// bounding: it is the one that gets worse the longer it lasts -- every
+  /// reader busy and more reads still arriving -- so a caller left queueing
+  /// without end would hear nothing while its latency grew.
+  Future<T> _lendWhenFree<T>(
+    Future<T> Function(SqliteWorkerHandle reader) fn,
+    String sql,
+  ) {
+    final waiting = Completer<SqliteWorkerHandle>();
+    _waiting.add(waiting);
+    final giveUp = Timer(_acquireTimeout, () {
+      // Out of the queue before the failure goes out, so [_release] cannot
+      // hand a reader to a caller that has stopped waiting. Such a reader
+      // would run nothing and never come back, leaving the pool to count it
+      // busy for the rest of the database's life -- a worse fault than the
+      // wait being bounded here, and it would take every later read with it.
+      _waiting.remove(waiting);
+      waiting.completeError(
+        SqliteTimeoutException(timeout: _acquireTimeout, sql: sql),
+      );
+    });
+    // Cancelled however the wait ended, the timeout included. Completing a
+    // completer schedules microtasks, and microtasks all run before the
+    // event loop reaches a timer, so a reader or a close that gets there
+    // first always cancels this in time.
+    return waiting.future
+        .whenComplete(giveUp.cancel)
+        .then((reader) => _lend(reader, fn));
   }
 
   Future<T> _lend<T>(

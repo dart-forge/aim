@@ -86,6 +86,13 @@ class SqliteDatabase extends Database {
   /// [path] may be a file, `:memory:`, or a `file:` URI. A memory database
   /// is private to its connection, so there is nothing for readers to share
   /// and [readers] is forced to 0.
+  ///
+  /// [busyTimeout] bounds SQLite waiting for a lock on the file;
+  /// [acquireTimeout] bounds this driver waiting for a read-only connection
+  /// to come free. A read therefore costs at worst the two of them plus
+  /// however long the statement itself takes. Neither bounds a statement
+  /// that is running, and neither bounds the writer's queue --
+  /// [SqliteOptions.acquireTimeout] says why.
   static Future<SqliteDatabase> open(
     String path, {
     int readers = 4,
@@ -432,8 +439,11 @@ class SqliteDatabase extends Database {
     );
     // The pool lends a free reader where it stands, so the statement is on
     // the isolate's port before this returns rather than a microtask later.
+    // When they are all busy it waits, and only that wait is bounded by
+    // acquireTimeout.
     final response = await _readers.withReader(
       (reader) => reader.send(request),
+      sql: sql,
     );
     switch (response) {
       case SqliteRowsResponse(:final rows):

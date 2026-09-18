@@ -36,6 +36,10 @@ class SqliteOptions {
 
   /// How long SQLite waits for a lock another connection holds before
   /// giving up with SQLITE_BUSY. [Duration.zero] gives up immediately.
+  ///
+  /// This is SQLite waiting on the database file. [acquireTimeout] is this
+  /// driver waiting for a connection to run on, which is a different wait
+  /// and does not overlap with it.
   final Duration busyTimeout;
 
   /// `PRAGMA synchronous`, applied to the writer.
@@ -45,7 +49,29 @@ class SqliteOptions {
   /// environment variable and then the platform defaults.
   final String? libraryPath;
 
-  /// How long a statement waits for a free connection.
+  /// How long a read waits for one of the [readers] to come free before it
+  /// is failed with a SqliteTimeoutException. [Duration.zero] refuses a
+  /// read that finds them all busy instead of waiting at all.
+  ///
+  /// This is the driver waiting for a connection to run on, not SQLite
+  /// waiting for a lock -- that is [busyTimeout]. A read costs at worst the
+  /// two of them plus however long the statement itself takes.
+  ///
+  /// It bounds that wait and nothing else.
+  ///
+  /// Not the running time. An FFI call cannot be interrupted, so a limit
+  /// there could only be a limit on when the driver stops reporting the
+  /// result -- the statement would run to the end regardless, and the
+  /// connection would stay busy while the caller was told otherwise.
+  ///
+  /// Not the writer's queue either. There is one writer, and writes,
+  /// transactions and reads with nowhere else to go pass through it in
+  /// order; a transaction holds it for as long as its body runs. A call
+  /// waiting there is waiting for work that is proceeding normally, so
+  /// failing it would turn one slow transaction into errors on calls that
+  /// did nothing wrong. What is bounded is the wait with no such owner:
+  /// every reader busy, more reads still arriving, and nothing about it
+  /// improving on its own.
   final Duration acquireTimeout;
 
   static void _requireNonNegative(Duration d, String name) {
