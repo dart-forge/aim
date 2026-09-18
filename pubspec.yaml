@@ -6,6 +6,7 @@ workspace:
   - packages/aim_core
   - packages/aim_server
   - packages/aim_edge
+  - packages/aim_functions
   - packages/aim_cli
   - packages/aim_server_cors
   - packages/aim_server_cookie
