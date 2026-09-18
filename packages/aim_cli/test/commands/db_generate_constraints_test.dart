@@ -67,15 +67,6 @@ void main() {
     return content.substring(up!.end, down!.start);
   }
 
-  /// The text after the `-- DOWN` marker.
-  // ignore: unused_element
-  String downOf(String migrationName) {
-    final content = migrationNamed(migrationName).readAsStringSync();
-    final down = RegExp(r'^--\s*DOWN\s*$', multiLine: true).firstMatch(content);
-    expect(down, isNotNull);
-    return content.substring(down!.end);
-  }
-
   group('db:generate - constraints are created with a name', () {
     test('a foreign key written inside CREATE TABLE carries the name the '
         'generator drops it by', () async {
