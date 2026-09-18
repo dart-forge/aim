@@ -33,6 +33,40 @@ void main() {
       decode(SqliteColumnKind.decimalText, const SqliteRawInteger(10)),
       '10',
     );
+    expect(
+      decode(SqliteColumnKind.decimalText, const SqliteRawReal(19.99)),
+      '19.99',
+    );
+  });
+
+  test('a decimal column never comes back in exponent notation', () {
+    // A String whose content is `1e+21` honours the type and breaks the
+    // contract: no decimal parser on the other side can read it.
+    expect(
+      decode(SqliteColumnKind.decimalText, const SqliteRawReal(1e21)),
+      '1000000000000000000000',
+    );
+    expect(
+      decode(SqliteColumnKind.decimalText, const SqliteRawReal(1e-7)),
+      '0.0000001',
+    );
+    expect(
+      decode(SqliteColumnKind.decimalText, const SqliteRawReal(1.5e-7)),
+      '0.00000015',
+    );
+    expect(
+      decode(SqliteColumnKind.decimalText, const SqliteRawReal(-2.5e22)),
+      '-25000000000000000000000',
+    );
+  });
+
+  test('a decimal column reports a stored float as it is, noise and all', () {
+    // The precision was lost when this was written, not now. Rounding it here
+    // would invent digits the database does not hold.
+    expect(
+      decode(SqliteColumnKind.decimalText, SqliteRawReal(0.1 + 0.2)),
+      '0.30000000000000004',
+    );
   });
 
   test('a boolean column reads 0 and 1', () {
@@ -84,14 +118,16 @@ void main() {
   });
 
   test('a real timestamp is a julian day', () {
-    final value = decode(
-      SqliteColumnKind.dateTime,
-      const SqliteRawReal(2440587.5),
-    ) as DateTime;
+    DateTime julian(double day) =>
+        decode(SqliteColumnKind.dateTime, SqliteRawReal(day)) as DateTime;
 
-    // The julian day of the unix epoch.
-    expect(value.isUtc, isTrue);
-    expect(value.millisecondsSinceEpoch, 0);
+    // The julian day of the unix epoch, and one day either side of it. A
+    // single point at the epoch would pass just as well with the subtraction
+    // reversed or the day length mistyped, since it always yields zero.
+    expect(julian(2440587.5).isUtc, isTrue);
+    expect(julian(2440587.5).millisecondsSinceEpoch, 0);
+    expect(julian(2440588.5).millisecondsSinceEpoch, 86400000);
+    expect(julian(2440586.5).millisecondsSinceEpoch, -86400000);
   });
 
   test('an unreadable timestamp names the column and the stored value', () {
@@ -120,6 +156,24 @@ void main() {
     expect(
       () => decode(SqliteColumnKind.json, const SqliteRawText('{')),
       throwsA(isA<SqliteDecodeException>()),
+    );
+  });
+
+  test('a json column holding bytes that are not UTF-8 names the column', () {
+    // The utf8 decode has to happen inside the same guard as the json parse,
+    // or this arrives as a bare FormatException with no idea which column it
+    // came from.
+    expect(
+      () => decode(
+        SqliteColumnKind.json,
+        SqliteRawBlob(Uint8List.fromList([0xFF, 0xFE, 0xFD])),
+        declType: 'JSON',
+      ),
+      throwsA(
+        isA<SqliteDecodeException>()
+            .having((e) => e.column, 'column', 'c')
+            .having((e) => e.declType, 'declType', 'JSON'),
+      ),
     );
   });
 

@@ -56,7 +56,7 @@ Object? decodeValue({
       return switch (raw) {
         SqliteRawText(:final value) => value,
         SqliteRawInteger(:final value) => '$value',
-        SqliteRawReal(:final value) => '$value',
+        SqliteRawReal(:final value) => _plainDecimal(value),
         SqliteRawBlob() => fail('a decimal column holds a blob'),
         SqliteRawNull() => null,
       };
@@ -85,14 +85,17 @@ Object? decodeValue({
       };
 
     case SqliteColumnKind.json:
-      final text = switch (raw) {
-        SqliteRawText(:final value) => value,
-        SqliteRawBlob(:final value) => utf8.decode(value),
-        SqliteRawInteger(:final value) => '$value',
-        SqliteRawReal(:final value) => '$value',
-        SqliteRawNull() => null,
-      };
       try {
+        // Inside the try on purpose: utf8.decode throws FormatException on a
+        // blob that is not UTF-8, and that failure has to arrive with the
+        // column name attached like every other one.
+        final text = switch (raw) {
+          SqliteRawText(:final value) => value,
+          SqliteRawBlob(:final value) => utf8.decode(value),
+          SqliteRawInteger(:final value) => '$value',
+          SqliteRawReal(:final value) => '$value',
+          SqliteRawNull() => null,
+        };
         return jsonDecode(text!);
       } on FormatException catch (error) {
         fail('not json: ${error.message}');
@@ -120,9 +123,51 @@ Object? decodeValue({
   }
 }
 
+/// Reads a stored timestamp string as an instant in UTC.
+///
+/// A value that carries no zone is a UTC wall clock, so `Z` is appended
+/// before parsing. Parsing it as written would give a local `DateTime` whose
+/// instant depends on the machine's time zone.
 DateTime _parseTimestamp(String value, Never Function(String) fail) {
-  final hasZone = RegExp(r'(?:[Zz]|[+-]\d{2}:?\d{2})$').hasMatch(value.trim());
-  final parsed = DateTime.tryParse(hasZone ? value : '${value.trim()}Z');
+  final trimmed = value.trim();
+  final hasZone = RegExp(r'(?:[Zz]|[+-]\d{2}:?\d{2})$').hasMatch(trimmed);
+  final parsed = DateTime.tryParse(hasZone ? trimmed : '${trimmed}Z');
   if (parsed == null) fail('not a timestamp');
   return parsed.toUtc();
+}
+
+/// The shortest decimal string that round-trips to [value], never in
+/// exponent notation.
+///
+/// A column declared NUMERIC or DECIMAL is meant to hold digits, but SQLite
+/// stores whatever it is given, so the value can arrive as a float. Plain
+/// interpolation would then hand back `1e+21` or `1e-7`, which no decimal
+/// parser on the other side can read. Precision already lost was lost when
+/// the value was written; this only decides how the stored double is spelled.
+String _plainDecimal(double value) {
+  final shortest = '$value';
+  final exponentAt = shortest.indexOf('e');
+  if (exponentAt == -1) return shortest;
+
+  final exponent = int.parse(shortest.substring(exponentAt + 1));
+  var mantissa = shortest.substring(0, exponentAt);
+  final negative = mantissa.startsWith('-');
+  if (negative) mantissa = mantissa.substring(1);
+
+  final point = mantissa.indexOf('.');
+  final digits = point == -1 ? mantissa : mantissa.replaceFirst('.', '');
+  // How many digits sit left of the point once the exponent is applied.
+  final integerDigits = (point == -1 ? mantissa.length : point) + exponent;
+
+  final String plain;
+  if (integerDigits <= 0) {
+    plain = '0.${'0' * -integerDigits}$digits';
+  } else if (integerDigits >= digits.length) {
+    plain = '$digits${'0' * (integerDigits - digits.length)}';
+  } else {
+    plain =
+        '${digits.substring(0, integerDigits)}.'
+        '${digits.substring(integerDigits)}';
+  }
+  return negative ? '-$plain' : plain;
 }
