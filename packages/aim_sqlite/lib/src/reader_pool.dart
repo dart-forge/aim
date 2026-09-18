@@ -180,6 +180,14 @@ class ReaderPool {
     SqliteWorkerHandle reader,
     Future<T> Function(SqliteWorkerHandle reader) fn,
   ) {
+    // The invariant that keeps this pool's idea of a busy reader and the
+    // reader's own from coming apart, asserted at both ends of a loan
+    // because it is the one an honest mistake breaks: bounding the round
+    // trip rather than the wait -- send(request).timeout(d) -- would give
+    // the reader back here while its statement was still running on the
+    // isolate. Future.timeout does not touch the request it wraps, so the
+    // handle would still be holding it and nothing over there would notice.
+    assert(!reader.busy, 'a reader is lent only with nothing outstanding');
     // Through Future.sync so that [fn] throwing where it stands still gives
     // the reader back: a leaked one would cost the pool a connection for the
     // rest of the database's life.
@@ -187,6 +195,10 @@ class ReaderPool {
   }
 
   void _release(SqliteWorkerHandle reader) {
+    // The other end of the loan. A response is taken out of the handle's
+    // pending map before its caller is completed, so a reader that got here
+    // by answering has nothing left outstanding.
+    assert(!reader.busy, 'a reader comes back only once nothing is left');
     if (_waiting.isEmpty) {
       _idle.add(reader);
       return;

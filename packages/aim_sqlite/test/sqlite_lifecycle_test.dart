@@ -110,15 +110,21 @@ void main() {
       await letGo.future;
     });
     await holding.future;
-    // From outside the body, so it queues rather than being refused.
-    final queued = db.execute('INSERT INTO t VALUES (2)');
+    // From outside the body, so it queues rather than being refused. Waited
+    // on from here rather than at the end: a bound on this wait would fail
+    // it while nothing was listening, and that reports as an unhandled error
+    // rather than as this expectation.
+    final queued = expectLater(
+      db.execute('INSERT INTO t VALUES (2)'),
+      completion(1),
+    );
     // Ten times acquireTimeout with the writer held throughout: a bound on
     // this wait would have fired long before the release.
     await Future<void>.delayed(const Duration(milliseconds: 200));
     letGo.complete();
     await held;
 
-    expect(await queued, 1);
+    await queued;
   });
 
   test('close lets the statement in flight finish', () async {
@@ -145,6 +151,32 @@ void main() {
     // Waited on before the close rather than after it: the queue is failed
     // from inside close(), and a future nobody is listening to yet reports
     // that as an unhandled error instead of to this test.
+    final refused = expectLater(
+      db.query('SELECT 1'),
+      throwsA(isA<StateError>()),
+    );
+    await db.close();
+
+    await running;
+    await refused;
+  });
+
+  test('close refuses a queued read instead of timing it out', () async {
+    // The timer behind a queued read has to go when close() fails that read.
+    // Left armed it fires later and completes the same waiter a second time,
+    // which throws inside a timer callback where no caller can catch it. The
+    // short acquireTimeout is what brings that second completion inside this
+    // test: close cannot return until the reader finishes its heavy
+    // statement, which is several times the timeout away from here.
+    final db = await SqliteDatabase.open(
+      '${dir.path}/app.db',
+      readers: 1,
+      acquireTimeout: const Duration(milliseconds: 50),
+    );
+
+    final running = db.query(heavyQuery);
+    // A StateError, which a SqliteTimeoutException is not: this read did not
+    // run out of patience, the database went away underneath it.
     final refused = expectLater(
       db.query('SELECT 1'),
       throwsA(isA<StateError>()),
