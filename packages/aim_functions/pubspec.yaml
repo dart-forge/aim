@@ -10,7 +10,6 @@ resolution: workspace
 
 dependencies:
   aim_core: ^0.2.0
-  firebase_functions: ^0.8.0
   shelf: ^1.4.2
 
 dev_dependencies:
