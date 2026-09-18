@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:aim_core/aim_core.dart';
@@ -54,14 +55,39 @@ Future<shelf.Response> _handle<E extends Variables>(
   // the wire. A failure in the body *stream* surfaces later, after
   // shelf_io has already written the status line and headers, which is
   // outside both try/catches above — logging it here, on the way into
-  // shelf.Response, is the only place left that can see it. The error is
-  // swallowed rather than rethrown: shelf_io has no way to end a
-  // chunked response gracefully once bytes are on the wire, so
-  // rethrowing would only recreate the unlogged crash this is fixing.
+  // shelf.Response, is the only place left that can see it.
+  //
+  // By the time a body-stream error happens, the status line and headers
+  // are already on the wire, so there is no "pretend it never happened"
+  // option — the choice is between handing the client a body that looks
+  // complete but is silently broken, and letting the client see that the
+  // transfer failed. This picks the second, unlike aim_server (which
+  // logs and lets the response end as a clean, silently truncated 200).
+  // `sink.addError` is what makes that possible: it both logs the
+  // failure (an earlier version of this comment claimed the opposite —
+  // that rethrowing would only recreate an unlogged crash — which is
+  // wrong; `sink.addError` logs *and* forwards the error) and re-signals
+  // it to shelf_io, which then ends the connection without a clean
+  // terminating chunk, so the client's own HTTP stack reports the
+  // failure instead of quietly finishing.
+  //
+  // `StreamTransformer.fromHandlers`'s `handleError` also stops the
+  // stream at the first error, unlike the `Stream.handleError` this
+  // replaces: `Stream.handleError` (without `cancelOnError`) logs an
+  // error and then keeps forwarding whatever the producer emits
+  // afterwards, so bytes produced after a reported failure were still
+  // reaching the client — a corrupted response, not merely a truncated
+  // one.
   return shelfResponse.change(
-    body: shelfResponse.read().handleError((Object e, StackTrace st) {
-      stderr.writeln('Failed to send response body: $e\n$st');
-    }),
+    body: shelfResponse.read().transform(
+      StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleError: (Object e, StackTrace st, EventSink<List<int>> sink) {
+          stderr.writeln('Failed to send response body: $e\n$st');
+          sink.addError(e, st);
+          sink.close();
+        },
+      ),
+    ),
   );
 }
 
