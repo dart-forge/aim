@@ -23,11 +23,13 @@ void main() {
     await tmp.delete(recursive: true);
   });
 
-  void writeSchema(String contents) {
+  void writeSchemaFile(String fileName, String contents) {
     final schemaDir = Directory(p.join(tmp.path, 'lib', 'schema'));
     schemaDir.createSync(recursive: true);
-    File(p.join(schemaDir.path, 'schema.dart')).writeAsStringSync(contents);
+    File(p.join(schemaDir.path, fileName)).writeAsStringSync(contents);
   }
+
+  void writeSchema(String contents) => writeSchemaFile('schema.dart', contents);
 
   /// Runs `db:generate -n [migrationName]`.
   ///
@@ -384,6 +386,135 @@ final posts = (
               .having((e) => e.message, 'message', contains('nope'))
               .having((e) => e.message, 'message', contains('id, email')),
         ),
+      );
+    });
+
+    test('a variable declared in two files resolves within the file that '
+        'wrote the reference', () async {
+      writeSchemaFile('a.dart', '''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('a_users')
+final users = (
+  a_id: integer('a_id').primaryKey(),
+);
+
+@PgTable('a_posts')
+final aPosts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(() => users.a_id),
+);
+''');
+      writeSchemaFile('b.dart', '''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('b_users')
+final users = (
+  a_id: integer('a_id').primaryKey(),
+);
+''');
+      await generate('first');
+
+      final up = upOf('first');
+      expect(up, contains('REFERENCES a_users(a_id)'));
+      expect(up, isNot(contains('REFERENCES b_users')));
+    });
+
+    test('a variable declared in two other files stops the command, naming '
+        'them', () async {
+      writeSchemaFile('a.dart', '''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('a_users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+''');
+      writeSchemaFile('b.dart', '''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('b_users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+''');
+      writeSchemaFile('c.dart', '''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('c_posts')
+final cPosts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(() => users.id),
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('a.dart'))
+              .having((e) => e.message, 'message', contains('b.dart'))
+              .having(
+                (e) => e.message,
+                'message',
+                contains('declared more than once'),
+              ),
+        ),
+      );
+    });
+
+    test('two records claiming one table stop the command', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('shared')
+final varA = (
+  a_id: integer('a_id').primaryKey(),
+);
+
+@PgTable('shared')
+final varB = (
+  b_id: integer('b_id').primaryKey(),
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('shared'))
+              .having((e) => e.message, 'message', contains('varA'))
+              .having((e) => e.message, 'message', contains('varB')),
+        ),
+      );
+    });
+
+    test('resolves the field against the referenced table, not the one '
+        'holding the key', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  key: integer('user_key').primaryKey(),
+);
+
+@PgTable('posts')
+final posts = (
+  key: integer('post_key').primaryKey(),
+  owner: integer('owner_key').references(() => users.key),
+);
+''');
+      await generate('first');
+
+      final up = upOf('first');
+      expect(up, contains('REFERENCES users(user_key)'));
+      expect(
+        up,
+        isNot(contains('REFERENCES users(post_key)')),
+        reason:
+            'both tables have a field called key, and only the '
+            'referenced one decides the column',
       );
     });
   });

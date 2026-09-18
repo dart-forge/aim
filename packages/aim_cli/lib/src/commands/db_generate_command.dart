@@ -276,7 +276,27 @@ class DbGenerateCommand extends Command<void> {
   /// column definition, so this can only run once every table has been
   /// read.
   List<TableSchema> _resolveReferences(List<_ScannedTable> scanned) {
-    final byVariable = {for (final t in scanned) t.variableName: t};
+    // One record per table. Two claiming the same name would each write a
+    // CREATE TABLE, and a reference to either would resolve against only
+    // one of them.
+    final byTableName = <String, _ScannedTable>{};
+    for (final scannedTable in scanned) {
+      final claimed = byTableName[scannedTable.table.name];
+      if (claimed != null) {
+        throw FormatException(
+          'Two records claim the table "${scannedTable.table.name}": '
+          '${claimed.variableName} in ${claimed.filePath}, and '
+          '${scannedTable.variableName} in ${scannedTable.filePath}.',
+        );
+      }
+      byTableName[scannedTable.table.name] = scannedTable;
+    }
+
+    final byVariable = <String, List<_ScannedTable>>{};
+    for (final scannedTable in scanned) {
+      (byVariable[scannedTable.variableName] ??= []).add(scannedTable);
+    }
+
     return [
       for (final scannedTable in scanned)
         TableSchema(
@@ -301,7 +321,7 @@ class DbGenerateCommand extends Command<void> {
   ForeignKeySchema _resolveForeignKey(
     _PendingForeignKey pending,
     _ScannedTable owner,
-    Map<String, _ScannedTable> byVariable,
+    Map<String, List<_ScannedTable>> byVariable,
   ) {
     final written =
         'references(() => ${pending.referencesVariable}.'
@@ -311,14 +331,34 @@ class DbGenerateCommand extends Command<void> {
         '"${owner.table.name}.${pending.column}" in ${owner.filePath}:\n'
         '  $written\n';
 
-    final target = byVariable[pending.referencesVariable];
-    if (target == null) {
+    final candidates =
+        byVariable[pending.referencesVariable] ?? const <_ScannedTable>[];
+    if (candidates.isEmpty) {
       throw FormatException(
         '${where}No table annotated @PgTable was found for '
         '"${pending.referencesVariable}" in the scanned path. Check the '
         'name, or add the file holding it to the schema path.',
       );
     }
+
+    // A name declared in more than one file is taken to mean the one in
+    // the file that wrote the reference, which is what Dart itself would
+    // do. With no such declaration there is nothing to choose between
+    // them, and picking one would point the key at the wrong table.
+    final sameFile = candidates
+        .where((candidate) => candidate.filePath == owner.filePath)
+        .toList();
+    final pool = sameFile.isNotEmpty ? sameFile : candidates;
+    if (pool.length > 1) {
+      throw FormatException(
+        '$where"${pending.referencesVariable}" is declared more than once: '
+        '${pool.map((candidate) => '${candidate.variableName} in '
+            '${candidate.filePath} as "${candidate.table.name}"').join('; ')}. '
+        'Rename one of them, or move the reference into the file that '
+        'declares the table it means.',
+      );
+    }
+    final target = pool.single;
 
     final column = target.fieldToColumn[pending.referencesField];
     if (column == null) {
