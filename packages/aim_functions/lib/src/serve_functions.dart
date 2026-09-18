@@ -36,9 +36,12 @@ Future<shelf.Response> _handle<E extends Variables>(
       onUnhandledError: _logAndRespond,
     );
   } catch (e, st) {
-    // The request could not be translated at all.
+    // toAimRequest is a synchronous field copy — it does not read the
+    // body — so the only way this throws is a bug on this side (for
+    // example a shelf.Request whose body was already consumed upstream).
+    // That is server-side, so it gets a 500, not a 400.
     stderr.writeln('Failed to process request: $e\n$st');
-    return shelf.Response(400, body: 'Bad Request');
+    return shelf.Response.internalServerError(body: 'Internal Server Error');
   }
   shelf.Response shelfResponse;
   try {
