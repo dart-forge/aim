@@ -443,42 +443,60 @@ class DbGenerateCommand extends Command<void> {
           if (args.isNotEmpty) {
             defaultValue = _extractDefaultValue(args.first.argumentExpression);
           }
+        case 'withDefaultNow':
+          // The ORM documents this as "set the default to
+          // CURRENT_TIMESTAMP", which is the same value withDefault()
+          // records for DateTime.now().
+          defaultValue = 'CURRENT_TIMESTAMP';
         case 'references':
           // references(() => users.id, onDelete: OnDeleteAction.cascade)
           final args = method.argumentList.arguments;
-          if (args.isNotEmpty) {
-            final firstArg = args.first;
-            if (firstArg is FunctionExpression) {
-              final body = firstArg.body;
-              if (body is ExpressionFunctionBody) {
-                final refExpr = body.expression;
-                String? refVariable;
-                String? refField;
-                // PropertyAccess: users.id
-                if (refExpr is PropertyAccess) {
-                  final target = refExpr.target;
-                  if (target is SimpleIdentifier) {
-                    refVariable = target.name;
-                  }
-                  refField = refExpr.propertyName.name;
-                }
-                // PrefixedIdentifier: users.id (fallback)
-                if (refExpr is PrefixedIdentifier) {
-                  refVariable = refExpr.prefix.name;
-                  refField = refExpr.identifier.name;
-                }
-                if (refVariable != null && refField != null) {
-                  foreignKey = _PendingForeignKey(
-                    column: columnName ?? fieldName,
-                    referencesVariable: refVariable,
-                    referencesField: refField,
-                    onDelete: _extractOnDelete(args, filePath),
-                    onUpdate: _extractOnUpdate(args, filePath),
-                  );
-                }
-              }
+          final refExpr = _referencedExpression(args);
+          String? refVariable;
+          String? refField;
+          // PropertyAccess: users.id
+          if (refExpr is PropertyAccess) {
+            final target = refExpr.target;
+            if (target is SimpleIdentifier) {
+              refVariable = target.name;
+            } else if (target is PrefixedIdentifier) {
+              // An import prefix: `u.users.id`. The prefix says which
+              // library the variable came from; the variable name is what
+              // a reference resolves on.
+              refVariable = target.identifier.name;
             }
+            refField = refExpr.propertyName.name;
           }
+          // PrefixedIdentifier: users.id (fallback)
+          if (refExpr is PrefixedIdentifier) {
+            refVariable = refExpr.prefix.name;
+            refField = refExpr.identifier.name;
+          }
+          if (refVariable == null || refField == null) {
+            // Skipping it would leave a table with no referential
+            // integrity and nothing said about it.
+            throw FormatException(
+              'Cannot read the reference on "$fieldName" in $filePath:\n'
+              '  ${method.toSource()}\n'
+              'Write it as a closure naming a table variable and one of '
+              'its fields, as in `references(() => users.id)`.',
+            );
+          }
+          foreignKey = _PendingForeignKey(
+            column: columnName ?? fieldName,
+            referencesVariable: refVariable,
+            referencesField: refField,
+            onDelete: _extractOnDelete(args, filePath),
+            onUpdate: _extractOnUpdate(args, filePath),
+          );
+        default:
+          // Ignoring it would drop whatever the method was meant to
+          // declare, and the migration would be quietly short of it.
+          throw FormatException(
+            'Unknown column method "$methodName" on "$fieldName" in '
+            '$filePath. This tool does not know what it declares, so it '
+            'cannot write the column.',
+          );
       }
     }
 
@@ -495,6 +513,17 @@ class DbGenerateCommand extends Command<void> {
       isIndexed: isIndexed,
       foreignKey: foreignKey,
     );
+  }
+
+  /// The expression a `references(...)` call points at, or null when the
+  /// call is not the closure form this reader understands.
+  Expression? _referencedExpression(NodeList<Argument> args) {
+    if (args.isEmpty) return null;
+    final first = args.first;
+    if (first is! FunctionExpression) return null;
+    final body = first.body;
+    if (body is! ExpressionFunctionBody) return null;
+    return body.expression;
   }
 
   String? _extractDefaultValue(Expression expr) {
@@ -831,6 +860,27 @@ class DbGenerateCommand extends Command<void> {
               column: addDiff.column, // 新しいカラム
               oldColumn: dropDiff.column, // 古いカラム
             ));
+            // A unique constraint is named after the column it sits on,
+            // and Postgres does not rename it with the column. Left alone,
+            // it keeps the old name and a later removal of the constraint
+            // looks for a name that is not there. The statement order puts
+            // the drop before the rename and the add after it.
+            final renamedFrom = dropDiff.column!;
+            final renamedTo = addDiff.column!;
+            if (renamedFrom.isUnique && !renamedFrom.isPrimaryKey) {
+              result.add(_SchemaDiff(
+                type: _DiffType.dropUnique,
+                table: dropDiff.table,
+                column: renamedFrom,
+              ));
+            }
+            if (renamedTo.isUnique && !renamedTo.isPrimaryKey) {
+              result.add(_SchemaDiff(
+                type: _DiffType.addUnique,
+                table: dropDiff.table,
+                column: renamedTo,
+              ));
+            }
             toRemove.add(dropDiff);
             toRemove.add(addDiff);
             break; // このドロップは処理済み

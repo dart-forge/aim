@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:aim_cli/aim_cli.dart';
@@ -8,6 +9,14 @@ import 'package:test/test.dart';
 void main() {
   late Directory tmp;
   late String previousCwd;
+
+  /// Absolute path of the CLI entrypoint, resolved before any test moves
+  /// the working directory.
+  late String entrypoint;
+
+  setUpAll(() {
+    entrypoint = p.absolute('bin', 'aim.dart');
+  });
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('aim_db_constraints_');
@@ -67,6 +76,31 @@ void main() {
     expect(up, isNotNull);
     expect(down, isNotNull);
     return content.substring(up!.end, down!.start);
+  }
+
+  /// Runs `db:generate -n [migrationName]` as a child process, writing
+  /// [answers] to its stdin one line each.
+  ///
+  /// The rename question is read from stdin, and a test cannot answer a
+  /// prompt raised by the command running inside it.
+  Future<ProcessResult> generateAnswering(
+    String migrationName,
+    List<String> answers,
+  ) async {
+    final process = await Process.start(Platform.resolvedExecutable, [
+      'run',
+      entrypoint,
+      'db:generate',
+      '-n',
+      migrationName,
+    ], workingDirectory: tmp.path);
+    for (final answer in answers) {
+      process.stdin.writeln(answer);
+    }
+    await process.stdin.close();
+    final out = await process.stdout.transform(utf8.decoder).join();
+    final err = await process.stderr.transform(utf8.decoder).join();
+    return ProcessResult(process.pid, await process.exitCode, out, err);
   }
 
   group('db:generate - constraints are created with a name', () {
@@ -656,6 +690,153 @@ final child = (
         files,
         hasLength(1),
         reason: 'nothing changed, so there is nothing to migrate',
+      );
+    });
+  });
+
+  group('db:generate - nothing the schema declares is dropped in silence', () {
+    test('a reference through an import prefix is read', () async {
+      writeSchemaFile('users.dart', '''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('pref_users')
+final prefUsers = (
+  id: integer('id').primaryKey(),
+);
+''');
+      writeSchemaFile('posts.dart', '''
+import 'package:aim_orm/aim_orm.dart';
+import 'users.dart' as u;
+
+@PgTable('pref_posts')
+final prefPosts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(() => u.prefUsers.id),
+);
+''');
+      await generate('first');
+
+      expect(upOf('first'), contains('REFERENCES pref_users(id)'));
+    });
+
+    test(
+      'a reference the reader cannot make sense of stops the command',
+      () async {
+        writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+
+@PgTable('posts')
+final posts = (
+  id: integer('id').primaryKey(),
+  user_id: integer('user_id').references(users.id),
+);
+''');
+
+        await expectLater(
+          generate('first'),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('user_id'))
+                .having((e) => e.message, 'message', contains('schema.dart'))
+                .having(
+                  (e) => e.message,
+                  'message',
+                  contains('references(() => users.id)'),
+                ),
+          ),
+        );
+      },
+    );
+
+    test('withDefaultNow becomes a default in the SQL', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  created_at: timestamp('created_at').withDefaultNow(),
+);
+''');
+      await generate('first');
+
+      expect(
+        upOf('first'),
+        contains('created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP'),
+      );
+    });
+
+    test('a method the reader does not know stops the command', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+  name: varchar('name', length: 20).withCollation('C'),
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('withCollation'))
+              .having((e) => e.message, 'message', contains('name'))
+              .having((e) => e.message, 'message', contains('schema.dart')),
+        ),
+      );
+    });
+
+    test('renaming a unique column takes the constraint with it', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('ren_users')
+final renUsers = (
+  id: integer('id').primaryKey(),
+  code: varchar('code', length: 20).unique(),
+);
+''');
+      await generate('first');
+
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('ren_users')
+final renUsers = (
+  id: integer('id').primaryKey(),
+  code2: varchar('code2', length: 20).unique(),
+);
+''');
+      final result = await generateAnswering('second', ['y']);
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+
+      final up = upOf('second');
+      final dropOld = up.indexOf(
+        'DROP CONSTRAINT IF EXISTS uq_ren_users_code;',
+      );
+      final rename = up.indexOf('RENAME COLUMN code TO code2;');
+      final addNew = up.indexOf(
+        'ADD CONSTRAINT uq_ren_users_code2 UNIQUE (code2);',
+      );
+      expect(dropOld, isNonNegative);
+      expect(rename, isNonNegative);
+      expect(addNew, isNonNegative);
+      expect(
+        dropOld,
+        lessThan(rename),
+        reason: 'the old constraint is named after the old column',
+      );
+      expect(
+        rename,
+        lessThan(addNew),
+        reason: 'the new constraint is named after the new column',
       );
     });
   });
