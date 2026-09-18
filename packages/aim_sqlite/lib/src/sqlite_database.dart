@@ -13,6 +13,12 @@ import 'package:aim_sqlite/src/worker/protocol.dart';
 /// as [Database] describes. Parameters, though, only reach the first
 /// statement of such a batch: a later one carrying a placeholder is refused
 /// rather than left holding a NULL that SQLite would store without a word.
+///
+/// That refusal is not a rollback. Statements run one at a time, so the ones
+/// ahead of the refused statement have already been applied and committed
+/// when the [ArgumentError] arrives; running the same call again would apply
+/// them a second time. Wrap a batch that must be all or nothing in a
+/// transaction.
 class SqliteDatabase extends Database {
   SqliteDatabase._(this._writer);
 

@@ -73,7 +73,7 @@ Object? decodeValue({
         SqliteRawText(:final value) => value,
         SqliteRawInteger(:final value) => '$value',
         SqliteRawReal(:final value) => '$value',
-        SqliteRawBlob(:final value) => utf8.decode(value, allowMalformed: true),
+        SqliteRawBlob(:final value) => _decodeUtf8(value, fail),
         SqliteRawNull() => null,
       };
 
@@ -134,6 +134,25 @@ DateTime _parseTimestamp(String value, Never Function(String) fail) {
   final parsed = DateTime.tryParse(hasZone ? trimmed : '${trimmed}Z');
   if (parsed == null) fail('not a timestamp');
   return parsed.toUtc();
+}
+
+/// Reads [bytes] as UTF-8, or fails naming the column.
+///
+/// TEXT affinity does not convert a blob, so a column declared TEXT can hand
+/// back blob storage holding anything at all -- SQLite never checks that the
+/// bytes it was given are UTF-8. Repairing them with replacement characters
+/// would be the one silent corruption in the driver: the repaired string is
+/// what a caller writes back, so the broken bytes would be overwritten with
+/// U+FFFD and the original lost. The driver promises a value read from one
+/// query can be passed to the next, so this fails instead, with the column
+/// attached like every other failure here. A caller who wants the bytes
+/// declares the column BLOB, or casts.
+String _decodeUtf8(Uint8List bytes, Never Function(String) fail) {
+  try {
+    return utf8.decode(bytes);
+  } on FormatException catch (error) {
+    fail('not valid UTF-8: ${error.message}');
+  }
 }
 
 /// The shortest decimal string that round-trips to [value], never in

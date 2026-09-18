@@ -22,6 +22,38 @@ void main() {
     expect(decode(SqliteColumnKind.text, const SqliteRawText('hi')), 'hi');
   });
 
+  test('a text column holding a blob of UTF-8 reads as that text', () {
+    // TEXT affinity does not convert a blob, so a text column can hand back
+    // blob storage. Bytes that are valid UTF-8 read straight through, which
+    // is what keeps the guard below from failing every such column.
+    expect(
+      decode(
+        SqliteColumnKind.text,
+        SqliteRawBlob(Uint8List.fromList([104, 105])),
+        declType: 'TEXT',
+      ),
+      'hi',
+    );
+  });
+
+  test('a text column holding bytes that are not UTF-8 names the column', () {
+    // Repairing these with replacement characters would be the one silent
+    // corruption in the driver: the repaired string is what a caller writes
+    // back, so the broken bytes would be overwritten with U+FFFD.
+    expect(
+      () => decode(
+        SqliteColumnKind.text,
+        SqliteRawBlob(Uint8List.fromList([0xFF, 0xFE, 0xFD])),
+        declType: 'TEXT',
+      ),
+      throwsA(
+        isA<SqliteDecodeException>()
+            .having((e) => e.column, 'column', 'c')
+            .having((e) => e.declType, 'declType', 'TEXT'),
+      ),
+    );
+  });
+
   test('a decimal column stays text so money survives', () {
     expect(
       decode(SqliteColumnKind.decimalText, const SqliteRawText('10.01')),

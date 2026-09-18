@@ -118,7 +118,10 @@ class SqliteConnection {
   /// stepped to the end, so a `RETURNING` clause handed to execute() does
   /// not leave the batch half run.
   ///
-  /// Only the first statement of a batch may carry parameters.
+  /// Only the first statement of a batch may carry parameters. Statements
+  /// are prepared and stepped one at a time, so a later one carrying a
+  /// placeholder is refused only once it is reached -- by which point
+  /// everything before it has run and committed, and nothing is rolled back.
   StatementBatchResult? run(
     String sql, {
     required List<SqliteBindValue> positional,
@@ -334,7 +337,9 @@ class SqliteConnection {
   ///
   /// Only the first statement is bound. A later one carrying placeholders is
   /// rejected rather than left silently holding NULLs, which is the whole
-  /// reason parameters and multi-statement SQL do not mix.
+  /// reason parameters and multi-statement SQL do not mix. The rejection
+  /// cannot come any earlier than the statement itself on this path, so it
+  /// says how much of the batch has already run.
   void _bind(
     String sql,
     Pointer<Void> stmt,
@@ -348,7 +353,9 @@ class SqliteConnection {
         throw ArgumentError.value(
           sql,
           'sql',
-          'only the first statement of a batch can take parameters',
+          'only the first statement of a batch can take parameters; the '
+              '$index statement(s) before this one have already run and been '
+              'committed, so running this call again would apply them twice',
         );
       }
       return;

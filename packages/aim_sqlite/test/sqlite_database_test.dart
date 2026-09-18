@@ -146,10 +146,28 @@ void main() {
   test('refuses parameters on any statement but the first', () async {
     // Only the first statement of a batch is bound, and leaving a later
     // placeholder unbound would have SQLite quietly read it as NULL.
-    expect(
-      () => db.query('SELECT ? AS a; SELECT ? AS b', args: [1]),
-      throwsA(isA<ArgumentError>()),
+    await db.execute('CREATE TABLE t (a INTEGER)');
+
+    await expectLater(
+      () => db.execute(
+        'INSERT INTO t VALUES (?); INSERT INTO t VALUES (?)',
+        args: [1],
+      ),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => e.message,
+          'message',
+          contains('already run'),
+        ),
+      ),
     );
+
+    // The refusal lands as that statement is reached, so the one before it
+    // has already run and committed. Nothing is rolled back, which is why
+    // the message has to say so rather than reading as a precondition.
+    expect(await db.query('SELECT a FROM t'), [
+      {'a': 1},
+    ]);
   });
 
   test('every declared type survives the round trip', () async {
@@ -267,6 +285,21 @@ void main() {
     );
 
     expect(await db.query('SELECT 1 AS a'), [
+      {'a': 1},
+    ]);
+  });
+
+  test('opens a memory database, which has no WAL to turn on', () async {
+    // The journal_mode check has to accept 'memory' as well as 'wal', or a
+    // documented capability is unopenable. Nothing else in this file covers
+    // that branch.
+    final memory = await SqliteDatabase.open(':memory:');
+    addTearDown(memory.close);
+
+    await memory.execute('CREATE TABLE t (a INTEGER)');
+    await memory.execute('INSERT INTO t VALUES (1)');
+
+    expect(await memory.query('SELECT a FROM t'), [
       {'a': 1},
     ]);
   });
