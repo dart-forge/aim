@@ -82,10 +82,12 @@ class SqliteDatabase extends Database {
       );
 
   @override
-  Future<void> close() async {
-    if (_closed) return;
+  Future<void> close() {
     _closed = true;
-    await _writer.close();
+    // The handle hands the same future back every time, so a second close
+    // still waits for the isolate to actually be gone rather than returning
+    // while the first one is mid-flight.
+    return _writer.close();
   }
 
   Future<SqliteRowsResponse> _run(

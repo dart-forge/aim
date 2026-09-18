@@ -93,10 +93,10 @@ class SqliteConnection {
       library.extendedResultCodes(handle, 1);
       library.busyTimeout(handle, busyTimeout.inMilliseconds);
       // SQLite leaves foreign keys off for backwards compatibility.
-      connection._exec('PRAGMA foreign_keys = ON');
+      connection._pragma('PRAGMA foreign_keys = ON');
       if (!readOnly) {
         connection._enableWal();
-        connection._exec('PRAGMA synchronous = ${synchronous.pragmaValue}');
+        connection._pragma('PRAGMA synchronous = ${synchronous.pragmaValue}');
       }
     } on Object {
       connection.close();
@@ -555,7 +555,7 @@ class SqliteConnection {
   void _enableWal() {
     const sql = 'PRAGMA journal_mode = WAL';
     // The pragma answers with the mode it actually reached.
-    final rows = _runUnbound(sql, wantRows: true).rows;
+    final rows = _pragma(sql, wantRows: true).rows;
     final mode = rows.length == 1 ? rows.single.values.single : null;
     // A :memory: or temporary database answers 'memory': it has no file to
     // share, so there was never anything WAL could give it. Any other answer
@@ -571,9 +571,9 @@ class SqliteConnection {
     }
   }
 
-  void _exec(String sql) => _runUnbound(sql, wantRows: false);
-
-  StatementBatchResult _runUnbound(String sql, {required bool wantRows}) => run(
+  /// Runs one of the driver's own settings statements. None of them takes a
+  /// parameter, and none of them is ever refused as a write.
+  StatementBatchResult _pragma(String sql, {bool wantRows = false}) => run(
     sql,
     positional: const [],
     named: const {},

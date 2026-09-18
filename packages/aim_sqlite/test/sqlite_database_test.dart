@@ -29,6 +29,17 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('open throws what the worker could not open', () {
+    // The worker sends the failure in place of its port, so this surfaces
+    // here rather than as an isolate that never answers.
+    expect(
+      SqliteDatabase.open('${dir.path}/no-such-directory/app.db'),
+      throwsA(
+        isA<SqliteException>().having((e) => e.sql, 'sql', contains('open')),
+      ),
+    );
+  });
+
   test('puts the database in WAL mode', () async {
     final rows = await db.query('PRAGMA journal_mode');
 
@@ -53,6 +64,16 @@ void main() {
     expect(await db.execute('CREATE TABLE t (a INTEGER)'), 0);
   });
 
+  test('a statement that reports no count does not inherit the last', () async {
+    // sqlite3_changes keeps whatever the last statement that reported a
+    // count left in it, so a DDL statement run after an INSERT would
+    // otherwise claim the rows the INSERT changed.
+    await db.execute('CREATE TABLE t (a INTEGER)');
+    await db.execute('INSERT INTO t VALUES (1), (2)');
+
+    expect(await db.execute('CREATE TABLE u (a INTEGER)'), 0);
+  });
+
   test('sums the counts when one call runs several statements', () async {
     await db.execute('CREATE TABLE t (a INTEGER)');
 
@@ -69,6 +90,20 @@ void main() {
     final rows = await db.query('SELECT 99 AS x; SELECT a FROM t');
 
     expect(rows, [
+      {'a': 1},
+    ]);
+  });
+
+  test('steps over a trailing comment and a bare semicolon', () async {
+    // prepare_v2 answers with no statement at all for text it cannot run,
+    // and the batch has to walk past that rather than stall on it.
+    await db.execute('CREATE TABLE t (a INTEGER);');
+
+    expect(
+      await db.execute('INSERT INTO t VALUES (1); -- nothing after this\n'),
+      1,
+    );
+    expect(await db.query('SELECT a FROM t; '), [
       {'a': 1},
     ]);
   });
@@ -233,6 +268,18 @@ void main() {
 
     expect(await db.query('SELECT 1 AS a'), [
       {'a': 1},
+    ]);
+  });
+
+  test('close waits for a statement already running', () async {
+    // An FFI call cannot be interrupted, so closing has to mean "stop once
+    // you are done" rather than cutting the answer off.
+    final counted = db.query(heavyQuery);
+
+    await db.close();
+
+    expect(await counted, [
+      {'n': 2000000},
     ]);
   });
 

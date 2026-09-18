@@ -123,7 +123,8 @@ class SqliteWorkerHandle {
   }
 
   /// The isolate is gone. Nothing else will arrive, so every caller still
-  /// waiting has to hear about it.
+  /// waiting has to hear about it. After a deliberate close there is nobody
+  /// left waiting and [error] goes nowhere.
   void _finish(Object error) {
     _requests = null;
     _stopping = true;
