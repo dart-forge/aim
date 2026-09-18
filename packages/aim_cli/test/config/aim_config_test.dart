@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:aim_cli/src/config/aim_config.dart';
 import 'package:test/test.dart';
 
@@ -45,6 +47,83 @@ void main() {
       final config = AimConfig.parse('aim: true\n');
       expect(config.target, AimTarget.server);
       expect(config.env, isEmpty);
+    });
+  });
+
+  group('AimConfig.parse database', () {
+    test('expands a default in aim.database.url', () {
+      final config = AimConfig.parse(
+        'aim:\n  database:\n'
+        '    url: \${AIM_TEST_UNSET_DB:postgresql://localhost:5432/dev}\n',
+      );
+      expect(config.database.url, 'postgresql://localhost:5432/dev');
+    });
+
+    test('treats an unset url with no default as absent', () {
+      final config = AimConfig.parse(
+        'aim:\n  database:\n    url: \${AIM_TEST_UNSET_DB}\n',
+      );
+      expect(config.database.url, isNull);
+    });
+
+    test('expands a default in aim.database.schema', () {
+      final config = AimConfig.parse(
+        'aim:\n  database:\n'
+        '    schema: \${AIM_TEST_UNSET_SCHEMA:lib/db/schema.dart}\n',
+      );
+      expect(config.database.configuredSchema, 'lib/db/schema.dart');
+    });
+
+    test('resolveSchema prefers --path, then the configured path', () {
+      final configured = AimConfig.parse(
+        'aim:\n  database:\n    schema: lib/db/schema.dart\n',
+      );
+      expect(
+        configured.database.resolveSchema('lib/other.dart'),
+        'lib/other.dart',
+      );
+      expect(configured.database.resolveSchema(null), 'lib/db/schema.dart');
+
+      final none = AimConfig.parse('name: app\n');
+      expect(none.database.resolveSchema(null), 'lib/schema');
+    });
+
+    test('has no database settings when aim.database is absent', () {
+      final config = AimConfig.parse('aim:\n  entry: bin/server.dart\n');
+      expect(config.database.url, isNull);
+      expect(config.database.configuredSchema, isNull);
+    });
+
+    test('ignores a non-map aim.database section', () {
+      final config = AimConfig.parse('aim:\n  database: true\n');
+      expect(config.database.url, isNull);
+      expect(config.database.configuredSchema, isNull);
+    });
+  });
+
+  group('AimConfig.loadOrDefault', () {
+    late Directory tmp;
+
+    setUp(() async {
+      tmp = await Directory.systemTemp.createTemp('aim_config_');
+    });
+
+    tearDown(() async => tmp.delete(recursive: true));
+
+    test('reads the database section from the file', () async {
+      final pubspec = File('${tmp.path}/pubspec.yaml');
+      await pubspec.writeAsString(
+        'name: app\naim:\n  database:\n'
+        '    url: postgresql://localhost/app\n',
+      );
+      final config = await AimConfig.loadOrDefault(pubspec.path);
+      expect(config.database.url, 'postgresql://localhost/app');
+    });
+
+    test('returns defaults when the file is absent', () async {
+      final config = await AimConfig.loadOrDefault('${tmp.path}/pubspec.yaml');
+      expect(config.database.url, isNull);
+      expect(config.target, AimTarget.server);
     });
   });
 }

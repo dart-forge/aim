@@ -41,7 +41,7 @@ aim:
 This tells the code generator and migration tools where to find your table definitions.
 
 ::: tip
-If not specified, the default path is `lib/schema.dart`.
+If not specified, the default path is `lib/schema`, which may be a file or a directory.
 :::
 
 ### 3. Define Schema

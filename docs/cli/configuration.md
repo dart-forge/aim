@@ -9,7 +9,19 @@ head:
 
 # Configuration
 
-Configure Aim CLI via `pubspec.yaml`.
+Configure Aim CLI via `pubspec.yaml`, under a top-level `aim:` key.
+
+## Settings
+
+| Key | Used by | Description | Default |
+|---|---|---|---|
+| `target` | `aim dev`, `aim build` | Where the app runs: `server` or `edge` | `server` |
+| `entry` | `aim dev`, `aim build` | Entry point | `bin/server.dart`, or `lib/main.dart` for `edge` |
+| `env` | `aim dev` | Environment variables passed to the app | none |
+| `database.url` | `aim db:*` | Database connection URL | required by `aim db:*` |
+| `database.schema` | `aim db:generate` | Path to table definitions, a file or a directory | `lib/schema` |
+
+Values under `env` and `database` go through [variable expansion](#variable-expansion-formats), so secrets stay out of the file.
 
 ## Basic Configuration
 
@@ -96,6 +108,34 @@ aim:
     JWT_SECRET: ${JWT_SECRET}
 ```
 
+## Database
+
+`aim.database` configures the `aim db:*` commands.
+
+```yaml
+aim:
+  database:
+    url: ${DATABASE_URL:postgresql://localhost:5432/mydb}
+    schema: lib/schema
+```
+
+| Key | Description |
+|---|---|
+| `url` | Connection URL used by `db:migrate`, `db:rollback`, `db:reset` and `db:status` |
+| `schema` | Where `db:generate` reads table definitions from. `--path` overrides it |
+
+`url` is expanded like `aim.env`, so the connection string does not have to be
+committed:
+
+```bash
+export DATABASE_URL="postgresql://user:pass@prod-host:5432/mydb"
+aim db:migrate
+```
+
+A `${VAR}` that is not set and has no default reads as *not configured*, and the
+command stops with `Database URL not found` instead of dialling an empty
+address.
+
 ## Variable Expansion Formats
 
 | Format | Description |
@@ -103,6 +143,8 @@ aim:
 | `$VAR_NAME` | Simple expansion |
 | `${VAR_NAME}` | Braces expansion |
 | `${VAR_NAME:default}` | With default value |
+
+Expansion applies to the values under `aim.env` and `aim.database`.
 
 ## How It Works
 

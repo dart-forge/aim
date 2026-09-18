@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:aim_cli/src/config/aim_config.dart';
 import 'package:args/command_runner.dart';
 import 'package:aim_orm/aim_orm.dart';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:path/path.dart' as path;
-import 'package:yaml/yaml.dart';
 
 class DbGenerateCommand extends Command<void> {
   @override
@@ -20,7 +20,6 @@ class DbGenerateCommand extends Command<void> {
       'path',
       abbr: 'p',
       help: 'Path to schema definitions (default: lib/schema)',
-      defaultsTo: 'lib/schema',
     );
     argParser.addOption(
       'name',
@@ -39,17 +38,11 @@ class DbGenerateCommand extends Command<void> {
       exit(1);
     }
 
-    final pubspecContent = await pubspecFile.readAsString();
+    final config = await AimConfig.load(pubspecFile.path);
 
     // schema パスを決定（CLI オプション > pubspec.yaml > デフォルト）
-    String schemaPath = argResults?['path'] as String;
-    if (schemaPath == 'lib/schema') {
-      // デフォルト値の場合、pubspec.yaml を確認
-      final pubspecSchemaPath = _extractAimSchema(pubspecContent);
-      if (pubspecSchemaPath != null) {
-        schemaPath = pubspecSchemaPath;
-      }
-    }
+    final schemaPath =
+        config.database.resolveSchema(argResults?['path'] as String?);
 
     final absolutePath = path.absolute(schemaPath);
 
@@ -1433,18 +1426,4 @@ String _toSnakeCase(String input) {
   // 連続するアンダースコアを1つに
   result = result.replaceAll(RegExp(r'_+'), '_');
   return result.toLowerCase();
-}
-
-/// Extract aim.database.schema from pubspec.yaml content
-String? _extractAimSchema(String content) {
-  final yaml = loadYaml(content);
-  if (yaml is! YamlMap) return null;
-
-  final aim = yaml['aim'];
-  if (aim is! YamlMap) return null;
-
-  final database = aim['database'];
-  if (database is! YamlMap) return null;
-
-  return database['schema'] as String?;
 }
