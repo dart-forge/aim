@@ -76,6 +76,15 @@ class SqliteWorkerHandle {
     if (port == null || _stopping) {
       return Future.error(StateError('the SQLite worker isolate is stopped'));
     }
+    // One counter on one isolate hands the ids out, so a collision cannot
+    // happen -- and it must not, because this map is how a response finds
+    // its caller: an overwrite would leave the first caller waiting for an
+    // answer the second one had already taken. Said out loud rather than
+    // left to be inferred, because the map is the only record of who asked.
+    assert(
+      !_pending.containsKey(request.id),
+      'request ${request.id} is already outstanding on this worker',
+    );
     final completer = Completer<SqliteResponse>();
     _pending[request.id] = completer;
     port.send(request);
@@ -119,7 +128,18 @@ class SqliteWorkerHandle {
       return;
     }
     final response = message as SqliteResponse;
-    _pending.remove(response.id)?.complete(response);
+    final caller = _pending.remove(response.id);
+    // Every response has a caller: nothing takes a request back once it
+    // has been sent, since a read that gives up waiting gives up before it
+    // has a worker at all and a request that did reach one is awaited to
+    // the end. That is also what keeps the pool's idea of which worker is
+    // busy and the worker's own agreeing, so a response nobody is waiting
+    // for would mean those two had come apart -- a connection lent out
+    // while it is still running somebody else's statement. Said out loud
+    // rather than passing unnoticed; with asserts off there is nobody left
+    // to tell, so it is dropped.
+    assert(caller != null, 'no caller is waiting for response ${response.id}');
+    caller?.complete(response);
   }
 
   /// The isolate is gone. Nothing else will arrive, so every caller still
