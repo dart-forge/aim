@@ -42,23 +42,32 @@ void main() {
   });
 
   test('no exported file reaches dart:ffi or dart:isolate', () {
-    // Walk the files named in the barrel; none of them may import dart:ffi or
-    // dart:isolate, and none may name a type from them.
-    for (final path in [
-      'lib/src/sqlite_database.dart',
-      'lib/src/sqlite_options.dart',
-      'lib/src/sqlite_exception.dart',
-      'lib/src/sqlite_stats.dart',
-    ]) {
+    // The file list is DERIVED from the barrel's own exports, not written
+    // out again: a hardcoded list lets a newly exported file pass this test
+    // simply by never being added to it. isNotEmpty guards the derivation
+    // itself -- a barrel that parsed to no exports would otherwise make the
+    // loop below, and so the whole test, pass vacuously.
+    final exported =
+        RegExp(r'''^export\s+['"](src/[^'"]+)['"]''', multiLine: true)
+            .allMatches(File('lib/aim_sqlite.dart').readAsStringSync())
+            .map((m) => 'lib/${m.group(1)!}')
+            .toList();
+    expect(exported, isNotEmpty);
+
+    for (final path in exported) {
       final source = File(path).readAsStringSync();
+      // Both imports, not only ffi: a file could reach for ReceivePort or
+      // Isolate.spawn without ever writing the word SendPort.
       expect(source, isNot(contains("import 'dart:ffi'")), reason: path);
+      expect(source, isNot(contains("import 'dart:isolate'")), reason: path);
       expect(source, isNot(contains('Pointer<')), reason: path);
       expect(source, isNot(contains('SendPort')), reason: path);
     }
   });
 
   test('only the connection layer touches ffi', () {
-    // Keeping FFI in one file is what makes the rest unit testable.
+    // Keeping FFI confined to these two files is what makes the rest unit
+    // testable.
     final ffiUsers =
         Directory('lib')
             .listSync(recursive: true)
@@ -103,9 +112,12 @@ void main() {
 /// Collapses every run of whitespace in [s] to a single space, and trims the
 /// ends.
 ///
-/// The third export's `show` clause is long enough that dart format wraps it
-/// onto its own, indented line, and a future export could wrap differently
-/// again as the barrel grows or shrinks. Comparing the raw captured clause
+/// Not needed for today's barrel: the third export's `show` clause wraps
+/// onto its own indented line, but the line break falls before the literal
+/// `show` and is absorbed by the regex's own leading `\s+`, so it never
+/// reaches the captured clause below -- this is tolerance for a wrap that
+/// does not currently occur. A future export could still wrap *inside* the
+/// clause as the barrel grows or shrinks, and comparing that raw capture
 /// would tie this test to exactly where dart format happens to break the
 /// line, which is not a property of the public surface. Collapsing
 /// whitespace first keeps the comparison about which identifiers are
