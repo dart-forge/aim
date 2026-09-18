@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:isolate';
+
 import 'package:aim_sqlite/src/ffi/bindings.dart';
 import 'package:test/test.dart';
 
@@ -6,8 +9,9 @@ void main() {
     test('loads the platform library and reports a usable version', () {
       final lib = SqliteLibrary.open();
 
-      // 3.7.0 is the first release with WAL, which the driver requires.
-      expect(lib.versionNumber, greaterThanOrEqualTo(3007000));
+      // The floor comes from sqlite3_malloc64 (3.8.7), the newest function
+      // in the symbol list -- not from WAL (3.7.0).
+      expect(lib.versionNumber, greaterThanOrEqualTo(3008007));
     });
 
     test('names every place it looked when the library is missing', () {
@@ -17,16 +21,67 @@ void main() {
           isA<SqliteLibraryNotFoundException>().having(
             (e) => e.searched,
             'searched',
-            contains('/nonexistent/libsqlite3.dylib'),
+            // An explicit path is tried alone -- no fallback appended.
+            equals(['/nonexistent/libsqlite3.dylib']),
           ),
         ),
       );
     });
+  });
 
-    test('reads the override from the environment', () {
-      // AIM_SQLITE_LIBRARY is only read when no explicit path is given, so
-      // this asserts the precedence rather than the loading itself.
-      expect(SqliteLibrary.environmentVariable, 'AIM_SQLITE_LIBRARY');
+  group('SqliteLibrary.candidates', () {
+    test('an explicit path wins outright, ignoring the environment', () {
+      expect(
+        SqliteLibrary.candidates('/explicit/path', {
+          SqliteLibrary.environmentVariable: '/env/path',
+        }),
+        ['/explicit/path'],
+      );
+    });
+
+    test('the environment override wins when no explicit path is given', () {
+      expect(
+        SqliteLibrary.candidates(null, {
+          SqliteLibrary.environmentVariable: '/env/path',
+        }),
+        ['/env/path'],
+      );
+    });
+
+    test('falls back to the platform defaults when neither is set', () {
+      final result = SqliteLibrary.candidates(null, {});
+
+      if (Platform.isMacOS) {
+        expect(result, ['libsqlite3.dylib']);
+      } else if (Platform.isWindows) {
+        expect(result, ['sqlite3.dll']);
+      } else {
+        expect(result, ['libsqlite3.so.0', 'libsqlite3.so']);
+      }
     });
   });
+
+  group('SqliteLibrary SendPort safety', () {
+    test('cannot cross a SendPort to another isolate', () async {
+      final lib = SqliteLibrary.open();
+      final receivePort = ReceivePort();
+      addTearDown(receivePort.close);
+
+      final isolate = await Isolate.spawn(
+        _sendBackOwnPort,
+        receivePort.sendPort,
+      );
+      addTearDown(isolate.kill);
+      final childSendPort = await receivePort.first as SendPort;
+
+      expect(() => childSendPort.send(lib), throwsArgumentError);
+    });
+  });
+}
+
+/// Isolate entry point: hands its own [SendPort] back to the caller so the
+/// caller has a real cross-isolate port to send to.
+void _sendBackOwnPort(SendPort parentSendPort) {
+  final childReceivePort = ReceivePort();
+  parentSendPort.send(childReceivePort.sendPort);
 }

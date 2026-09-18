@@ -350,7 +350,9 @@ class SqliteLibrary {
   /// must not be read after a non-DML statement.
   final ChangesDart changes;
 
-  /// sqlite3_total_changes.
+  /// sqlite3_total_changes. Unlike [changes], this also counts rows
+  /// changed by triggers and foreign key actions, so a delta in it must
+  /// not be treated as an affected-row count.
   final TotalChangesDart totalChanges;
 
   /// sqlite3_errmsg.
@@ -381,30 +383,69 @@ class SqliteLibrary {
   int get versionNumber => _libversionNumber();
 
   static SqliteLibrary open({String? libraryPath}) {
-    final searched = <String>[
-      if (libraryPath != null) libraryPath,
-      if (libraryPath == null &&
-          Platform.environment[environmentVariable] != null)
-        Platform.environment[environmentVariable]!,
-      if (libraryPath == null &&
-          Platform.environment[environmentVariable] == null)
-        ..._platformDefaults(),
-    ];
+    final searched = candidates(libraryPath, Platform.environment);
     Object? last;
     for (final path in searched) {
+      final DynamicLibrary library;
       try {
-        return SqliteLibrary._(DynamicLibrary.open(path));
+        library = DynamicLibrary.open(path);
       } on Object catch (error) {
         last = error;
+        continue;
       }
+      _checkMinimumVersion(library, path);
+      // A lookup failure below propagates as-is, naming the missing
+      // symbol, instead of being reported as "could not load libsqlite3".
+      return SqliteLibrary._(library);
     }
     throw SqliteLibraryNotFoundException(searched, last!);
+  }
+
+  /// The paths [open] will try, in order: an explicit [libraryPath] wins
+  /// outright and nothing else is tried; otherwise [environmentVariable]
+  /// wins if set; otherwise the platform defaults for the current OS.
+  ///
+  /// Takes the environment as a plain map, rather than reading
+  /// [Platform.environment] itself, so this precedence can be tested
+  /// without touching the real process environment.
+  static List<String> candidates(String? libraryPath, Map<String, String> env) {
+    if (libraryPath != null) return [libraryPath];
+    final override = env[environmentVariable];
+    if (override != null) return [override];
+    return _platformDefaults();
   }
 
   static List<String> _platformDefaults() {
     if (Platform.isMacOS) return ['libsqlite3.dylib'];
     if (Platform.isWindows) return ['sqlite3.dll'];
     return ['libsqlite3.so.0', 'libsqlite3.so'];
+  }
+
+  /// sqlite3_malloc64 (3.8.7) is the newest function in the symbol list
+  /// below, so that -- not any SQL feature like WAL -- is the actual
+  /// floor this driver can run on.
+  static const int _minimumVersion = 3008007;
+
+  /// Throws if [library] (opened from [path]) predates [_minimumVersion].
+  ///
+  /// Checked before any of the other 30 symbols are looked up: an old
+  /// libsqlite3 must fail with its version number in the message, not
+  /// with a confusing missing-symbol error from whichever new function
+  /// happens to be looked up first.
+  static void _checkMinimumVersion(DynamicLibrary library, String path) {
+    final libversionNumber = library
+        .lookupFunction<LibversionNumberNative, LibversionNumberDart>(
+          'sqlite3_libversion_number',
+        );
+    final version = libversionNumber();
+    if (version < _minimumVersion) {
+      throw SqliteLibraryNotFoundException(
+        [path],
+        'libsqlite3 at "$path" is version $version, older than the '
+        'minimum supported version $_minimumVersion (required by '
+        'sqlite3_malloc64)',
+      );
+    }
   }
 }
 
@@ -427,8 +468,18 @@ extension SqliteUtf8 on SqliteLibrary {
   void freeUtf8(SqliteNativeString string) => freeMemory(string.pointer.cast());
 
   /// Reads [length] bytes of UTF-8 from [pointer].
-  String readUtf8(Pointer<Char> pointer, int length) =>
-      utf8.decode(pointer.cast<Uint8>().asTypedList(length));
+  ///
+  /// sqlite3_column_text returns NULL (with a byte count of 0) for a SQL
+  /// NULL column, so the caller must branch on the column's storage class
+  /// (via columnType) before calling this rather than relying on it to
+  /// signal NULL.
+  String readUtf8(Pointer<Char> pointer, int length) {
+    assert(
+      pointer != nullptr || length == 0,
+      'readUtf8 called with a null pointer and a non-zero length',
+    );
+    return utf8.decode(pointer.cast<Uint8>().asTypedList(length));
+  }
 
   /// Reads a NUL terminated C string (for sqlite3_errmsg / _column_name /
   /// _column_decltype, which do not report a length).
