@@ -51,8 +51,10 @@ void main() {
       addTearDown(db.close);
       await db.execute('CREATE TABLE t (a INTEGER)');
 
-      // INSERT is routed to the writer by its leading keyword, so no reader
-      // ever sees it; the RETURNING rows still come back through query().
+      // INSERT goes to the writer on its leading keyword alone, so this
+      // exercises the first stage only -- no reader is involved and
+      // stmt_readonly never runs. The test below is the one that reaches the
+      // second stage.
       final rows = await db.query('INSERT INTO t VALUES (1) RETURNING a');
 
       expect(rows, [
@@ -64,26 +66,43 @@ void main() {
     },
   );
 
-  test('a write the leading keyword hides is run on the writer', () async {
-    final db = await SqliteDatabase.open('${dir.path}/app.db', readers: 2);
+  test('a brand new database can be read through a reader', () async {
+    // Names the WAL index step. Without it the readers cannot open a database
+    // nothing has written yet, and three other tests in this file fail with a
+    // confusing SQLITE_CANTOPEN instead of this one failing with its name.
+    final db = await SqliteDatabase.open('${dir.path}/fresh.db', readers: 2);
     addTearDown(db.close);
-    await db.execute('CREATE TABLE t (a INTEGER)');
 
-    // The leading WITH routes this to a reader, which prepares it, finds
-    // that sqlite3_stmt_readonly says it writes, and hands it back without
-    // stepping it. The writer then runs it -- parameters and all.
-    final rows = await db.query(
-      'WITH v(a) AS (VALUES (?)) INSERT INTO t SELECT a FROM v RETURNING a',
-      args: [7],
-    );
-
-    expect(rows, [
-      {'a': 7},
-    ]);
-    expect(await db.query('SELECT a FROM t'), [
-      {'a': 7},
+    expect(await db.query('SELECT 1 AS a'), [
+      {'a': 1},
     ]);
   });
+
+  test(
+    'a write that looks like a read is caught by the second stage',
+    () async {
+      final db = await SqliteDatabase.open('${dir.path}/app.db', readers: 2);
+      addTearDown(db.close);
+      await db.execute('CREATE TABLE t (a INTEGER)');
+
+      // Leading keyword WITH, so the first stage sends this to a reader. Only
+      // sqlite3_stmt_readonly can tell that it writes, and the reader must hand
+      // it back rather than stepping it -- the read-only connection would
+      // otherwise refuse it with a bare "attempt to write a readonly database".
+      // Named parameters, so the redirect re-encodes those too.
+      final rows = await db.query(
+        'WITH v(x) AS (VALUES (:a)) INSERT INTO t SELECT x FROM v RETURNING a',
+        params: {'a': 7},
+      );
+
+      expect(rows, [
+        {'a': 7},
+      ]);
+      expect(await db.query('SELECT count(*) AS n FROM t'), [
+        {'n': 1},
+      ]);
+    },
+  );
 
   test('a read batch with a write in it runs nothing on the reader', () async {
     final db = await SqliteDatabase.open('${dir.path}/app.db', readers: 2);
@@ -134,7 +153,7 @@ void main() {
     // completers hold the writer while the read below goes through.
     final bodyRunning = Completer<void>();
     final letGo = Completer<void>();
-    final held = db.transaction((tx) async {
+    final holding = db.transaction((tx) async {
       await tx.execute('INSERT INTO t VALUES (2)');
       bodyRunning.complete();
       await letGo.future;
@@ -154,7 +173,7 @@ void main() {
     );
 
     letGo.complete();
-    await held;
+    await holding;
     // And the snapshot is per statement, so the commit is visible at once.
     expect(await db.query('SELECT count(*) AS n FROM t'), [
       {'n': 2},
@@ -167,7 +186,7 @@ void main() {
     final order = <String>[];
     final bodyRunning = Completer<void>();
     final letGo = Completer<void>();
-    final held = db.transaction((tx) async {
+    final holding = db.transaction((tx) async {
       bodyRunning.complete();
       await letGo.future;
       order.add('transaction');
@@ -177,18 +196,39 @@ void main() {
     // query() routes a SELECT to a reader, which answers while the writer is
     // held. execute() never consults the routing, so the same SQL waits for
     // the writer instead -- which is what puts it last.
-    final reading = db.query('SELECT 1 AS a').then((_) => order.add('query'));
+    //
+    // The read is given a timeout because the regression here is that it
+    // queues for the writer too: without one it would wait for a lease the
+    // line below releases, and the test would hang to its own timeout
+    // instead of saying what went wrong.
+    final reading = db
+        .query('SELECT 1 AS a')
+        .timeout(const Duration(seconds: 2))
+        .then((_) => order.add('query'));
     final executing = db
         .execute('SELECT 1 AS a')
         .then((_) => order.add('execute'));
-    await reading;
-    letGo.complete();
-    await Future.wait([held, executing]);
+    try {
+      await reading;
+    } finally {
+      // Even on that failure, so the transaction ends and the teardown does
+      // not close a database whose writer is still held.
+      letGo.complete();
+    }
+    await Future.wait([holding, executing]);
 
     expect(order, ['query', 'transaction', 'execute']);
   });
 
   test('reads run in parallel across readers', () async {
+    // This measures parallelism, which cannot happen on one core. Asserted so
+    // a constrained machine fails with the reason rather than with a ratio.
+    expect(
+      Platform.numberOfProcessors,
+      greaterThanOrEqualTo(2),
+      reason: 'this test needs at least two cores to mean anything',
+    );
+
     final db = await SqliteDatabase.open('${dir.path}/app.db', readers: 2);
     addTearDown(db.close);
     // Warm up so the measurement is not dominated by isolate start up.

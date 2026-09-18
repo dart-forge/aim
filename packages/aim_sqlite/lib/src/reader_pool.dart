@@ -59,6 +59,13 @@ class ReaderPool {
 
   /// The free ones, lent from the end: the reader that ran the last
   /// statement runs the next one, and its cache is the warm one.
+  ///
+  /// The same order concentrates the damage if a reader ever dies, since
+  /// nothing here retires one: the dead reader stays the preferred pick, so
+  /// every later read fails on it rather than one read in [size]. Left that
+  /// way deliberately -- dropping a handle with nothing to replace it and
+  /// nowhere to fall back to would turn reads that fail loudly into reads
+  /// that wait forever.
   final List<SqliteWorkerHandle> _idle;
 
   final Queue<Completer<SqliteWorkerHandle>> _waiting = Queue();
@@ -88,6 +95,9 @@ class ReaderPool {
   /// wait for, so the wait would never end. A caller asks [size] first and
   /// sends the read to the writer instead.
   Future<T> withReader<T>(Future<T> Function(SqliteWorkerHandle reader) fn) {
+    // Says so rather than hanging, which is what breaking that precondition
+    // would otherwise look like from the outside.
+    assert(size > 0, 'a read cannot wait for a reader when there are none');
     if (_closing != null) {
       return Future.error(StateError('the SQLite readers are closed'));
     }

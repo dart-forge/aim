@@ -38,6 +38,15 @@ const int _walIndexRequestId = -2;
 /// so a write that the keyword did not give away is still never stepped by a
 /// reader.
 ///
+/// **Await a write before reading what it wrote.** A read goes to its own
+/// connection instead of queueing behind the writes, so a write and a read
+/// started in that order are two statements on two connections and the read
+/// may well win: it can return the value from before the write, or fail with
+/// "no such table" when the write was the CREATE TABLE. Awaiting the write
+/// is all it takes. This is a different thing from the snapshot a reader
+/// takes while a transaction holds the writer, which is deliberate, and
+/// which awaiting cannot change from outside the transaction.
+///
 /// One call may run several statements, and the counts and rows are reported
 /// as [Database] describes. Parameters, though, only reach the first
 /// statement of such a batch: a later one carrying a placeholder is refused
@@ -234,6 +243,13 @@ class SqliteDatabase extends Database {
   /// instead of inside the transaction, where it would be committed -- or
   /// thrown away -- on somebody else's terms. One queue, so those waiting
   /// statements also keep the order they arrived in.
+  ///
+  /// That order is the writer's order, and covers only what comes through
+  /// here: every write, every transaction, and a read that had nowhere else
+  /// to go. A read on a reader does not queue -- it would be waiting for a
+  /// transaction that cannot block it -- so it is not ordered against the
+  /// writes waiting here. [SqliteDatabase] says what that leaves a caller
+  /// able to rely on.
   Future<T> _serialized<T>(Future<T> Function() action) {
     final previous = _tail;
     final done = Completer<void>();
