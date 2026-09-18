@@ -2,24 +2,17 @@
 library;
 
 import 'package:aim_postgres/src/pg_connection.dart';
+import 'package:rig_postgres/rig_postgres.dart';
 import 'package:test/test.dart';
 
-import 'docker_stack.dart';
-
 void main() {
-  setUpAll(ensurePostgresStack);
+  final pg = usePostgres(auth: PgAuth.scram);
 
   group('SCRAM-SHA-256 Authentication', () {
     late PostgresConnection conn;
 
     setUp(() async {
-      // Connect to SCRAM-SHA-256 environment (port 15435)
-      conn = await reportPortIfTaken(
-        () => PostgresConnection.connect(
-          'postgresql://test:test@localhost:15435/test_db',
-        ),
-        port: 15435,
-      );
+      conn = await PostgresConnection.connect(pg.url);
     });
 
     tearDown(() async {
@@ -112,9 +105,7 @@ void main() {
     late PostgresConnection conn;
 
     setUp(() async {
-      conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15435/test_db',
-      );
+      conn = await PostgresConnection.connect(pg.url);
       await conn.sendSimpleQuery('DROP TABLE IF EXISTS scram_test_extended');
       await conn.sendSimpleQuery(
         'CREATE TABLE scram_test_extended (id SERIAL PRIMARY KEY, name TEXT, age INT)',
@@ -225,9 +216,7 @@ void main() {
     late PostgresConnection conn;
 
     setUp(() async {
-      conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15435/test_db',
-      );
+      conn = await PostgresConnection.connect(pg.url);
     });
 
     tearDown(() async {
@@ -253,10 +242,14 @@ void main() {
       await conn.sendSimpleQuery(
         'CREATE TABLE scram_test_constraint (id INT PRIMARY KEY)',
       );
-      await conn.sendSimpleQuery('INSERT INTO scram_test_constraint VALUES (1)');
+      await conn.sendSimpleQuery(
+        'INSERT INTO scram_test_constraint VALUES (1)',
+      );
 
       expect(
-        () => conn.sendSimpleQuery('INSERT INTO scram_test_constraint VALUES (1)'),
+        () => conn.sendSimpleQuery(
+          'INSERT INTO scram_test_constraint VALUES (1)',
+        ),
         throwsA(isA<QueryException>()),
       );
     });
@@ -264,12 +257,8 @@ void main() {
 
   group('SCRAM-SHA-256 Connection', () {
     test('can establish multiple connections', () async {
-      final conn1 = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15435/test_db',
-      );
-      final conn2 = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15435/test_db',
-      );
+      final conn1 = await PostgresConnection.connect(pg.url);
+      final conn2 = await PostgresConnection.connect(pg.url);
 
       final result1 = await conn1.sendSimpleQuery('SELECT 1');
       final result2 = await conn2.sendSimpleQuery('SELECT 2');
@@ -282,18 +271,16 @@ void main() {
     });
 
     test('fails with wrong password', () async {
-      expect(
-        () => PostgresConnection.connect(
-          'postgresql://test:wrong_password@localhost:15435/test_db',
+      await expectLater(
+        PostgresConnection.connect(
+          'postgresql://test:wrong_password@${pg.host}:${pg.port}/${pg.database}',
         ),
         throwsA(isA<Exception>()),
       );
     });
 
     test('sends Terminate message on close', () async {
-      final testConn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15435/test_db',
-      );
+      final testConn = await PostgresConnection.connect(pg.url);
 
       // Execute a query to ensure connection is ready
       final result = await testConn.sendSimpleQuery('SELECT 1');

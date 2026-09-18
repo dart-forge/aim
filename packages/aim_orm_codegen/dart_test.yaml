@@ -1,5 +1,5 @@
 tags:
   integration:
-    skip: "Needs Docker (the suite starts its own Postgres container on localhost:15437, see test/integration/docker-compose.yml). Run with: dart test -t integration --run-skipped"
+    skip: "Needs Docker (the suite starts its own Postgres container via rig). Run with: dart test -t integration --run-skipped"
   slow:
     skip: "Runs build_runner in every golden fixture directory; takes minutes. Run with: dart test -t slow --run-skipped"

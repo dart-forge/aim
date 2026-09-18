@@ -3,83 +3,81 @@ library;
 
 import 'package:aim_postgres/src/pg_connection.dart';
 import 'package:aim_postgres/src/types/notice_message.dart';
+import 'package:rig_postgres/rig_postgres.dart';
 import 'package:test/test.dart';
 
-import 'docker_stack.dart';
-
 void main() {
-  setUpAll(ensurePostgresStack);
+  final pg = usePostgres();
 
   group('NoticeResponse', () {
     late PostgresConnection conn;
 
     setUp(() async {
-      conn = await reportPortIfTaken(
-        () => PostgresConnection.connect(
-          'postgresql://test:test@localhost:15433/test_db',
-        ),
-        port: 15433,
-      );
+      conn = await PostgresConnection.connect(pg.url);
     });
 
     tearDown(() async {
       await conn.close();
     });
 
-    test('receives NOTICE for CREATE TABLE IF NOT EXISTS when table exists',
-        () async {
-      final notices = <NoticeMessage>[];
-      final subscription = conn.noticeMessage.listen(notices.add);
+    test(
+      'receives NOTICE for CREATE TABLE IF NOT EXISTS when table exists',
+      () async {
+        final notices = <NoticeMessage>[];
+        final subscription = conn.noticeMessage.listen(notices.add);
 
-      // Create table first time
-      await conn.sendSimpleQuery(
-        'CREATE TABLE IF NOT EXISTS notice_test (id SERIAL PRIMARY KEY, name TEXT)',
-      );
+        // Create table first time
+        await conn.sendSimpleQuery(
+          'CREATE TABLE IF NOT EXISTS notice_test (id SERIAL PRIMARY KEY, name TEXT)',
+        );
 
-      // Create table second time - should trigger NOTICE
-      final result = await conn.sendSimpleQuery(
-        'CREATE TABLE IF NOT EXISTS notice_test (id SERIAL PRIMARY KEY, name TEXT)',
-      );
+        // Create table second time - should trigger NOTICE
+        final result = await conn.sendSimpleQuery(
+          'CREATE TABLE IF NOT EXISTS notice_test (id SERIAL PRIMARY KEY, name TEXT)',
+        );
 
-      // Query should succeed even with NOTICE
-      expect(result, isNotNull);
+        // Query should succeed even with NOTICE
+        expect(result, isNotNull);
 
-      // Wait for notice to be processed
-      await Future.delayed(Duration(milliseconds: 50));
+        // Wait for notice to be processed
+        await Future.delayed(Duration(milliseconds: 50));
 
-      // Verify NOTICE was received
-      expect(notices.length, greaterThan(0));
-      expect(notices.first.severity, 'NOTICE');
-      expect(notices.first.message, contains('already exists'));
+        // Verify NOTICE was received
+        expect(notices.length, greaterThan(0));
+        expect(notices.first.severity, 'NOTICE');
+        expect(notices.first.message, contains('already exists'));
 
-      // Clean up
-      await subscription.cancel();
-      await conn.sendSimpleQuery('DROP TABLE IF EXISTS notice_test');
-    });
+        // Clean up
+        await subscription.cancel();
+        await conn.sendSimpleQuery('DROP TABLE IF EXISTS notice_test');
+      },
+    );
 
-    test('receives NOTICE for DROP TABLE IF EXISTS when table does not exist',
-        () async {
-      final notices = <NoticeMessage>[];
-      final subscription = conn.noticeMessage.listen(notices.add);
+    test(
+      'receives NOTICE for DROP TABLE IF EXISTS when table does not exist',
+      () async {
+        final notices = <NoticeMessage>[];
+        final subscription = conn.noticeMessage.listen(notices.add);
 
-      // Drop non-existent table - should trigger NOTICE
-      final result = await conn.sendSimpleQuery(
-        'DROP TABLE IF EXISTS non_existent_table_12345',
-      );
+        // Drop non-existent table - should trigger NOTICE
+        final result = await conn.sendSimpleQuery(
+          'DROP TABLE IF EXISTS non_existent_table_12345',
+        );
 
-      // Query should succeed even with NOTICE
-      expect(result, isNotNull);
+        // Query should succeed even with NOTICE
+        expect(result, isNotNull);
 
-      // Wait for notice to be processed
-      await Future.delayed(Duration(milliseconds: 50));
+        // Wait for notice to be processed
+        await Future.delayed(Duration(milliseconds: 50));
 
-      // Verify NOTICE was received
-      expect(notices.length, greaterThan(0));
-      expect(notices.first.severity, 'NOTICE');
-      expect(notices.first.message, contains('does not exist'));
+        // Verify NOTICE was received
+        expect(notices.length, greaterThan(0));
+        expect(notices.first.severity, 'NOTICE');
+        expect(notices.first.message, contains('does not exist'));
 
-      await subscription.cancel();
-    });
+        await subscription.cancel();
+      },
+    );
 
     test('receives NOTICE for SERIAL column implicit sequence', () async {
       final notices = <NoticeMessage>[];

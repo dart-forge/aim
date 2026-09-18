@@ -2,22 +2,15 @@
 library;
 
 import 'package:aim_postgres/src/pg_connection.dart';
+import 'package:rig_postgres/rig_postgres.dart';
 import 'package:test/test.dart';
 
-import 'docker_stack.dart';
-
 void main() {
-  setUpAll(ensurePostgresStack);
+  final pg = usePostgres(auth: PgAuth.md5);
 
   group('MD5 Authentication', () {
     test('connects with MD5 auth', () async {
-      // Docker Compose MD5環境に接続（ポート15434）
-      final conn = await reportPortIfTaken(
-        () => PostgresConnection.connect(
-          'postgresql://test:test@localhost:15434/test_db',
-        ),
-        port: 15434,
-      );
+      final conn = await PostgresConnection.connect(pg.url);
 
       // クエリを実行して認証成功を確認
       final result = await conn.sendSimpleQuery('SELECT 1');
@@ -27,18 +20,16 @@ void main() {
     });
 
     test('fails with wrong password', () async {
-      expect(
-        () => PostgresConnection.connect(
-          'postgresql://test:wrong@localhost:15434/test_db',
+      await expectLater(
+        PostgresConnection.connect(
+          'postgresql://test:wrong@${pg.host}:${pg.port}/${pg.database}',
         ),
         throwsA(isA<QueryException>()),
       );
     });
 
     test('sends Terminate message on close', () async {
-      final conn = await PostgresConnection.connect(
-        'postgresql://test:test@localhost:15434/test_db',
-      );
+      final conn = await PostgresConnection.connect(pg.url);
 
       // Execute a query to ensure connection is ready
       final result = await conn.sendSimpleQuery('SELECT 1');

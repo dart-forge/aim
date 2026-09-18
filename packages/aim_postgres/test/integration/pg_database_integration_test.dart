@@ -3,21 +3,16 @@ library;
 
 import 'package:aim_postgres/src/pg_connection.dart';
 import 'package:aim_postgres/src/pg_database.dart';
+import 'package:rig_postgres/rig_postgres.dart';
 import 'package:test/test.dart';
 
-import 'docker_stack.dart';
-
 void main() {
+  final pg = usePostgres();
+
   late PostgresDatabase db;
 
   setUpAll(() async {
-    await ensurePostgresStack();
-    db = await reportPortIfTaken(
-      () => PostgresDatabase.connect(
-        'postgresql://test:test@localhost:15433/test_db',
-      ),
-      port: 15433,
-    );
+    db = await PostgresDatabase.connect(pg.url);
 
     // テスト用テーブル作成
     await db.query('''
@@ -45,7 +40,9 @@ void main() {
 
   group('Query with no parameters (Simple Query)', () {
     test('SELECT all products', () async {
-      final products = await db.query('SELECT * FROM test_products ORDER BY id');
+      final products = await db.query(
+        'SELECT * FROM test_products ORDER BY id',
+      );
 
       expect(products.length, 3);
       expect(products[0]['name'], 'Laptop');
@@ -54,8 +51,9 @@ void main() {
     });
 
     test('SELECT with WHERE clause (no params)', () async {
-      final products =
-          await db.query("SELECT * FROM test_products WHERE name = 'Mouse'");
+      final products = await db.query(
+        "SELECT * FROM test_products WHERE name = 'Mouse'",
+      );
 
       expect(products.length, 1);
       expect(products[0]['name'], 'Mouse');
@@ -236,10 +234,7 @@ void main() {
     });
 
     test('empty args list uses Simple Query', () async {
-      final products = await db.query(
-        'SELECT * FROM test_products',
-        args: [],
-      );
+      final products = await db.query('SELECT * FROM test_products', args: []);
       expect(products.length, greaterThanOrEqualTo(3));
     });
   });
@@ -369,15 +364,18 @@ void main() {
       expect(rowCount, 1);
     });
 
-    test('execute throws ArgumentError when both params and args provided', () async {
-      expect(
-        () => db.execute(
-          'UPDATE test_products SET price = :price WHERE id = \$1',
-          params: {'price': 100},
-          args: [1],
-        ),
-        throwsArgumentError,
-      );
-    });
+    test(
+      'execute throws ArgumentError when both params and args provided',
+      () async {
+        expect(
+          () => db.execute(
+            'UPDATE test_products SET price = :price WHERE id = \$1',
+            params: {'price': 100},
+            args: [1],
+          ),
+          throwsArgumentError,
+        );
+      },
+    );
   });
 }

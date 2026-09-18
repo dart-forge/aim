@@ -2,22 +2,18 @@
 library;
 
 import 'package:aim_postgres/aim_postgres.dart';
+import 'package:rig_postgres/rig_postgres.dart';
 import 'package:test/test.dart';
 
-import 'docker_stack.dart';
 import 'fixtures/tables.dart';
 
 void main() {
+  final pg = usePostgres(auth: PgAuth.scram);
+
   late PostgresDatabase db;
 
   setUpAll(() async {
-    await ensurePostgresStack();
-    db = await reportPortIfTaken(
-      () => PostgresDatabase.connect(
-        'postgresql://test:test@localhost:15437/test_db',
-      ),
-      port: 15437,
-    );
+    db = await PostgresDatabase.connect(pg.url);
 
     // Create tables in correct order (respecting FK constraints)
     await db.execute('''
@@ -141,16 +137,16 @@ void main() {
     });
 
     test('select() handles NULL values', () async {
-      final rows = await db.users
-          .select()
-          .where(name: users.name.eq('Charlie'));
+      final rows = await db.users.select().where(
+        name: users.name.eq('Charlie'),
+      );
       expect(rows[0].age, isNull);
     });
 
     test('select() returns empty list when no match', () async {
-      final rows = await db.users
-          .select()
-          .where(name: users.name.eq('NonExistent'));
+      final rows = await db.users.select().where(
+        name: users.name.eq('NonExistent'),
+      );
       expect(rows, isEmpty);
     });
   });
@@ -205,9 +201,9 @@ void main() {
           .set(name: 'Alice Updated', age: 100)
           .where(name: users.name.eq('Alice'));
 
-      final rows = await db.users
-          .select()
-          .where(name: users.name.eq('Alice Updated'));
+      final rows = await db.users.select().where(
+        name: users.name.eq('Alice Updated'),
+      );
       expect(rows.length, 1);
       expect(rows[0].age, 100);
     });
@@ -221,10 +217,7 @@ void main() {
 
     test('update().set() throws when no fields provided', () async {
       expect(
-        () => db.users
-            .update()
-            .where(name: users.name.eq('Alice'))
-            .execute(),
+        () => db.users.update().where(name: users.name.eq('Alice')).execute(),
         throwsA(isA<StateError>()),
       );
     });
@@ -235,7 +228,9 @@ void main() {
       // Charlie has no FK references, safe to delete
       await db.users.delete().where(name: users.name.eq('Charlie'));
 
-      final rows = await db.users.select().where(name: users.name.eq('Charlie'));
+      final rows = await db.users.select().where(
+        name: users.name.eq('Charlie'),
+      );
       expect(rows, isEmpty);
     });
 
@@ -255,18 +250,15 @@ void main() {
 
       expect(rows.length, 2);
       // Find Alice's post
-      final alicePost = rows.firstWhere(
-        (r) => r.user.name == 'Alice',
-      );
+      final alicePost = rows.firstWhere((r) => r.user.name == 'Alice');
       expect(alicePost.post.title, 'First Post');
       expect(alicePost.user.age, 30);
     });
 
     test('posts.select().withUser().where() filters correctly', () async {
-      final rows = await db.posts
-          .select()
-          .withUser()
-          .where(title: posts.title.eq('First Post'));
+      final rows = await db.posts.select().withUser().where(
+        title: posts.title.eq('First Post'),
+      );
 
       expect(rows.length, 1);
       expect(rows[0].user.name, 'Alice');
@@ -387,9 +379,9 @@ void main() {
         // Expected
       }
 
-      final rows = await db.users
-          .select()
-          .where(name: users.name.eq('RollbackUser'));
+      final rows = await db.users.select().where(
+        name: users.name.eq('RollbackUser'),
+      );
       expect(rows, isEmpty);
     });
 
@@ -412,14 +404,14 @@ void main() {
         );
       });
 
-      final userRows = await db.users
-          .select()
-          .where(name: users.name.eq('MultiTableUser'));
+      final userRows = await db.users.select().where(
+        name: users.name.eq('MultiTableUser'),
+      );
       expect(userRows.length, 1);
 
-      final postRows = await db.posts
-          .select()
-          .where(title: posts.title.eq('Multi Table Post'));
+      final postRows = await db.posts.select().where(
+        title: posts.title.eq('Multi Table Post'),
+      );
       expect(postRows.length, 1);
       expect(postRows[0].userId, '88888888-8888-8888-8888-888888888888');
     });
