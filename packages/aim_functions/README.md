@@ -4,8 +4,15 @@ Run an [Aim](https://pub.dev/packages/aim_core) application as a
 [Cloud Functions for Firebase](https://pub.dev/packages/firebase_functions)
 `onRequest` HTTP function.
 
+The package's only runtime dependency is `shelf`. `serveFunction()` returns
+a plain `shelf.Handler`; `firebase_functions` is what your own entry point
+(`runFunctions`, `firebase.https.onRequest`) depends on to turn that
+handler into a deployable Cloud Function, not something this package needs
+itself. That is why `test/serve_functions_test.dart` never imports
+`firebase_functions` at all.
+
 **Not yet published to pub.dev.** This README describes the intended
-interface; the `pub.dev` badge above will be filled in once it ships.
+interface; a `pub.dev` badge will be added once it ships.
 
 ```dart
 import 'package:aim_functions/aim_functions.dart';
@@ -46,57 +53,83 @@ name a real Firebase project; see `examples/functions-sample/README.md`.
 
 ## Routes are written without the function name prefix
 
-Registering a function with `name: 'api'` makes clients address it at
-`/api/...` (via the emulator's shared dev routing, a direct
-`cloudfunctions.net/api/...` call, or a Firebase Hosting rewrite). That
-prefix **does not reach the Aim app** — `firebase_functions` strips it
-before calling the handler, so the app itself should register `/`, not
-`/api/`, and `/users/:id`, not `/api/users/:id`.
+Registering a function with `name: 'api'` and calling it through the
+shared local dev process (the "Try it locally" section above) makes
+clients address it at `/api/...`. Write your Aim routes without that
+prefix regardless — `/`, not `/api/`; `/users/:id`, not `/api/users/:id`
+— because the *mechanism* that makes this work is different locally than
+in production, and the production one doesn't strip anything.
 
-This was measured, not assumed. `firebase_functions`' own routing
-(`lib/src/server.dart`) never establishes a shelf `handlerPath` other than
-the default root — it never uses `shelf_router`'s `Router.mount` or a
-`Cascade`, so `shelf.Request.requestedUri` and `.url` always carry the same
-path in every case this SDK can construct: it either hands the handler the
-original, untouched request (the single-function-per-Cloud-Run-service
-production path), or, in the local shared-process dev routing, builds a
-*new* request with the prefix already removed from `requestedUri` itself
-(confirmed by the package's own passing test,
-`test/unit/server_test.dart` — `/echo` → handler sees `/`,
-`/echo/other` → handler sees `/other`). `toAimRequest` uses `requestedUri`
-for this reason (and because it's the absolute, leading-`/` path Aim's
-router expects — `url`'s path never has the leading `/`). This was also
-confirmed by actually running `examples/functions-sample` locally and
-`curl`ing it: `GET /api/` and `GET /api/users/42` reached the app's `/` and
+**Locally**, `firebase_functions` runs every registered function in one
+shared process and routes by path: it strips the function name from the
+request before calling the handler, rebuilding a new request whose
+`requestedUri` no longer carries it (`lib/src/server.dart`'s
+`_routeByPath` / `_withOriginalPath`). This was run and confirmed with
+curl: `GET /api/` and `GET /api/users/42` reached the app's `/` and
 `/users/:id` routes.
 
-One half of that is measured and the other is read, and the difference is
-worth knowing before you deploy. **The local path was run**: the emulator's
-routing strips the prefix, and curl confirmed it. **The production path was
-not** — it could not be, without a Firebase project. There, the reasoning is
-that a deployed function is one Cloud Run service of its own, so the function
-name lives in the service's address rather than in the request path, and the
-request arrives at `/` already. That follows from the SDK's source, but it is
-an inference from reading rather than something anyone here observed. If a
-deployed function turns out to see `/api/...`, this section is what is wrong,
-not your routes.
+**In production**, `firebase_functions` takes a different branch
+entirely (`_routeToTargetFunction`, selected when Cloud Run sets
+`FUNCTION_TARGET`) that hands the handler the request completely
+untouched. This was also run: `GCLOUD_PROJECT=demo-test
+FUNCTION_TARGET=api dart run bin/server.dart`, then `curl`, gives
+`GET /` → `200` and `GET /api/` → `404 Not Found` — the opposite of the
+local dev routing above, because this branch strips nothing. Routes
+still work at `/` in production, not because anything removes the
+prefix, but because a deployed function is its own Cloud Run service —
+one function per service — so the function name lives in the service's
+address rather than in the request path, and the request simply arrives
+at `/` already without needing to be rewritten. That last part — that
+Cloud Run itself delivers the path at `/` — is read from how the SDK is
+built to be deployed, not something observed against a real, deployed
+function; this repository has no Firebase project to deploy to. If a
+deployed function turns out to see `/api/...` after all, this paragraph
+is what's wrong, not your routes.
+
+`toAimRequest` uses `requestedUri`, not `url`, for this reason (and
+because it's the absolute, leading-`/` path Aim's router expects —
+`url`'s path never has the leading `/`); the two agree in every case
+either branch of the SDK can construct, since neither ever mounts a
+shelf `Router` or `Cascade` under a non-root path.
 
 ## Streaming
 
-Both directions pass the request/response body through without
-materializing it — measured with a producer that only advances when a
-consumer actually reads, not merely by pushing a large body through and
-observing it arrive. Verified for request bodies (client → function) and
-response bodies (function → client); see `test/functions_request_test.dart`
-and `test/functions_response_test.dart`.
+`toAimRequest` and `toShelfResponse` themselves pass the request/response
+body through without materializing it — measured with a producer that
+only advances when a consumer actually reads, not merely by pushing a
+large body through and observing it arrive. Verified for request bodies
+(client → function) and response bodies (function → client); see
+`test/functions_request_test.dart` and `test/functions_response_test.dart`.
+
+That is a property of the translation functions in isolation, not of
+every path a request can take before reaching them — and the difference
+matters on exactly the path "Try it locally" above tells you to run.
+`firebase_functions`'s local dev routing reads any `application/json`
+POST body into a `String` in full (to check whether it's a CloudEvent)
+*before* dispatching to the handler at all. Measured: a JSON body sent in
+three chunks with pauses between them arrives at the handler as a single
+already-complete buffer, after the client has finished sending — the
+handler is invoked only once buffering is done. In production
+(`FUNCTION_TARGET` set — see [Routes](#routes-are-written-without-the-function-name-prefix)
+above), that check does not run: the same request reaches the handler
+before the body is complete, and reading it there advances only as the
+client sends more.
+
+So streaming is real end-to-end once deployed, and false for a JSON
+`POST` on the local dev path this README's own "Try it locally" section
+runs. A `GET` (as in the example above) has no body to buffer either way,
+which is why that section's own local test doesn't surface this.
 
 ## Logging
 
 `aim_core` never prints. `serveFunction()` is the adapter that does the
-logging: unhandled errors, and requests that fail translation entirely, are
-written to `stderr`. Cloud Run (which is what a Cloud Function actually
-runs on) collects a function's stdout and stderr into Cloud Logging, so
-nothing beyond `stderr.writeln` is needed.
+logging: unhandled errors, requests that fail translation entirely, and a
+response body stream that fails after the status line and headers are
+already on the wire (where a thrown error would otherwise surface outside
+every `try`/`catch` this adapter has) are all written to `stderr`. Cloud
+Run (which is what a Cloud Function actually runs on) collects a
+function's stdout and stderr into Cloud Logging, so nothing beyond
+`stderr.writeln` is needed.
 
 ## Limitations
 
