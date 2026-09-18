@@ -71,5 +71,48 @@ void main() {
       expect(res.headers['set-cookie'], contains('a=1; Path=/'));
       expect(res.headers['set-cookie'], contains('b=2; Path=/'));
     });
+
+    test('a response stream that fails mid-flight does not take the server '
+        'down — the next request still succeeds', () async {
+      // Whether the failure is actually logged to stderr is checked by
+      // hand in the fix report (a real dart:io stderr, not a Zone, is
+      // what serve_functions.dart writes to; see fix-report.md). What a
+      // test *can* assert is the observable behaviour: before the fix,
+      // this error surfaced as an uncaught asynchronous error outside
+      // both of the adapter's try/catch blocks; after the fix, the
+      // stream's error is intercepted before it ever reaches shelf_io,
+      // so it neither crashes the isolate nor wedges the server.
+      var callCount = 0;
+      final app = Aim();
+      app.get('/stream-fails', (c) async {
+        callCount++;
+        return Response.stream(() async* {
+          yield [1, 2, 3];
+          throw StateError('disk went away mid-stream');
+        }());
+      });
+      app.get('/ok', (c) async => c.text('still alive'));
+
+      final server = await shelf_io.serve(
+        app.serveFunction(),
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      addTearDown(() => server.close(force: true));
+
+      try {
+        final res = await get(server.port, '/stream-fails');
+        await res.drain<void>();
+      } catch (_) {
+        // Expected: the body is truncated once the producer throws.
+      }
+
+      expect(callCount, 1);
+      final res = await get(server.port, '/ok');
+      expect(
+        await res.transform(const SystemEncoding().decoder).join(),
+        'still alive',
+      );
+    });
   });
 }

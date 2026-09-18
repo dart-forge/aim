@@ -40,12 +40,26 @@ Future<shelf.Response> _handle<E extends Variables>(
     stderr.writeln('Failed to process request: $e\n$st');
     return shelf.Response(400, body: 'Bad Request');
   }
+  shelf.Response shelfResponse;
   try {
-    return toShelfResponse(response);
+    shelfResponse = toShelfResponse(response);
   } catch (e, st) {
     stderr.writeln('Failed to send response: $e\n$st');
     return shelf.Response.internalServerError(body: 'Internal Server Error');
   }
+  // toShelfResponse can only fail synchronously, before any bytes are on
+  // the wire. A failure in the body *stream* surfaces later, after
+  // shelf_io has already written the status line and headers, which is
+  // outside both try/catches above — logging it here, on the way into
+  // shelf.Response, is the only place left that can see it. The error is
+  // swallowed rather than rethrown: shelf_io has no way to end a
+  // chunked response gracefully once bytes are on the wire, so
+  // rethrowing would only recreate the unlogged crash this is fixing.
+  return shelfResponse.change(
+    body: shelfResponse.read().handleError((Object e, StackTrace st) {
+      stderr.writeln('Failed to send response body: $e\n$st');
+    }),
+  );
 }
 
 /// `aim_core` never prints — an adapter that wants unhandled errors logged
