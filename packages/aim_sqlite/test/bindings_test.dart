@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:aim_sqlite/src/ffi/bindings.dart';
+import 'package:aim_sqlite/src/sqlite_exception.dart';
 import 'package:test/test.dart';
 
 void main() {

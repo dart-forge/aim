@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:aim_sqlite/src/sqlite_exception.dart';
+
 // Native / Dart signature pairs. Written out rather than generated so the
 // package keeps its only dependency (aim_database) and nothing else.
 typedef OpenV2Native = Int Function(
@@ -148,22 +150,6 @@ typedef FreeMemoryDart = void Function(Pointer<Void>);
 
 typedef LibversionNumberNative = Int Function();
 typedef LibversionNumberDart = int Function();
-
-/// Thrown when libsqlite3 cannot be loaded.
-class SqliteLibraryNotFoundException implements Exception {
-  SqliteLibraryNotFoundException(this.searched, this.cause);
-
-  /// Every path that was tried, in order.
-  final List<String> searched;
-
-  /// The failure from the last attempt.
-  final Object cause;
-
-  @override
-  String toString() =>
-      'SqliteLibraryNotFoundException: could not load libsqlite3. '
-      'Looked in: ${searched.join(", ")}. Last error: $cause';
-}
 
 /// libsqlite3, loaded and looked up.
 ///
@@ -394,6 +380,13 @@ class SqliteLibrary {
   /// e.g. 3051000 for 3.51.0.
   int get versionNumber => _libversionNumber();
 
+  /// Loads libsqlite3 from the first of [candidates] that works.
+  ///
+  /// Throws a [SqliteLibraryNotFoundException] when none of them loads at
+  /// all, and a [SqliteLibraryTooOldException] when one loads and is turned
+  /// down for its version. Both are public exceptions of this package: a
+  /// caller of SqliteDatabase.open gets them back through the worker
+  /// isolate's handshake, so they have to be nameable in a catch.
   static SqliteLibrary open({String? libraryPath}) {
     final searched = candidates(libraryPath, Platform.environment);
     Object? last;
@@ -438,7 +431,8 @@ class SqliteLibrary {
   /// floor this driver can run on.
   static const int _minimumVersion = 3008007;
 
-  /// Throws if [library] (opened from [path]) predates [_minimumVersion].
+  /// Throws a [SqliteLibraryTooOldException] if [library] (opened from
+  /// [path]) predates [_minimumVersion].
   ///
   /// Checked before any of the other 30 symbols are looked up: an old
   /// libsqlite3 must fail with its version number in the message, not
@@ -451,11 +445,10 @@ class SqliteLibrary {
         );
     final version = libversionNumber();
     if (version < _minimumVersion) {
-      throw SqliteLibraryNotFoundException(
-        [path],
-        'libsqlite3 at "$path" is version $version, older than the '
-        'minimum supported version $_minimumVersion (required by '
-        'sqlite3_malloc64)',
+      throw SqliteLibraryTooOldException(
+        path: path,
+        version: version,
+        requiredVersion: _minimumVersion,
       );
     }
   }

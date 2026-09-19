@@ -36,7 +36,9 @@ void main() {
     ));
     expect(exports[2], (
       uri: 'src/sqlite_exception.dart',
-      show: 'SqliteException, SqliteDecodeException, SqliteTimeoutException',
+      show:
+          'SqliteException, SqliteDecodeException, SqliteTimeoutException, '
+          'SqliteLibraryNotFoundException, SqliteLibraryTooOldException',
     ));
     expect(exports[3], (uri: 'src/sqlite_stats.dart', show: 'SqliteStats'));
   });
@@ -112,14 +114,13 @@ void main() {
 /// Collapses every run of whitespace in [s] to a single space, and trims the
 /// ends.
 ///
-/// Not needed for today's barrel: the third export's `show` clause wraps
-/// onto its own indented line, but the line break falls before the literal
-/// `show` and is absorbed by the regex's own leading `\s+`, so it never
-/// reaches the captured clause below -- this is tolerance for a wrap that
-/// does not currently occur. A future export could still wrap *inside* the
-/// clause as the barrel grows or shrinks, and comparing that raw capture
-/// would tie this test to exactly where dart format happens to break the
-/// line, which is not a property of the public surface. Collapsing
+/// Load-bearing, now that the exception export shows five names: dart format
+/// breaks that `show` clause across an indented line per name, so the
+/// captured clause arrives with newlines and indentation inside it. It was
+/// not, when the same clause showed three and fitted on one line -- so this
+/// is the wrap the comment here used to call hypothetical. Comparing the raw
+/// capture would tie this test to exactly where dart format happens to break
+/// the line, which is not a property of the public surface. Collapsing
 /// whitespace first keeps the comparison about which identifiers are
 /// exported, and in what order, and nothing else.
 String _collapseWhitespace(String s) =>

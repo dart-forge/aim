@@ -75,3 +75,59 @@ class SqliteTimeoutException implements Exception {
       'SqliteTimeoutException: no SQLite connection came free within '
       '${timeout.inMilliseconds}ms\nSQL: $sql';
 }
+
+/// No libsqlite3 could be loaded.
+///
+/// This driver does not bundle libsqlite3, so this is what a machine without
+/// one -- or a `libraryPath` pointing at nothing -- gets from
+/// `SqliteDatabase.open`, rethrown out of the worker isolate that tried to
+/// load it. [searched] is every path that was tried, in the order they were
+/// tried, so the failure says where a library could go and not only that
+/// there is none.
+///
+/// A library that did load and was turned down for its version is a
+/// different failure, [SqliteLibraryTooOldException], and catching this one
+/// does not catch that one.
+class SqliteLibraryNotFoundException implements Exception {
+  SqliteLibraryNotFoundException(this.searched, this.cause);
+
+  /// Every path that was tried, in order.
+  final List<String> searched;
+
+  /// The failure from the last attempt.
+  final Object cause;
+
+  @override
+  String toString() =>
+      'SqliteLibraryNotFoundException: could not load libsqlite3. '
+      'Looked in: ${searched.join(", ")}. Last error: $cause';
+}
+
+/// A libsqlite3 was loaded and is older than this driver can run on.
+///
+/// Kept apart from [SqliteLibraryNotFoundException] because the two call for
+/// different things: there is a library here, at [path], and it is its
+/// version that is wrong. Both versions are in the form
+/// sqlite3_libversion_number reports -- 3008007 for 3.8.7.
+class SqliteLibraryTooOldException implements Exception {
+  SqliteLibraryTooOldException({
+    required this.path,
+    required this.version,
+    required this.requiredVersion,
+  });
+
+  /// The library that loaded and was turned down.
+  final String path;
+
+  /// What it reported, e.g. 3007017 for 3.7.17.
+  final int version;
+
+  /// The lowest version this driver runs on, in the same form.
+  final int requiredVersion;
+
+  @override
+  String toString() =>
+      'SqliteLibraryTooOldException: libsqlite3 at "$path" is version '
+      '$version, older than the $requiredVersion this driver needs. That '
+      'floor comes from sqlite3_malloc64, the newest function it calls.';
+}

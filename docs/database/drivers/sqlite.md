@@ -274,7 +274,7 @@ A single read can therefore cost, at worst, the two timeouts summed, plus howeve
 2. The `AIM_SQLITE_LIBRARY` environment variable, if set.
 3. The platform default: `libsqlite3.dylib` on macOS, `sqlite3.dll` on Windows, or `libsqlite3.so.0` then `libsqlite3.so` on Linux.
 
-**libsqlite3 3.8.7 or newer is required.** That floor comes from `sqlite3_malloc64`, the newest function the driver calls -- not from WAL support, which is older still. Opening with an older library fails, naming the version that was found.
+**libsqlite3 3.8.7 or newer is required.** That floor comes from `sqlite3_malloc64`, the newest function the driver calls -- not from WAL support, which is older still. Opening with an older library fails with a `SqliteLibraryTooOldException`, naming the version that was found.
 
 ## Error Handling
 
@@ -293,6 +293,8 @@ try {
 - `SqliteException` -- a statement failed inside SQLite. Carries `extendedResultCode` (e.g. `2067` for `SQLITE_CONSTRAINT_UNIQUE`) and `resultCode`, its low 8 bits, so you can branch on the failure without matching on `message`.
 - `SqliteDecodeException` -- a column's value could not become the Dart type its declared type promises. Names the `column`, the `declType`, and the `rawValue` that failed to decode.
 - `SqliteTimeoutException` -- a read waited longer than `acquireTimeout` for a reader to come free. Nothing ran, so retrying repeats nothing.
+- `SqliteLibraryNotFoundException` -- no libsqlite3 could be loaded at all, thrown by `SqliteDatabase.open()`. `searched` lists every path that was tried, in order; see [libsqlite3](#libsqlite3) for where that list comes from.
+- `SqliteLibraryTooOldException` -- a libsqlite3 was loaded and is older than the 3.8.7 floor. Carries the `path` it came from, the `version` it reported, and the `requiredVersion`. A separate type from the one above on purpose: "no library at all" and "the wrong library" are different problems to fix, so catching one does not catch the other.
 
 ## Scope
 
