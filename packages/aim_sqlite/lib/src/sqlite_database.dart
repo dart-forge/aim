@@ -52,11 +52,14 @@ const int _walIndexRequestId = -2;
 /// statement of such a batch: a later one carrying a placeholder is refused
 /// rather than left holding a NULL that SQLite would store without a word.
 ///
-/// That refusal is not a rollback. Statements run one at a time, so the ones
-/// ahead of the refused statement have already been applied and committed
-/// when the [ArgumentError] arrives; running the same call again would apply
-/// them a second time. Wrap a batch that must be all or nothing in a
-/// [transaction].
+/// That refusal is not a rollback: the statements ahead of the refused one
+/// have already run when the [ArgumentError] arrives. What that leaves
+/// behind depends on where they ran. Outside a transaction each of them
+/// committed as it went, so running the same call again would apply them a
+/// second time; inside [transaction] they are rolled back along with it; and
+/// a batch refused on a read-only connection can only have held reads, since
+/// one holding a write is handed to the writer before anything runs. Wrap a
+/// batch that must be all or nothing in a [transaction].
 class SqliteDatabase extends Database {
   SqliteDatabase._(this._writer, this._readers);
 

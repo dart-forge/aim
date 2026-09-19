@@ -125,10 +125,12 @@ class SqliteConnection {
   /// stepped to the end, so a `RETURNING` clause handed to execute() does
   /// not leave the batch half run.
   ///
-  /// Only the first statement of a batch may carry parameters. Statements
-  /// are prepared and stepped one at a time, so a later one carrying a
-  /// placeholder is refused only once it is reached -- by which point
-  /// everything before it has run and committed, and nothing is rolled back.
+  /// Only the first statement of a batch may carry parameters. A later one
+  /// carrying a placeholder is refused only once it is reached, and by then
+  /// the statements before it have run. This method rolls none of them back:
+  /// in autocommit they have committed already, inside a transaction they are
+  /// the caller's to roll back with it, and under [requireReadOnly] they can
+  /// only have been reads, since a batch holding a write never gets this far.
   StatementBatchResult? run(
     String sql, {
     required List<SqliteBindValue> positional,
