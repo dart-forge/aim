@@ -64,7 +64,7 @@ final db = await SqliteDatabase.open(
 | `readers` | `4` | Read-only connections opened alongside the one writer. Forced to `0` for an in-memory database, since such a database is private to the connection that opened it and there is nothing for a second connection to share. |
 | `busyTimeout` | 5 seconds | How long SQLite waits for a lock another connection holds on the file before giving up with `SQLITE_BUSY`. |
 | `acquireTimeout` | 30 seconds | How long a read waits for a reader connection to come free. See [Timeouts](#busytimeout-vs-acquiretimeout). |
-| `synchronous` | `SqliteSynchronous.full` | `PRAGMA synchronous`, applied to the writer. `.full` survives a power loss; `.normal` is faster but loses the most recent commits on one. |
+| `synchronous` | `SqliteSynchronous.full` | `PRAGMA synchronous`, applied to the writer. `.full` survives a power loss; `.normal` is faster but loses the most recent commits on one (in WAL mode, a crash of the process alone is still safe either way). |
 | `libraryPath` | `null` | An explicit path to libsqlite3. See [libsqlite3](#libsqlite3). |
 
 ### Concurrency Model
@@ -279,9 +279,9 @@ Do not call `db.query()`, `db.execute()`, or `db.transaction()` from inside a `t
 
 ## Limits
 
-- **`CREATE TEMP TABLE` does not work on the read path.** A reader connection prepares an entire multi-statement batch before running any of it, to decide up front whether the whole batch only reads. A later statement that depends on an earlier one having already run cannot be prepared yet, so `SELECT 1; CREATE TEMP TABLE t AS SELECT 1; SELECT * FROM t` fails with "no such table" as a single `query()` call, even though the same three statements work fine one at a time, or through `execute()` / a transaction.
-- **A parameterized call cannot carry a placeholder past the first statement of a batch.** `db.execute('INSERT INTO t VALUES (?); INSERT INTO t VALUES (?)', args: [1])` throws `ArgumentError` as soon as the second statement is reached. **That refusal is not a rollback**: statements run one at a time, so everything before the refused statement has already run and been committed. Wrap a batch that must be all-or-nothing in `db.transaction()` instead.
-- **An in-memory database has no readers.** Every connection to `:memory:` is a private, empty database of its own, so there is nothing for a second connection to share; `readers` is forced to `0` and reads run on the writer connection too.
+- **`CREATE TEMP TABLE` does not work on the read path.** A reader connection prepares an entire multi-statement batch before running any of it, to decide up front whether the whole batch only reads. A later statement that depends on an earlier one having already run cannot be prepared yet, so `SELECT 1; CREATE TEMP TABLE t AS SELECT 1; SELECT * FROM t` fails with "no such table" as a single `query()` call, even though the same three statements work fine one at a time, or through `execute()` / a transaction, which run the writer's connection one statement at a time instead.
+- **A parameterized call cannot carry a placeholder past the first statement of a batch.** `db.execute('INSERT INTO t VALUES (?); INSERT INTO t VALUES (?)', args: [1])` throws `ArgumentError` as soon as the second statement is reached. **That refusal is not a rollback**: statements run one at a time, so everything before the refused statement has already run and been committed. Running the same call again would apply it a second time. Wrap a batch that must be all-or-nothing in `db.transaction()` instead.
+- **An in-memory database has no readers.** Every connection to `:memory:` (or its `file:` URI spellings) is a private, empty database of its own, so there is nothing for a second connection to share; `readers` is forced to `0` and reads run on the writer connection too.
 - **The database's directory must be writable, even for a connection opened read-only.** WAL keeps a shared index (a `-shm` file) next to the database file, and only a connection that may write can create or extend it. A read-only filesystem is not supported.
 
 ## `busyTimeout` vs `acquireTimeout`

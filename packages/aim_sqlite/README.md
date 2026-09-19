@@ -180,7 +180,7 @@ final inserted = await db.execute(
 ); // 1
 ```
 
-`execute()` always goes to the writer, even for a statement that only reads -- it does not consult the read/write routing that `query()` uses. A statement that changes nothing (most DDL, for instance) returns `0`. Running several `;`-separated statements in one call sums their counts.
+`execute()` always goes to the writer, even for a statement that only reads -- it does not consult the read/write routing that `query()` uses. A statement that changes nothing (most DDL, for instance) returns `0`. Running several `;`-separated statements in one call sums their counts. Use `query()` with `RETURNING` when you need the rows themselves.
 
 ### Getting the inserted row id
 
