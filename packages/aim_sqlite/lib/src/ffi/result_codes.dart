@@ -2,13 +2,8 @@
 abstract final class SqliteResultCode {
   static const int ok = 0;
   static const int error = 1;
-  static const int busy = 5;
-  static const int misuse = 21;
   static const int row = 100;
   static const int done = 101;
-
-  /// The low 8 bits of an extended result code are the primary code.
-  static int primaryOf(int extended) => extended & 0xff;
 }
 
 /// Flags for sqlite3_open_v2.
@@ -24,10 +19,13 @@ abstract final class SqliteOpenFlag {
 }
 
 /// Storage classes returned by sqlite3_column_type.
+///
+/// SQLITE_NULL (5) is not listed: the one switch over these reads it as the
+/// default case, since there is no sixth storage class for it to be confused
+/// with.
 abstract final class SqliteDataType {
   static const int integer = 1;
   static const int float = 2;
   static const int text = 3;
   static const int blob = 4;
-  static const int nullValue = 5;
 }
