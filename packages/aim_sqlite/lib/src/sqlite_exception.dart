@@ -22,6 +22,12 @@ class SqliteException implements Exception {
   /// The full code, e.g. 2067 for SQLITE_CONSTRAINT_UNIQUE. Carried so
   /// callers can branch on the exact failure instead of matching on
   /// [message], which is English prose and free to change.
+  ///
+  /// One exception: a failure to open the connection carries the primary
+  /// code here instead. That one is sqlite3_open_v2's own return value, and
+  /// extended result codes are a setting on a connection, which cannot be
+  /// made before the call that creates one. [resultCode] is the same number
+  /// either way, and [sql] reads `open "<path>"` on that path.
   final int extendedResultCode;
 
   /// The low 8 bits, e.g. 19 for SQLITE_CONSTRAINT.

@@ -434,7 +434,7 @@ class SqliteLibrary {
   /// Throws a [SqliteLibraryTooOldException] if [library] (opened from
   /// [path]) predates [_minimumVersion].
   ///
-  /// Checked before any of the other 30 symbols are looked up: an old
+  /// Checked before any of the other 31 symbols are looked up: an old
   /// libsqlite3 must fail with its version number in the message, not
   /// with a confusing missing-symbol error from whichever new function
   /// happens to be looked up first.

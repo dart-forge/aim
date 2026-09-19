@@ -80,6 +80,11 @@ class SqliteConnection {
           ? 'could not open "$path" (result code $resultCode)'
           : library.readCString(library.errmsg(handle)) ?? 'unknown error';
       if (handle != nullptr) library.closeV2(handle);
+      // extendedResultCode is the primary code here, and only here: what
+      // this carries is sqlite3_open_v2's own return value, and extended
+      // result codes are a setting on a connection, which cannot be made
+      // before the call that creates one. Said on the field as well, since
+      // that field is public.
       throw SqliteException(
         extendedResultCode: resultCode,
         message: message,
@@ -369,9 +374,9 @@ class SqliteConnection {
   ///
   /// Only the first statement is bound. A later one carrying placeholders is
   /// rejected rather than left silently holding NULLs, which is the whole
-  /// reason parameters and multi-statement SQL do not mix. The rejection
-  /// cannot come any earlier than the statement itself on this path, so it
-  /// says how much of the batch has already run.
+  /// reason parameters and multi-statement SQL do not mix. Where the batch is
+  /// run a statement at a time the rejection cannot come any earlier than
+  /// the statement itself, so it says how much of the batch has already run.
   void _bind(
     String sql,
     Pointer<Void> stmt,
@@ -386,8 +391,9 @@ class SqliteConnection {
           sql,
           'sql',
           'only the first statement of a batch can take parameters; the '
-              '$index statement(s) before this one have already run and been '
-              'committed, so running this call again would apply them twice',
+              '$index statement(s) before this one have already run and '
+              'nothing here rolls them back, so running this call again '
+              'repeats whatever they did',
         );
       }
       return;
