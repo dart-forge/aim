@@ -15,8 +15,8 @@ Database packages for Dart. **Works independently of aim_server.**
 
 | Package | Description | Version |
 |---------|-------------|---------|
-| aim_database | Database abstraction layer | 0.0.1 |
-| aim_postgres | PostgreSQL native driver | 0.0.1 |
+| aim_database | Database abstraction layer | 0.2.0 |
+| aim_postgres | PostgreSQL native driver | 0.2.0 |
 | aim_sqlite | SQLite native driver | 0.1.0 |
 | aim_orm | ORM abstraction layer | Coming Soon |
 | aim_orm_postgres | PostgreSQL ORM implementation | Coming Soon |
