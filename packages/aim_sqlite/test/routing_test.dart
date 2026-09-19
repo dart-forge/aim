@@ -14,6 +14,10 @@ void main() {
 
   test('sends everything else to the writer', () {
     expect(routeFor('INSERT INTO t VALUES (1)'), SqliteRoute.writer);
+    // Lower case on this path too, not only on the read path: the keyword
+    // is upper cased before it is matched, and a write that fell through
+    // this test because of its spelling would land on a reader.
+    expect(routeFor('insert into t values (1)'), SqliteRoute.writer);
     expect(routeFor('UPDATE t SET a = 1'), SqliteRoute.writer);
     expect(routeFor('DELETE FROM t'), SqliteRoute.writer);
     expect(routeFor('CREATE TABLE t (a)'), SqliteRoute.writer);
@@ -64,6 +68,13 @@ void main() {
     expect(routeFor(''), SqliteRoute.writer);
     expect(routeFor('   '), SqliteRoute.writer);
     expect(routeFor('-- nothing here'), SqliteRoute.writer);
+    // Both unterminated comments, not just the -- one: a /* with no */ has
+    // its own branch, which gives up the same way. The second spelling is
+    // the one that discriminates -- an implementation that stepped past an
+    // unterminated /* instead of giving up would read the SELECT behind it
+    // and send this to a reader.
+    expect(routeFor('/* nothing here'), SqliteRoute.writer);
+    expect(routeFor('/* SELECT 1'), SqliteRoute.writer);
   });
 
   test('routes by the first statement only', () {
