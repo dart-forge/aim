@@ -19,6 +19,7 @@ workspace:
   - packages/aim_server_basic_auth
   - packages/aim_database
   - packages/aim_postgres
+  - packages/aim_sqlite
   - packages/aim_orm
   - packages/aim_orm_codegen
   - packages/aim_orm_postgres
