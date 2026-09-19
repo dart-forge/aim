@@ -49,6 +49,10 @@ aim dev   # compiles to WebAssembly and starts wrangler dev
 
 This requires Node.js (the CLI runs `npx wrangler@4`). See [Cloudflare Workers](/server/edge) for bindings, deployment, and what differs from the VM.
 
+### Cloud Functions
+
+Cloud Functions for Firebase isn't an `aim create` / `aim build` target — there's no `aim.target` value for it, and no `aim build` output to deploy. Instead, the Firebase CLI itself compiles your app during `firebase deploy --only functions`. Depend on `aim_functions` from a project created with `firebase init functions`; see [Cloud Functions for Firebase](/server/functions) for the full setup, and note that Dart support there is experimental.
+
 ## Manual Setup
 
 If you prefer to set up manually:
