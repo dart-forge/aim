@@ -52,9 +52,13 @@ everything else.
 
 ## Deploying is unusual: no cloud build step
 
-`firebase deploy --only functions` **compiles on your machine** with
-`dart compile exe` and uploads the resulting binary — it does not push
-source to Cloud Build the way Node.js or Python functions do. The entry
+`firebase deploy --only functions` **compiles on your machine** and uploads
+the resulting artifact — it does not push source to Cloud Build the way
+Node.js or Python functions do. Which toolchain command it uses depends on
+the SDK constraint your project declares: `firebase_functions` picks between
+`dart compile exe` and a `dart build cli` bundle, the latter from Dart 3.13
+onwards because it cross-compiles and runs native build hooks the former
+cannot. Do not build on either being the one you get. The entry
 point the Firebase CLI expects is `functions/bin/server.dart` inside the
 codebase directory `firebase init functions` creates. This repository does
 not commit a `firebase.json` / `.firebaserc` for the example, since those
