@@ -23,4 +23,24 @@ class SqliteStats {
 
   /// True while the writer is running a statement.
   final bool writerBusy;
+
+  /// Value equality, because the question asked of two snapshots is whether
+  /// anything moved between them, not whether they are the same object.
+  @override
+  bool operator ==(Object other) =>
+      other is SqliteStats &&
+      other.readers == readers &&
+      other.busyReaders == busyReaders &&
+      other.queued == queued &&
+      other.writerBusy == writerBusy;
+
+  @override
+  int get hashCode => Object.hash(readers, busyReaders, queued, writerBusy);
+
+  /// Being logged is what this class is for, so it says what it holds
+  /// instead of leaving a line reading "Instance of 'SqliteStats'".
+  @override
+  String toString() =>
+      'SqliteStats(readers: $readers, busyReaders: $busyReaders, '
+      'queued: $queued, writerBusy: $writerBusy)';
 }
