@@ -320,7 +320,7 @@ class SqliteDatabase extends Database {
   /// Runs one transaction. Called with the queue held, so nothing else can
   /// reach the connection between the BEGIN and the COMMIT.
   Future<T> _runTransaction<T>(Future<T> Function(Transaction tx) fn) async {
-    if (_closed) throw StateError('SqliteDatabase is closed');
+    if (_closed) throw StateError(sqliteClosedMessage);
     await _control(SqliteBeginRequest(_nextRequestId++));
     final tx = SqliteTransaction._(this);
     try {
@@ -436,7 +436,7 @@ class SqliteDatabase extends Database {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   ) async {
-    if (_closed) throw StateError('SqliteDatabase is closed');
+    if (_closed) throw StateError(sqliteClosedMessage);
     final request = _request(
       sql,
       params,
@@ -473,7 +473,7 @@ class SqliteDatabase extends Database {
     List<dynamic>? args, {
     required bool wantRows,
   }) async {
-    if (_closed) throw StateError('SqliteDatabase is closed');
+    if (_closed) throw StateError(sqliteClosedMessage);
     final response = await _writer.send(
       _request(sql, params, args, wantRows: wantRows, requireReadOnly: false),
     );

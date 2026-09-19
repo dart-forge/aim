@@ -1,3 +1,16 @@
+/// The one wording for a statement that arrives on a closed database.
+///
+/// Which check fails a given call depends only on how far it had got when
+/// close came: SqliteDatabase refuses what has not been sent yet, and the
+/// reader pool fails a read it had already queued. A caller can act on
+/// neither difference, so it must not hear two different things -- and there
+/// were five wordings of this before, all reachable, all decided by timing.
+///
+/// The worker handle's "the SQLite worker isolate is stopped" is not one of
+/// them: an isolate that has stopped without the database being closed is a
+/// different condition and says so.
+const sqliteClosedMessage = 'SqliteDatabase is closed';
+
 /// A statement failed inside SQLite.
 class SqliteException implements Exception {
   SqliteException({

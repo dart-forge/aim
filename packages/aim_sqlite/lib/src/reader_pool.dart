@@ -5,15 +5,6 @@ import 'package:aim_sqlite/src/sqlite_exception.dart';
 import 'package:aim_sqlite/src/sqlite_options.dart';
 import 'package:aim_sqlite/src/worker/handle.dart';
 
-/// What a read is failed with once the pool is closing, whether it was
-/// already queued or arrives afterwards.
-///
-/// Deliberately the same words SqliteDatabase refuses a call on a closed
-/// database with: which of the two a read gets depends only on how far it
-/// had got when close came, and that is not a difference a caller can act
-/// on.
-const _closedMessage = 'SqliteDatabase is closed';
-
 /// The read-only connections, one worker isolate each, and the reads waiting
 /// for one of them.
 ///
@@ -121,7 +112,7 @@ class ReaderPool {
     // Says so rather than hanging, which is what breaking that precondition
     // would otherwise look like from the outside.
     assert(size > 0, 'a read cannot wait for a reader when there are none');
-    if (_closing != null) return Future.error(StateError(_closedMessage));
+    if (_closing != null) return Future.error(StateError(sqliteClosedMessage));
     if (_idle.isEmpty) return _lendWhenFree(fn, sql);
     return _lend(_idle.removeLast(), fn);
   }
@@ -137,7 +128,7 @@ class ReaderPool {
     final waiting = _waiting.toList();
     _waiting.clear();
     for (final completer in waiting) {
-      completer.completeError(StateError(_closedMessage));
+      completer.completeError(StateError(sqliteClosedMessage));
     }
     // Each handle waits for the statement its isolate is running, because an
     // FFI call cannot be interrupted.

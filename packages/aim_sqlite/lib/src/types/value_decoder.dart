@@ -186,7 +186,7 @@ String _decodeUtf8(Uint8List bytes, Never Function(String) fail) {
   try {
     return utf8.decode(bytes);
   } on FormatException catch (error) {
-    fail('not valid UTF-8: ${error.message}');
+    fail('a text column holds bytes that are not UTF-8: ${error.message}');
   }
 }
 
