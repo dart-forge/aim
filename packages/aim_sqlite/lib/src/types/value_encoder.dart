@@ -57,12 +57,16 @@ SqliteBindValue encodeValue(Object? value, {required String parameter}) {
       try {
         return SqliteBindText(jsonEncode(value));
       } on JsonUnsupportedObjectError catch (error) {
-        throw ArgumentError(
+        throw ArgumentError.value(
+          value,
+          parameter,
           '$parameter cannot be encoded as json: ${error.unsupportedObject}',
         );
       }
     default:
-      throw ArgumentError(
+      throw ArgumentError.value(
+        value,
+        parameter,
         '$parameter has no SQLite representation. Pass an int, double, bool, '
         'String, Uint8List, DateTime, Map, List or null',
       );

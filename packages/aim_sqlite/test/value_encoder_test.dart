@@ -70,19 +70,33 @@ void main() {
 
   test('refuses a type it cannot represent, naming the parameter', () {
     // Falling back to toString() would silently store "Instance of 'Object'".
+    final value = Object();
+
     expect(
-      () => encodeValue(Object(), parameter: ':name'),
+      () => encodeValue(value, parameter: ':name'),
       throwsA(
-        isA<ArgumentError>().having(
-          (e) => e.message.toString(),
-          'message',
-          contains(':name'),
-        ),
+        isA<ArgumentError>()
+            .having((e) => e.message.toString(), 'message', contains(':name'))
+            // In the structured fields as well as in the prose, which is
+            // how the rest of the driver builds this failure: a caller
+            // reading e.name and e.invalidValue sees what the message says.
+            .having((e) => e.name, 'name', ':name')
+            .having((e) => e.invalidValue, 'invalidValue', same(value)),
       ),
     );
   });
 
-  test('refuses a value json cannot hold', () {
-    expect(() => encode([Object()]), throwsA(isA<ArgumentError>()));
+  test('refuses a value json cannot hold, naming the parameter', () {
+    final value = [Object()];
+
+    expect(
+      () => encodeValue(value, parameter: ':name'),
+      throwsA(
+        isA<ArgumentError>()
+            .having((e) => e.message.toString(), 'message', contains(':name'))
+            .having((e) => e.name, 'name', ':name')
+            .having((e) => e.invalidValue, 'invalidValue', same(value)),
+      ),
+    );
   });
 }
