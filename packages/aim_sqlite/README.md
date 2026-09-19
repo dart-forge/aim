@@ -182,6 +182,33 @@ final inserted = await db.execute(
 
 `execute()` always goes to the writer, even for a statement that only reads -- it does not consult the read/write routing that `query()` uses. A statement that changes nothing (most DDL, for instance) returns `0`. Running several `;`-separated statements in one call sums their counts.
 
+### Getting the inserted row id
+
+`query()` with a `RETURNING` clause is how to read back what a write produced -- most often the id of a row just inserted. The statement is a write, so it goes to the writer like any other, and the rows it returns come back as the result of the call:
+
+```dart
+final inserted = await db.query(
+  'INSERT INTO users (name) VALUES (:name) RETURNING id',
+  params: {'name': 'Alice'},
+);
+final id = inserted.single['id'] as int;
+```
+
+**`last_insert_rowid()` through `query()` is meaningless.** It answers `0`, and not because the insert failed: `query()` sends that `SELECT` to one of the read-only connections, and that connection has never inserted anything, so it has no last insert row id to report. Awaiting the write first does not help -- the value belongs to a connection, not to the database.
+
+Inside a transaction it is a different matter. Every statement on a `tx` runs on the writer connection, so `last_insert_rowid()` there does see the insert the same body just made:
+
+```dart
+await db.transaction((tx) async {
+  await tx.execute(
+    'INSERT INTO users (name) VALUES (:name)',
+    params: {'name': 'Alice'},
+  );
+  final rows = await tx.query('SELECT last_insert_rowid() AS id');
+  final id = rows.single['id'] as int;
+});
+```
+
 ## Transactions
 
 ```dart
