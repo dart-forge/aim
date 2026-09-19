@@ -153,6 +153,11 @@ class ReaderPool {
       // would run nothing and never come back, leaving the pool to count it
       // busy for the rest of the database's life -- a worse fault than the
       // wait being bounded here, and it would take every later read with it.
+      //
+      // Queue.remove is a linear scan, so a whole saturated pool timing out
+      // at once costs O(n^2) in the number waiting. Fine at the concurrency
+      // a reader pool sees, and the alternative -- leaving a tombstone here
+      // for [_release] to skip past -- buys nothing at that size.
       _waiting.remove(waiting);
       waiting.completeError(
         SqliteTimeoutException(timeout: _acquireTimeout, sql: sql),

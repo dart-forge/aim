@@ -223,6 +223,11 @@ void main() {
   test('reads run in parallel across readers', () async {
     // This measures parallelism, which cannot happen on one core. Asserted so
     // a constrained machine fails with the reason rather than with a ratio.
+    //
+    // It is also the one test here that can fail for reasons that have
+    // nothing to do with the code -- a busy machine, a noisy CI box, a core
+    // taken away mid-run -- so it is the expected flake if one ever turns
+    // up. Anything else failing means something is actually wrong.
     expect(
       Platform.numberOfProcessors,
       greaterThanOrEqualTo(2),

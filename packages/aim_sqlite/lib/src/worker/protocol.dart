@@ -39,10 +39,15 @@ class SqliteBeginRequest extends SqliteRequest {
   const SqliteBeginRequest(super.id);
 }
 
+/// Ends the transaction and makes its writes permanent. Sent only with
+/// nothing else in between, for the same reason a begin is.
 class SqliteCommitRequest extends SqliteRequest {
   const SqliteCommitRequest(super.id);
 }
 
+/// Ends the transaction and discards its writes. Sent only with nothing
+/// else in between: a statement that reached the connection first would be
+/// thrown away along with it.
 class SqliteRollbackRequest extends SqliteRequest {
   const SqliteRollbackRequest(super.id);
 }
