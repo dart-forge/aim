@@ -19,8 +19,10 @@ Future<void> main() async {
 
     // RETURNING, rather than last_insert_rowid(): a read goes to one of the
     // read-only connections, which has never inserted anything, so
-    // query('SELECT last_insert_rowid()') answers 0. Asking the INSERT
-    // itself is the way to get the id of the row it wrote.
+    // query('SELECT last_insert_rowid()') answers 0 here. It would answer
+    // correctly on a database with no readers -- every in-memory one is
+    // forced to that -- which is the trap rather than the consolation.
+    // Asking the INSERT itself gets the id in every configuration.
     final inserted = await db.query(
       'INSERT INTO users (name, created_at) VALUES (:name, :createdAt) '
       'RETURNING id',

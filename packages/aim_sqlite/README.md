@@ -194,7 +194,7 @@ final inserted = await db.query(
 final id = inserted.single['id'] as int;
 ```
 
-**`last_insert_rowid()` through `query()` is meaningless.** It answers `0`, and not because the insert failed: `query()` sends that `SELECT` to one of the read-only connections, and that connection has never inserted anything, so it has no last insert row id to report. Awaiting the write first does not help -- the value belongs to a connection, not to the database.
+**`last_insert_rowid()` through `query()` is not to be relied on.** It answers `0` -- not because the insert failed, but because `query()` sends that `SELECT` to one of the read-only connections, which has never inserted anything and so has no last insert row id to report. Awaiting the write first does not help: the value belongs to a connection, not to the database. The one exception makes this worse rather than better -- a database with no readers (`readers: 0`, which every in-memory database is forced to) runs every read on the writer, so the real id does come back there. The same code can work against `:memory:` in a test and answer `0` against the file in production.
 
 Inside a transaction it is a different matter. Every statement on a `tx` runs on the writer connection, so `last_insert_rowid()` there does see the insert the same body just made:
 
