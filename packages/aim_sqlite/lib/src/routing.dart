@@ -3,6 +3,11 @@ enum SqliteRoute { reader, writer }
 
 const _readKeywords = {'SELECT', 'WITH', 'EXPLAIN'};
 
+/// One letter of a keyword. Hoisted out of [_leadingKeyword] because it
+/// walks the keyword a character at a time, on a path every statement
+/// takes, and a RegExp written inline there is compiled per character.
+final _keywordLetter = RegExp(r'[A-Za-z]');
+
 /// Picks a connection from the statement's leading keyword.
 ///
 /// This is the FIRST of two stages, and it is not sufficient on its own. It
@@ -43,7 +48,7 @@ String _leadingKeyword(String sql) {
     }
   }
   final start = i;
-  while (i < sql.length && RegExp(r'[A-Za-z]').hasMatch(sql[i])) {
+  while (i < sql.length && _keywordLetter.hasMatch(sql[i])) {
     i++;
   }
   return sql.substring(start, i).toUpperCase();

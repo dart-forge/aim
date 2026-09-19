@@ -271,7 +271,14 @@ class SqliteDatabase extends Database {
 
     // Nothing to wait for, so [action] starts here instead of a microtask
     // later, which is what puts its request on the port before returning.
-    if (previous == null) return action().whenComplete(release);
+    //
+    // Through Future.sync, the same shape ReaderPool._lend uses for the
+    // same reason: an action that threw where it stands would otherwise
+    // never reach [release], leaving [_tail] an uncompleted future that
+    // every later call on this database waits on forever, with nothing
+    // anywhere to say why. Every action here is an async closure today, so
+    // that is latent rather than live -- and unreachable now.
+    if (previous == null) return Future.sync(action).whenComplete(release);
     return previous.then((_) => action()).whenComplete(release);
   }
 
