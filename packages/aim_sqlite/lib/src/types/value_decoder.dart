@@ -9,6 +9,11 @@ import 'package:aim_sqlite/src/types/raw_value.dart';
 const _unixEpochJulianDay = 2440587.5;
 const _millisecondsPerDay = 86400000;
 
+/// As far from the epoch as a [DateTime] reaches: 100,000,000 days either
+/// side of it. Anything past this is not an instant, however it was stored.
+const _maxMillisecondsSinceEpoch = 8640000000000000;
+const _maxSecondsSinceEpoch = _maxMillisecondsSinceEpoch ~/ 1000;
+
 /// Turns one stored value into the Dart type [kind] promises.
 ///
 /// [column] and [declType] are only used to describe a failure.
@@ -107,20 +112,50 @@ Object? decodeValue({
         // is a UTC wall clock: reading it as local time would make it depend
         // on the server's time zone.
         SqliteRawText(:final value) => _parseTimestamp(value, fail),
-        // unixepoch() / strftime('%s').
-        SqliteRawInteger(:final value) => DateTime.fromMillisecondsSinceEpoch(
-          value * 1000,
-          isUtc: true,
-        ),
+        // unixepoch() / strftime('%s'). Seconds, never milliseconds: a
+        // column written by something that stores milliseconds reads as a
+        // date tens of thousands of years out, which the type mapping in
+        // the README says out loud rather than guessing between the two.
+        SqliteRawInteger(:final value) => _timestampFromSeconds(value, fail),
         // A julian day, as SQLite's own date functions produce by default.
-        SqliteRawReal(:final value) => DateTime.fromMillisecondsSinceEpoch(
-          ((value - _unixEpochJulianDay) * _millisecondsPerDay).round(),
-          isUtc: true,
-        ),
+        SqliteRawReal(:final value) => _timestampFromJulianDay(value, fail),
         SqliteRawBlob() => fail('a timestamp column holds a blob'),
         SqliteRawNull() => null,
       };
   }
+}
+
+/// Reads [seconds] since the unix epoch as an instant in UTC.
+///
+/// Bounded before the multiply, not after: `seconds * 1000` wraps silently
+/// at int64, so a value far enough out comes back as a perfectly plausible
+/// instant -- 2^61 seconds wraps to exactly zero and reads as the epoch --
+/// while one merely past what a [DateTime] holds makes the constructor throw
+/// a [RangeError] that names no column. A stored number this cannot be an
+/// instant is a decode failure like an unreadable timestamp string, and is
+/// reported the same way, with the column and the stored value attached.
+DateTime _timestampFromSeconds(int seconds, Never Function(String) fail) {
+  if (seconds < -_maxSecondsSinceEpoch || seconds > _maxSecondsSinceEpoch) {
+    fail('not a timestamp');
+  }
+  return DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
+}
+
+/// Reads [day], a julian day number, as an instant in UTC.
+///
+/// The guard covers two different escapes, not one twice: [double.round]
+/// throws an [UnsupportedError] for a value that is not finite, and
+/// [DateTime.fromMillisecondsSinceEpoch] throws a [RangeError] past its own
+/// range -- which a finite but enormous day reaches, because round() clamps
+/// it to the largest int rather than refusing it. Neither carries the column.
+DateTime _timestampFromJulianDay(double day, Never Function(String) fail) {
+  final milliseconds = (day - _unixEpochJulianDay) * _millisecondsPerDay;
+  if (!milliseconds.isFinite ||
+      milliseconds < -_maxMillisecondsSinceEpoch ||
+      milliseconds > _maxMillisecondsSinceEpoch) {
+    fail('not a timestamp');
+  }
+  return DateTime.fromMillisecondsSinceEpoch(milliseconds.round(), isUtc: true);
 }
 
 /// Reads a stored timestamp string as an instant in UTC.

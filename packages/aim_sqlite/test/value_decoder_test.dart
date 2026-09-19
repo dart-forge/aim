@@ -162,6 +162,82 @@ void main() {
     expect(julian(2440586.5).millisecondsSinceEpoch, -86400000);
   });
 
+  test('a julian day too far out to be a DateTime names the column', () {
+    // DateTime.fromMillisecondsSinceEpoch refuses anything past
+    // +-8640000000000000 ms with a RangeError. Reaching the caller, that
+    // RangeError comes out of a worker isolate naming no column at all,
+    // while every other decode failure here carries the column, the
+    // declared type and the value SQLite stored.
+    expect(
+      () => decode(
+        SqliteColumnKind.dateTime,
+        const SqliteRawReal(1e300),
+        declType: 'DATETIME',
+      ),
+      throwsA(
+        isA<SqliteDecodeException>()
+            .having((e) => e.column, 'column', 'c')
+            .having((e) => e.declType, 'declType', 'DATETIME')
+            .having((e) => e.rawValue, 'rawValue', 1e300),
+      ),
+    );
+  });
+
+  test('an infinite julian day names the column', () {
+    // A separate case from the one above, not a second example of it:
+    // double.round() throws UnsupportedError rather than RangeError for a
+    // value that is not finite, so a guard that only knew about the range
+    // would let this one through.
+    expect(
+      () => decode(
+        SqliteColumnKind.dateTime,
+        SqliteRawReal(double.infinity),
+        declType: 'DATETIME',
+      ),
+      throwsA(
+        isA<SqliteDecodeException>()
+            .having((e) => e.column, 'column', 'c')
+            .having((e) => e.rawValue, 'rawValue', double.infinity),
+      ),
+    );
+  });
+
+  test(
+    'an integer timestamp too far out to be a DateTime names the column',
+    () {
+      expect(
+        () => decode(
+          SqliteColumnKind.dateTime,
+          const SqliteRawInteger(9007199254740993),
+          declType: 'DATETIME',
+        ),
+        throwsA(
+          isA<SqliteDecodeException>()
+              .having((e) => e.column, 'column', 'c')
+              .having((e) => e.rawValue, 'rawValue', 9007199254740993),
+        ),
+      );
+    },
+  );
+
+  test(
+    'an integer timestamp that overflows int64 fails instead of wrapping',
+    () {
+      // 2^61 seconds is the shape a range check on the milliseconds alone
+      // would miss: multiplying by 1000 overflows int64 and wraps to exactly
+      // zero, so this decoded to 1970-01-01 -- a wrong answer handed back
+      // without a word, which is worse than the RangeError above.
+      expect(
+        () => decode(
+          SqliteColumnKind.dateTime,
+          const SqliteRawInteger(2305843009213693952),
+          declType: 'DATETIME',
+        ),
+        throwsA(isA<SqliteDecodeException>()),
+      );
+    },
+  );
+
   test('an unreadable timestamp names the column and the stored value', () {
     expect(
       () => decode(

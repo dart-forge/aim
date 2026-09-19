@@ -149,7 +149,7 @@ A declared type this driver does not recognize (anything not in the table above)
 Written as ISO 8601 text in UTC. Read back from:
 
 - **TEXT** -- any ISO 8601 string. One with no time zone offset is treated as a UTC wall clock, not local time.
-- **INTEGER** -- unix epoch seconds, what `unixepoch()` / `strftime('%s', ...)` produce.
+- **INTEGER** -- unix epoch seconds, what `unixepoch()` / `strftime('%s', ...)` produce. Always seconds, never milliseconds: a column holding milliseconds -- what Java, Android and JavaScript write -- does not fail, it decodes to a date tens of thousands of years out (`1758243723000` reads as the year 57686). To read such a column, select it through an expression (`created_at + 0`), which has no declared type and so comes back as the stored `int`.
 - **REAL** -- a Julian day, what SQLite's date functions produce by default.
 
 Every `DateTime` this driver returns has `isUtc == true`.
