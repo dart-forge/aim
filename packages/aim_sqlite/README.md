@@ -8,6 +8,8 @@ A native SQLite driver for Dart. Talks to libsqlite3 over `dart:ffi` from worker
 
 `aim_sqlite` implements `aim_database`'s `Database` / `Transaction` contract for SQLite. Every statement runs on a worker isolate rather than the caller's, because SQLite's C API blocks the thread it is called on. One isolate holds the only connection that may write; by default, four more each hold a read-only connection, and the database runs in WAL mode so reads and the writer never block each other.
 
+This README and the [docs site page](https://aim-dart.dev/database/drivers/sqlite) describe the same driver in the same order and are kept in sync by hand; an edit to one belongs in the other.
+
 ## Installation
 
 ```yaml
@@ -110,23 +112,6 @@ final rows = await db.query('SELECT * FROM users WHERE id = ?', args: [1]);
 
 A single statement takes either `args` or `params`, never both, and a wrong number of positional arguments -- or a named parameter the statement does not declare -- throws `ArgumentError`.
 
-### Parameter types
-
-| Dart | Stored as |
-|---|---|
-| `null` | `NULL` |
-| `int` | `INTEGER` |
-| `double` | `REAL` |
-| `bool` | `INTEGER` (`0` or `1`) |
-| `String` | `TEXT` |
-| `Uint8List` | `BLOB` |
-| `DateTime` | `TEXT`, ISO 8601 in UTC |
-| `Map`, `List` | `TEXT`, JSON |
-
-SQLite has no array type, so a `List` can only be sent as JSON -- unlike the Postgres driver, there is no array-literal option to choose between.
-
-Anything not in this table throws `ArgumentError` naming the parameter, rather than falling back to `Object.toString()`. SQLite would accept the resulting string without complaint, and the mistake would only turn up later as wrong data.
-
 ## Type mapping
 
 SQLite stores only five storage classes and has no separate date, boolean, or JSON type. The column's **declared type** is the only hint the driver gets, and it decides what Dart type a value comes back as:
@@ -168,6 +153,23 @@ Written as ISO 8601 text in UTC. Read back from:
 - **REAL** -- a Julian day, what SQLite's date functions produce by default.
 
 Every `DateTime` this driver returns has `isUtc == true`.
+
+### Parameter types
+
+| Dart | Stored as |
+|---|---|
+| `null` | `NULL` |
+| `int` | `INTEGER` |
+| `double` | `REAL` |
+| `bool` | `INTEGER` (`0` or `1`) |
+| `String` | `TEXT` |
+| `Uint8List` | `BLOB` |
+| `DateTime` | `TEXT`, ISO 8601 in UTC |
+| `Map`, `List` | `TEXT`, JSON |
+
+SQLite has no array type, so a `List` can only be sent as JSON -- unlike the Postgres driver, there is no array-literal option to choose between.
+
+Anything not in this table throws `ArgumentError` naming the parameter, rather than falling back to `Object.toString()`. SQLite would accept the resulting string without complaint, and the mistake would only turn up later as wrong data.
 
 ## Execute
 

@@ -11,6 +11,8 @@ head:
 
 Native SQLite driver for Dart. Talks to libsqlite3 over `dart:ffi` from worker isolates, so a statement never blocks the event loop.
 
+This page and the package [README](https://github.com/dart-forge/aim/blob/main/packages/aim_sqlite/README.md) describe the same driver in the same order and are kept in sync by hand; an edit to one belongs in the other.
+
 ## Features
 
 - Native `dart:ffi` bindings to libsqlite3 -- no bundled binary, no external process
