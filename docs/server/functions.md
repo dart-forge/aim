@@ -62,11 +62,14 @@ The result is flat — `firebase.json` sits next to `pubspec.yaml`, with `"sourc
 
 ```
 my_api/
-├── pubspec.yaml         # aim.target: functions
+├── pubspec.yaml           # aim.target: functions
 ├── firebase.json
-├── .firebaserc          # only when a Firebase project id was given
-├── bin/server.dart      # runFunctions + onRequest
-└── lib/src/server.dart  # createApp(): your routes
+├── .firebaserc            # only when a Firebase project id was given
+├── .gitignore
+├── README.md
+├── bin/server.dart        # runFunctions + onRequest
+├── lib/src/server.dart    # createApp(): your routes
+└── test/my_api_test.dart  # starter test
 ```
 
 `bin/server.dart` hands the app to Firebase:
@@ -139,7 +142,7 @@ This is the one genuinely unusual step compared to Node.js or Python functions: 
 
 ## Next Steps
 
-- [Installation](/server/installation) - How Cloud Functions differs from `aim create` / `aim build`
+- [Installation](/server/installation) - `aim create --target functions` alongside the other targets
 - [Context](/server/concepts/context) - `c.variables` and the response helpers
 - [Middleware](/server/middleware/) - Packages that run on every adapter
 - [Cloud Functions for Firebase documentation](https://firebase.google.com/docs/functions/) - triggers, configuration, and the Firebase CLI

@@ -16,7 +16,7 @@ Configure Aim CLI via `pubspec.yaml`, under a top-level `aim:` key.
 | Key | Used by | Description | Default |
 |---|---|---|---|
 | `target` | `aim dev`, `aim build` | Where the app runs: `server`, `edge` or `functions` | `server` |
-| `entry` | `aim dev`, `aim build` | Entry point | `bin/server.dart` for `server` and `functions`, or `lib/main.dart` for `edge` |
+| `entry` | `aim dev`, `aim build` | Entry point. No effect for `target: functions` — Firebase resolves the entry point itself | `bin/server.dart` for `server`, or `lib/main.dart` for `edge` |
 | `env` | `aim dev` | Environment variables passed to the app | none |
 | `database.url` | `aim db:*` | Database connection URL | required by `aim db:*` |
 | `database.schema` | `aim db:generate` | Path to table definitions, a file or a directory | `lib/schema` |
@@ -44,7 +44,7 @@ aim:
 |---|---|---|---|---|
 | `server` (default) | Dart VM with `aim_server` | `dart run` with restart on change | `dart compile exe` → `build/server` | `bin/server.dart` |
 | `edge` | Cloudflare workerd with `aim_edge` | `dart compile wasm` + `npx wrangler@4 dev`, recompiles on change | `dart compile wasm` → `build/edge/` | `lib/main.dart` |
-| `functions` | Cloud Functions for Firebase with `aim_functions` | `firebase emulators:start --only functions`; the emulator rebuilds on change | nothing — `firebase deploy --only functions` compiles | `bin/server.dart` |
+| `functions` | Cloud Functions for Firebase with `aim_functions` | `firebase emulators:start --only functions`; the emulator rebuilds on change | nothing — `firebase deploy --only functions` compiles | n/a — Firebase resolves the entry point itself, not `aim` |
 
 ```yaml
 aim:
@@ -188,11 +188,13 @@ aim dev
 
 ## Entry Point Resolution
 
+This applies to `target: server` and `target: edge`. For `target: functions`, none of it applies — `firebase emulators:start` and `firebase deploy` resolve the entry point themselves, so `--entry` and `aim.entry` are silently ignored.
+
 Entry point is determined in this order:
 
 1. `--entry` option (`aim dev --entry bin/api.dart`)
 2. `aim.entry` in `pubspec.yaml`
-3. Target default: `bin/server.dart` for `server` and `functions`, `lib/main.dart` for `edge`
+3. Target default: `bin/server.dart` for `server`, `lib/main.dart` for `edge`
 
 ## Watch Directories
 
