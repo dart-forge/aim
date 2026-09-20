@@ -563,11 +563,18 @@ changes by itself. The app answers at
 
 ```bash
 firebase use --add    # only needed once, if no Firebase project is bound yet
+gcloud services enable run.googleapis.com --project <your-project-id>
 firebase deploy --only functions
 ```
 
 There is no build step to run first: the Firebase CLI compiles for Linux on
 this machine and uploads the result.
+
+The `gcloud` line is needed once per project. A Dart function is deployed as a
+Cloud Run service, and `firebase deploy` does not enable the Cloud Run Admin
+API for you. Without it the deploy builds and uploads, then fails with
+`Cloud Run Admin API has not been used in project <id> before or it is
+disabled`. Enabling takes a minute or two to propagate.
 
 ## Routes
 

@@ -48,6 +48,14 @@ firebase experiments:enable dartfunctions
 ```
 
 - A Firebase project for deploying. Local development doesn't need one — `aim dev` falls back to a `demo-` project id derived from your package name, which the emulator suite keeps entirely offline. Confirmed against a project with no `.firebaserc` at all: the emulator logged `Detected demo project ID "demo-probe-api"` and served normally.
+- **The Cloud Run Admin API enabled in that project**, for deploying. A Dart function is deployed as a Cloud Run service, but `firebase deploy` enables only `cloudfunctions`, `cloudbuild` and `artifactregistry` — the `functions.yaml` that `build_runner` generates lists just `cloudfunctions.googleapis.com` under `requiredAPIs`, so nothing switches on `run.googleapis.com` for you. Without it the deploy builds, uploads, and only then fails with `Cloud Run Admin API has not been used in project <id> before or it is disabled`. Measured on a first deploy to a fresh project:
+
+```bash
+gcloud services enable run.googleapis.com --project <your-project-id>
+```
+
+Enabling takes a minute or two to propagate; retry the deploy after that. It is needed once per project.
+- Cloud Run requires billing, so a Blaze (pay-as-you-go) project. Local development does not.
 - **`firebase_functions` 0.8.0 or later.** This is not a formality: on 0.6.x the local routing does not remove the function name before dispatching, so an app whose routes are written as `/` is unreachable locally — the function's root answers 404 because your handler is asked for `/api/`, and any deeper path is rejected by the SDK before your handler runs at all. Measured by running the same application against both versions and changing nothing else. `firebase init` has been seen to scaffold `^0.6.0`; `aim create --target functions` writes `^0.8.0`.
 
 ## Create a project
@@ -109,7 +117,7 @@ Write your routes without the function name as a prefix — `/`, not `/api/`; `/
 That's true for two different reasons depending on where the request comes from, and only one of them was checked against a running process:
 
 - **Locally**, `firebase_functions` runs every registered function in one shared process and routes by path, stripping the function name before the request reaches your handler. Confirmed through `firebase emulators:start` against a project the Firebase CLI scaffolded: `GET /<project>/us-central1/api` and `.../api/users/42` reached the app's `/` and `/users/:id` routes, and `.../api/nope` came back as the app's own 404 rather than the emulator's. Also confirmed by running the entry point directly, without the emulator.
-- **In production**, a deployed function is its own Cloud Run service — one function per service — so the function name lives in the service's URL rather than in the request path, and nothing needs to strip a prefix. This part is read from how `firebase_functions` is built to be deployed (the SDK takes a different, untouched-request code path once Cloud Run sets an internal target variable), not something observed against a real deployed function — this adapter's test suite has no Firebase project to deploy to.
+- **In production**, a deployed function is its own Cloud Run service — one function per service — so the function name lives in the service's URL rather than in the request path, and nothing needs to strip a prefix. The service-per-function shape is confirmed by a real deploy, which created a Cloud Run service named after the function. The request handling is not: that part is read from how `firebase_functions` is built to be deployed (the SDK takes a different, untouched-request code path once Cloud Run sets an internal target variable), and no request has been sent to a deployed function to check it.
 
 ## Middleware
 
@@ -133,6 +141,10 @@ firebase deploy --only functions
 ```
 
 This is the one genuinely unusual step compared to Node.js or Python functions: the Firebase CLI compiles your Dart code **on your machine** and uploads the resulting artifact, rather than pushing source for Cloud Build to compile remotely. `aim build` does nothing for this target ([see above](#no-build-step)) — the Firebase CLI does its own build, using whichever local Dart toolchain command it picks for your project's declared SDK constraint.
+
+**What you get is a Cloud Run service, not a Cloud Functions function.** Outside the emulator the CLI rewrites the endpoint's platform from `gcfv2` to `run`; a real deploy logs `creating Dart 3 (Cloud Run) function api(us-central1)`, so look for the service under Cloud Run in the console rather than under Functions.
+
+**What travels is the compiled binary.** `build_runner` writes a `functions.yaml` whose `command` is `./build/cli/linux_x64/bundle/bin/server`, and the upload is the project directory with that binary in it — a deploy of the scaffold as generated packaged 2.96 MB. This is why `build` must not appear in `firebase.json`'s `ignore` list; the scaffold's list leaves it out. (`firebase-tools` strips a stale `build` entry for Dart projects itself, so an older scaffold still deploys.)
 
 ## Limitations
 
