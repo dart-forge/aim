@@ -50,6 +50,18 @@ void main() {
       expect(config.target, AimTarget.server);
       expect(config.env, isEmpty);
     });
+
+    test('still reads packageName when aim: is absent', () {
+      final config = AimConfig.parse('name: my_app\n');
+      expect(config.packageName, 'my_app');
+      expect(config.target, AimTarget.server);
+    });
+
+    test('still reads packageName when aim: is a non-map section', () {
+      final config = AimConfig.parse('name: my_app\naim: true\n');
+      expect(config.packageName, 'my_app');
+      expect(config.target, AimTarget.server);
+    });
   });
 
   group('AimConfig.parse database', () {
