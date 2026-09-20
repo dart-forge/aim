@@ -49,16 +49,13 @@ class DevCommand extends Command {
 
     // Determine entry point
     final config = await AimConfig.load();
-    final entryPoint = config.resolveEntry(argResults?['entry'] as String?);
-
-    // Check if entry point file exists
-    final entryFile = File(entryPoint);
-    if (!await entryFile.exists()) {
-      print('Error: Entry point "$entryPoint" not found');
-      exit(1);
-    }
 
     if (config.target == AimTarget.functions) {
+      // `firebase emulators:start` has no way to receive an entry point:
+      // Firebase resolves it from firebase.json plus its own convention. So
+      // this branch must not touch `--entry` / `aim.entry`, and it runs
+      // before the entry-point resolution below, which is for the other
+      // targets only.
       if (argResults?['port'] != null) {
         throw UsageException(
           '--port is not supported for target: functions. The Firebase '
@@ -70,9 +67,9 @@ class DevCommand extends Command {
       final firebaseJson = File('firebase.json');
       if (!await firebaseJson.exists()) {
         throw UsageException(
-          'firebase.json not found. The functions target needs it next to '
-          'pubspec.yaml, with "source": "." in its functions entry. '
-          '`aim create --target functions` writes one.',
+          'firebase.json not found. It is required next to pubspec.yaml for '
+          'the functions target. `aim create --target functions` writes '
+          'one.',
           invocation,
         );
       }
@@ -80,11 +77,13 @@ class DevCommand extends Command {
       // wins over a throwaway id.
       final hasFirebaserc = await File('.firebaserc').exists();
       final runner = FunctionsDevRunner(
-        projectId: hasFirebaserc ? null : demoProjectId(config.packageName),
+        projectId: emulatorProjectId(
+          hasFirebaserc: hasFirebaserc,
+          packageName: config.packageName,
+        ),
         environment: config.env,
       );
       print('🚀 Starting the Firebase emulator (functions)...');
-      print('📁 Entry point: $entryPoint');
       if (config.env.isNotEmpty) {
         print('🔧 Environment variables: ${config.env.keys.join(', ')}');
       }
@@ -98,10 +97,19 @@ class DevCommand extends Command {
       try {
         await runner.start();
       } catch (e) {
-        print('❌ Error: $e');
+        print('❌ Error: ${e is StateError ? e.message : e}');
         exit(1);
       }
       return;
+    }
+
+    final entryPoint = config.resolveEntry(argResults?['entry'] as String?);
+
+    // Check if entry point file exists
+    final entryFile = File(entryPoint);
+    if (!await entryFile.exists()) {
+      print('Error: Entry point "$entryPoint" not found');
+      exit(1);
     }
 
     // Hot reload configuration

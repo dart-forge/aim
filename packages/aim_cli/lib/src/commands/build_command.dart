@@ -27,7 +27,8 @@ class BuildCommand extends Command {
       abbr: 'o',
       help:
           'Output path (default: build/server, or the build/edge '
-          'directory for target: edge)',
+          'directory for target: edge; ignored for target: functions, '
+          'which has nothing to build)',
     );
   }
 
@@ -44,16 +45,12 @@ class BuildCommand extends Command {
 
     // Determine entry point
     final config = await AimConfig.load();
-    final entryPoint = config.resolveEntry(argResults?['entry'] as String?);
-
-    // Check if entry point file exists
-    final entryFile = File(entryPoint);
-    if (!await entryFile.exists()) {
-      print('Error: Entry point "$entryPoint" not found');
-      exit(1);
-    }
 
     if (config.target == AimTarget.functions) {
+      // Nothing here reads the entry point: `firebase deploy` resolves it
+      // itself, the same way `firebase emulators:start` does for `aim dev`.
+      // Checking it first would report "Entry point not found" for a
+      // project that simply has nothing to build.
       print('ℹ️  Nothing to build for target: functions.');
       print('');
       print('`firebase deploy --only functions` compiles the function for');
@@ -65,6 +62,15 @@ class BuildCommand extends Command {
       print('  firebase deploy --only functions   # compile and deploy');
       print('');
       return;
+    }
+
+    final entryPoint = config.resolveEntry(argResults?['entry'] as String?);
+
+    // Check if entry point file exists
+    final entryFile = File(entryPoint);
+    if (!await entryFile.exists()) {
+      print('Error: Entry point "$entryPoint" not found');
+      exit(1);
     }
 
     if (config.target == AimTarget.edge) {

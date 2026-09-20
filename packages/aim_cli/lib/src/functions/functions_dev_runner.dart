@@ -20,6 +20,13 @@ String demoProjectId(String? packageName) {
   return id.substring(0, 30).replaceAll(RegExp(r'-+$'), '');
 }
 
+/// The `--project` to pass the Firebase CLI, or null to let `.firebaserc`
+/// name it.
+String? emulatorProjectId({
+  required bool hasFirebaserc,
+  required String? packageName,
+}) => hasFirebaserc ? null : demoProjectId(packageName);
+
 /// Development loop for `aim.target: functions`.
 ///
 /// Starts the Firebase emulator and waits for it. There is deliberately no
@@ -68,7 +75,11 @@ class FunctionsDevRunner {
     final exitCode = await _firebase!.exitCode;
     if (_stopping) return;
     if (exitCode != 0) {
-      throw StateError('firebase emulators:start exited with code $exitCode');
+      throw StateError(
+        'firebase emulators:start exited with code $exitCode. This usually '
+        'means the Dart experiment is off; run '
+        '`firebase experiments:enable dartfunctions`.',
+      );
     }
   }
 

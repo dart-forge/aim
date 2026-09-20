@@ -23,4 +23,20 @@ void main() {
       expect(id, isNot(endsWith('-')));
     });
   });
+
+  group('emulatorProjectId', () {
+    test('is null when .firebaserc already names a project', () {
+      expect(
+        emulatorProjectId(hasFirebaserc: true, packageName: 'my_app'),
+        isNull,
+      );
+    });
+
+    test('falls back to demoProjectId when there is no .firebaserc', () {
+      expect(
+        emulatorProjectId(hasFirebaserc: false, packageName: 'my_app'),
+        'demo-my-app',
+      );
+    });
+  });
 }
