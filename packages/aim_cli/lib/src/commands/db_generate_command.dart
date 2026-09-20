@@ -521,6 +521,19 @@ class DbGenerateCommand extends Command<void> {
       );
     }
 
+    if (columnType == 'serial' && defaultValue != null) {
+      // SERIAL already means `integer NOT NULL DEFAULT nextval(...)`, and
+      // the server answers a second default with "multiple default values
+      // specified for column". The column definition refuses this at
+      // runtime, but this reader never runs it — it reads the source.
+      throw FormatException(
+        'The serial column "$fieldName" in $filePath asks for a default. A '
+        'serial column takes its value from the sequence PostgreSQL creates '
+        'for it, and the server refuses a second default. Remove '
+        'withDefault() from the column.',
+      );
+    }
+
     return _ColumnAnalysisResult(
       column: ColumnSchema(
         name: columnName ?? fieldName,
