@@ -114,10 +114,10 @@ Requests reach the app at `http://localhost:5001/<project-id>/us-central1/api`; 
 
 Write your routes without the function name as a prefix — `/`, not `/api/`; `/users/:id`, not `/api/users/:id` — the same as the example above, whatever name you pass to `onRequest`.
 
-That's true for two different reasons depending on where the request comes from, and only one of them was checked against a running process:
+That's true for two different reasons depending on where the request comes from, and both have been checked against a running process:
 
 - **Locally**, `firebase_functions` runs every registered function in one shared process and routes by path, stripping the function name before the request reaches your handler. Confirmed through `firebase emulators:start` against a project the Firebase CLI scaffolded: `GET /<project>/us-central1/api` and `.../api/users/42` reached the app's `/` and `/users/:id` routes, and `.../api/nope` came back as the app's own 404 rather than the emulator's. Also confirmed by running the entry point directly, without the emulator.
-- **In production**, a deployed function is its own Cloud Run service — one function per service — so the function name lives in the service's URL rather than in the request path, and nothing needs to strip a prefix. The service-per-function shape is confirmed by a real deploy, which created a Cloud Run service named after the function. The request handling is not: that part is read from how `firebase_functions` is built to be deployed (the SDK takes a different, untouched-request code path once Cloud Run sets an internal target variable), and no request has been sent to a deployed function to check it.
+- **In production**, a deployed function is its own Cloud Run service — one function per service — so the function name lives in the service's URL rather than in the request path, and nothing needs to strip a prefix. `firebase_functions` takes a different code path here, one that hands your handler the request untouched, selected once Cloud Run sets an internal target variable. Confirmed against a real deployed function: `firebase deploy --only functions` of a scaffolded app, then requests to the Cloud Run service's address, reached the app's `/users/:id` route and returned the app's own 404 for an unknown path.
 
 ## Middleware
 

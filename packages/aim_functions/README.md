@@ -100,11 +100,11 @@ prefix, but because a deployed function is its own Cloud Run service —
 one function per service — so the function name lives in the service's
 address rather than in the request path, and the request simply arrives
 at `/` already without needing to be rewritten. That last part — that
-Cloud Run itself delivers the path at `/` — is read from how the SDK is
-built to be deployed, not something observed against a real, deployed
-function; this repository has no Firebase project to deploy to. If a
-deployed function turns out to see `/api/...` after all, this paragraph
-is what's wrong, not your routes.
+Cloud Run itself delivers the path at `/` — has been confirmed against a
+real deployed function: `firebase deploy --only functions` of a
+scaffolded app, then requests to the Cloud Run service's own address,
+reached the app's `/users/:id` route and got the app's own 404 for an
+unknown path.
 
 `toAimRequest` uses `requestedUri`, not `url`, for this reason (and
 because it's the absolute, leading-`/` path Aim's router expects —
