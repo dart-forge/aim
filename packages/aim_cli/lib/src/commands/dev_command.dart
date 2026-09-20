@@ -1,7 +1,9 @@
 import 'dart:io';
+
 import 'package:args/command_runner.dart';
 import 'package:aim_cli/src/config/aim_config.dart';
 import 'package:aim_cli/src/edge/edge_dev_runner.dart';
+import 'package:aim_cli/src/functions/functions_dev_runner.dart';
 import 'package:aim_cli/src/hot_reload/hot_reloader.dart';
 
 class DevCommand extends Command {
@@ -56,15 +58,64 @@ class DevCommand extends Command {
       exit(1);
     }
 
+    if (config.target == AimTarget.functions) {
+      if (argResults?['port'] != null) {
+        throw UsageException(
+          '--port is not supported for target: functions. The Firebase '
+          'emulator takes its port from firebase.json; set '
+          'emulators.functions.port there.',
+          invocation,
+        );
+      }
+      final firebaseJson = File('firebase.json');
+      if (!await firebaseJson.exists()) {
+        throw UsageException(
+          'firebase.json not found. The functions target needs it next to '
+          'pubspec.yaml, with "source": "." in its functions entry. '
+          '`aim create --target functions` writes one.',
+          invocation,
+        );
+      }
+      // Omit --project when .firebaserc names one, so the user's own choice
+      // wins over a throwaway id.
+      final hasFirebaserc = await File('.firebaserc').exists();
+      final runner = FunctionsDevRunner(
+        projectId: hasFirebaserc ? null : demoProjectId(config.packageName),
+        environment: config.env,
+      );
+      print('🚀 Starting the Firebase emulator (functions)...');
+      print('📁 Entry point: $entryPoint');
+      if (config.env.isNotEmpty) {
+        print('🔧 Environment variables: ${config.env.keys.join(', ')}');
+      }
+      print('');
+      ProcessSignal.sigint.watch().listen((_) async {
+        print('\n🛑 Stopping the emulator...');
+        await runner.stop();
+        print('✅ Stopped');
+        exit(0);
+      });
+      try {
+        await runner.start();
+      } catch (e) {
+        print('❌ Error: $e');
+        exit(1);
+      }
+      return;
+    }
+
     // Hot reload configuration
     final hotReloadEnabled = argResults?['hot-reload'] as bool? ?? true;
     final watchPathsArg = argResults?['watch'] as String?;
-    final watchPaths = watchPathsArg?.split(',') ??
+    final watchPaths =
+        watchPathsArg?.split(',') ??
         (config.target == AimTarget.edge ? ['lib'] : ['lib', 'bin']);
 
     if (config.target == AimTarget.edge) {
       if (config.env.isNotEmpty) {
-        print('⚠️  aim.env is ignored for target: edge. Use vars in wrangler.jsonc.');
+        print(
+          '⚠️  aim.env is ignored for target: edge. Use vars in wrangler.jsonc.',
+        );
       }
       final portArg = argResults?['port'] as String?;
       int? port;
