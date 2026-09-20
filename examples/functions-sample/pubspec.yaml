@@ -1,0 +1,16 @@
+name: functions_sample
+description: Aim running as a Cloud Functions for Firebase HTTP function.
+version: 1.0.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  aim_functions:
+    path: ../../packages/aim_functions
+  firebase_functions: ^0.8.0
+
+dev_dependencies:
+  lints: ^6.0.0

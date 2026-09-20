@@ -6,6 +6,7 @@ workspace:
   - packages/aim_core
   - packages/aim_server
   - packages/aim_edge
+  - packages/aim_functions
   - packages/aim_cli
   - packages/aim_server_cors
   - packages/aim_server_cookie
@@ -26,6 +27,7 @@ workspace:
   - examples/basic-sample
   - examples/orm-sample
   - examples/edge-sample
+  - examples/functions-sample
   - tools/release
   - packages/aim_orm_codegen/test/golden/fixtures/simple_table
   - packages/aim_orm_codegen/test/golden/fixtures/nullable_columns
