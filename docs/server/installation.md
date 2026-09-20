@@ -51,7 +51,16 @@ This requires Node.js (the CLI runs `npx wrangler@4`). See [Cloudflare Workers](
 
 ### Cloud Functions
 
-Cloud Functions for Firebase isn't an `aim create` / `aim build` target — there's no `aim.target` value for it, and no `aim build` output to deploy. Instead, the Firebase CLI itself compiles your app during `firebase deploy --only functions`. Depend on `aim_functions` from a project created with `firebase init functions`; see [Cloud Functions for Firebase](/server/functions) for the full setup, and note that Dart support there is experimental.
+To target Cloud Functions for Firebase, pass `--target functions`:
+
+```bash
+aim create my_api --target functions
+cd my_api
+dart pub get
+aim dev   # starts the Firebase emulator
+```
+
+`aim build` does nothing for this target — the Firebase CLI itself compiles your app during `firebase deploy --only functions`. See [Cloud Functions for Firebase](/server/functions) for the full setup, and note that Dart support there is experimental.
 
 ## Manual Setup
 

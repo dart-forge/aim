@@ -32,7 +32,8 @@ aim create <project_name>
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--target` | Project target: `server` or `edge` | `server` |
+| `--target` | Project target: `server`, `edge` or `functions` | `server` |
+| `--firebase-project` | Firebase project id written to `.firebaserc` (target: functions). Pass an empty value to skip `.firebaserc` and bind a project later with `firebase use --add` | prompts when a terminal is attached |
 
 **Example:**
 ```bash
@@ -59,6 +60,20 @@ This scaffolds a Cloudflare workerd project instead:
 - `wrangler.jsonc` - Wrangler configuration
 
 The Worker name in `wrangler.jsonc` is the project name with underscores (`_`) replaced by hyphens (`-`), e.g. `my_worker` becomes `my-worker`.
+
+**With `--target functions`:**
+```bash
+aim create my_api --target functions
+cd my_api
+```
+
+This scaffolds a Cloud Functions for Firebase project, flat in one directory:
+- `firebase.json` - Firebase config, with `"source": "."` next to `pubspec.yaml`
+- `bin/server.dart` - hands the app to `firebase_functions`' `onRequest`
+- `lib/src/server.dart` - `createApp()`, your routes
+- `.firebaserc` - written only when a Firebase project id was given
+
+It prompts for a Firebase project id (`Firebase project id (leave empty to set it up later): `) unless `--firebase-project` is passed. An empty answer skips `.firebaserc`; with no terminal attached and no `--firebase-project`, the prompt is skipped the same way. See [Cloud Functions for Firebase](/server/functions) for the full setup.
 
 ### `aim dev`
 
@@ -112,6 +127,14 @@ aim dev --port 3000
 - `--no-hot-reload` disables file watching entirely
 - `aim.env` is ignored (with a warning) — configure vars and bindings in `wrangler.jsonc` instead
 - Requires Node.js to be installed (for `npx`)
+
+**With `--target functions`:**
+- Starts `firebase emulators:start --only functions`
+- The emulator runs `build_runner watch` itself, so edits are picked up while `aim dev` keeps running, without the CLI adding a second rebuild loop — `--hot-reload` and `--watch` have no effect
+- `--port` is rejected; set the port in `firebase.json` under `emulators.functions.port` instead
+- `aim.env` is passed to the emulator process, which the function process it spawns inherits
+- Falls back to a `demo-` project id (derived from the package name) when there's no `.firebaserc`
+- Requires the Firebase CLI, logged in, with `firebase experiments:enable dartfunctions` run once
 
 ### `aim build`
 
@@ -167,6 +190,9 @@ Next steps:
 - Output is `build/edge/main.wasm` and `build/edge/main.mjs` (with `CompiledApp` already exported)
 - `--output` is a directory (default `build/edge`), not a file path
 - Next step: `npx wrangler@4 deploy`
+
+**With `--target functions`:**
+- Does nothing — prints a message and exits; `firebase deploy --only functions` compiles on your machine and uploads the result
 
 ## Configuration
 

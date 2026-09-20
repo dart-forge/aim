@@ -15,8 +15,8 @@ Configure Aim CLI via `pubspec.yaml`, under a top-level `aim:` key.
 
 | Key | Used by | Description | Default |
 |---|---|---|---|
-| `target` | `aim dev`, `aim build` | Where the app runs: `server` or `edge` | `server` |
-| `entry` | `aim dev`, `aim build` | Entry point | `bin/server.dart`, or `lib/main.dart` for `edge` |
+| `target` | `aim dev`, `aim build` | Where the app runs: `server`, `edge` or `functions` | `server` |
+| `entry` | `aim dev`, `aim build` | Entry point | `bin/server.dart` for `server` and `functions`, or `lib/main.dart` for `edge` |
 | `env` | `aim dev` | Environment variables passed to the app | none |
 | `database.url` | `aim db:*` | Database connection URL | required by `aim db:*` |
 | `database.schema` | `aim db:generate` | Path to table definitions, a file or a directory | `lib/schema` |
@@ -44,6 +44,7 @@ aim:
 |---|---|---|---|---|
 | `server` (default) | Dart VM with `aim_server` | `dart run` with restart on change | `dart compile exe` → `build/server` | `bin/server.dart` |
 | `edge` | Cloudflare workerd with `aim_edge` | `dart compile wasm` + `npx wrangler@4 dev`, recompiles on change | `dart compile wasm` → `build/edge/` | `lib/main.dart` |
+| `functions` | Cloud Functions for Firebase with `aim_functions` | `firebase emulators:start --only functions`; the emulator rebuilds on change | nothing — `firebase deploy --only functions` compiles | `bin/server.dart` |
 
 ```yaml
 aim:
@@ -51,7 +52,7 @@ aim:
   entry: lib/main.dart
 ```
 
-`aim.env` is not applied for `target: edge`; declare vars and bindings in `wrangler.jsonc` instead and read them with `c.env`.
+`aim.env` is not applied for `target: edge`; declare vars and bindings in `wrangler.jsonc` instead and read them with `c.env`. For `target: functions`, `aim.env` is passed to the Firebase emulator process, which the function process it spawns inherits.
 
 ## Environment Variables
 
@@ -191,7 +192,7 @@ Entry point is determined in this order:
 
 1. `--entry` option (`aim dev --entry bin/api.dart`)
 2. `aim.entry` in `pubspec.yaml`
-3. Target default: `bin/server.dart` for `server`, `lib/main.dart` for `edge`
+3. Target default: `bin/server.dart` for `server` and `functions`, `lib/main.dart` for `edge`
 
 ## Watch Directories
 
