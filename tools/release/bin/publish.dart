@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:release/release_targets.dart';
 import 'package:yaml/yaml.dart';
 
 void main(List<String> args) async {
@@ -35,6 +36,7 @@ void main(List<String> args) async {
           name: name,
           path: entity.path,
           aimDependencies: deps,
+          skipped: isPublishToNone(content),
         );
       }
     }
@@ -43,9 +45,45 @@ void main(List<String> args) async {
   // Topological sort
   final sorted = _topologicalSort(packages);
 
+  final skippedNames = {
+    for (final pkg in sorted)
+      if (pkg.skipped) pkg.name,
+  };
+
+  // Fail before publishing anything if a package that will be published
+  // depends on one that is held back: it would push a package whose
+  // dependency never reached pub.dev.
+  final violations = skippedDependencyViolations(
+    dependenciesByPackage: {
+      for (final pkg in sorted) pkg.name: pkg.aimDependencies,
+    },
+    skippedPackages: skippedNames,
+  );
+
+  if (violations.isNotEmpty) {
+    stderr.writeln(
+      'Cannot publish: the following packages depend on a package that is '
+      'held back (publish_to: none) and is not on pub.dev:\n',
+    );
+    for (final violation in violations) {
+      stderr.writeln(
+        '  ${violation.dependent} depends on ${violation.dependency}, '
+        'which is publish_to: none',
+      );
+    }
+    exit(1);
+  }
+
   stdout.writeln('Publishing ${sorted.length} packages in order:\n');
   for (var i = 0; i < sorted.length; i++) {
-    stdout.writeln('  ${i + 1}. ${sorted[i].name}');
+    final pkg = sorted[i];
+    final note = pkg.skipped ? ' (skipped: publish_to: none)' : '';
+    stdout.writeln('  ${i + 1}. ${pkg.name}$note');
+  }
+  if (skippedNames.isNotEmpty) {
+    stdout.writeln(
+      '\n${skippedNames.length} package(s) skipped: ${skippedNames.join(', ')}',
+    );
   }
   stdout.writeln('');
 
@@ -55,17 +93,18 @@ void main(List<String> args) async {
 
   for (final pkg in sorted) {
     stdout.writeln('=' * 50);
+    if (pkg.skipped) {
+      stdout.writeln('Skipping ${pkg.name} (publish_to: none)');
+      stdout.writeln('=' * 50);
+      stdout.writeln('');
+      continue;
+    }
     stdout.writeln('Publishing ${pkg.name}...');
     stdout.writeln('=' * 50);
 
     final result = await Process.run(
       'dart',
-      [
-        'pub',
-        'publish',
-        if (dryRun) '--dry-run',
-        if (!dryRun) '--force',
-      ],
+      ['pub', 'publish', if (dryRun) '--dry-run', if (!dryRun) '--force'],
       workingDirectory: pkg.path,
       runInShell: true,
     );
@@ -96,10 +135,15 @@ class PackageInfo {
   final String path;
   final List<String> aimDependencies;
 
+  /// Whether this package declares `publish_to: none` and should be left
+  /// off pub.dev while still taking part in the release graph.
+  final bool skipped;
+
   PackageInfo({
     required this.name,
     required this.path,
     required this.aimDependencies,
+    required this.skipped,
   });
 }
 

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:release/changelog.dart';
 import 'package:release/pubspec_bump.dart';
+import 'package:release/release_targets.dart';
 import 'package:release/template_pins.dart';
 import 'package:release/workspace.dart';
 import 'package:yaml/yaml.dart';
@@ -45,8 +46,19 @@ void main(List<String> args) {
   var packageCount = 0;
   for (final file in memberFiles) {
     if (_isTopLevelPackage(file.parent.path)) {
+      final heldBack = isPublishToNone(file.readAsStringSync());
       _updatePubspec(file, newVersion);
-      _updateChangelog(file.parent, newVersion);
+      if (heldBack) {
+        // publish_to: none: version and aim_* constraints still move in
+        // lockstep, but writing release notes for a version that never
+        // reached pub.dev would be a lie. Whatever is under this
+        // package's "Unreleased" heading becomes its first real release
+        // notes once it is actually published.
+        final packageName = _packageNameFromPath(file.parent.path);
+        stdout.writeln('$packageName: CHANGELOG unchanged (publish_to: none)');
+      } else {
+        _updateChangelog(file.parent, newVersion);
+      }
       packageCount++;
     } else {
       _updateWorkspaceMemberDeps(file, newVersion);
@@ -62,7 +74,9 @@ void main(List<String> args) {
   stdout.writeln('\nDone! Updated $packageCount packages to $newVersion');
   stdout.writeln('\nNext steps:');
   stdout.writeln('  1. Review changes: git diff');
-  stdout.writeln('  2. Commit: git commit -am "chore: bump version to $newVersion"');
+  stdout.writeln(
+    '  2. Commit: git commit -am "chore: bump version to $newVersion"',
+  );
   stdout.writeln(
     '  3. Tag: git tag $newVersion  (no "v" prefix: docs deploy and create_release expect 0.2.0-style tags)',
   );
@@ -192,16 +206,23 @@ final _unreleasedHeadingPattern = RegExp(
   caseSensitive: false,
 );
 
-void _updateChangelog(Directory packageDir, String newVersion) {
-  final changelogFile = File('${packageDir.path}/CHANGELOG.md');
-  final packageName = packageDir.path
+/// The last non-empty path segment, used as the package name when a
+/// pubspec's own `name:` field isn't already at hand.
+String _packageNameFromPath(String path) {
+  return path
       .split(Platform.pathSeparator)
       .where((segment) => segment.isNotEmpty)
       .last;
+}
+
+void _updateChangelog(Directory packageDir, String newVersion) {
+  final changelogFile = File('${packageDir.path}/CHANGELOG.md');
+  final packageName = _packageNameFromPath(packageDir.path);
 
   if (!changelogFile.existsSync()) {
     // Create new CHANGELOG.md
-    final content = '''# Changelog
+    final content =
+        '''# Changelog
 
 ## $newVersion
 
@@ -249,9 +270,7 @@ void _updateCliTemplates(String newVersion) {
     final depName = match[2]!;
     final oldVersion = match[3]!;
     if (oldVersion != newVersion) {
-      stdout.writeln(
-        'aim_cli templates: $depName ^$oldVersion → ^$newVersion',
-      );
+      stdout.writeln('aim_cli templates: $depName ^$oldVersion → ^$newVersion');
     }
   }
 
