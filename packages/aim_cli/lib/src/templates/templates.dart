@@ -485,7 +485,14 @@ Aim createApp() {
       "source": ".",
       "codebase": "default",
       "runtime": "dart3",
-      "ignore": [".dart_tool"]
+      "ignore": [
+        ".dart_tool",
+        ".git",
+        "build",
+        ".firebase",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
     }
   ],
   "emulators": {
@@ -513,12 +520,12 @@ Aim createApp() {
 build/
 pubspec.lock
 
-# Compiled entry point
-bin/server
-
 # Firebase
 .firebase/
 *.local
+firebase-debug.log
+firebase-debug.*.log
+ui-debug.log
 
 # IDE
 .idea/
@@ -557,6 +564,7 @@ changes by itself. The app answers at
 ## Deploy
 
 ```bash
+firebase use --add    # only needed once, if no Firebase project is bound yet
 firebase deploy --only functions
 ```
 
