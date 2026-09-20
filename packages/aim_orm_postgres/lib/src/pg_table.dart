@@ -7,14 +7,18 @@ import 'package:aim_orm/aim_orm.dart';
 ///
 /// ## Example
 ///
+/// The annotation goes on a top-level variable holding a record, one field
+/// per column. That is the only shape the code generator and `aim
+/// db:generate` read.
+///
 /// ```dart
 /// @PgTable('users')
-/// class UsersTable {
-///   Column<int> get id => serial('id').primaryKey();
-///   Column<String> get name => varchar('name', length: 100);
-///   Column<String> get email => varchar('email', length: 255).unique();
-///   Column<DateTime> get createdAt => timestamp('created_at').withDefaultNow();
-/// }
+/// final users = (
+///   id: serial('id').primaryKey(),
+///   name: varchar('name', length: 100),
+///   email: varchar('email', length: 255).unique(),
+///   createdAt: timestamp('created_at').withDefaultNow(),
+/// );
 /// ```
 ///
 /// Use with [aim_orm_codegen](https://pub.dev/packages/aim_orm_codegen) to

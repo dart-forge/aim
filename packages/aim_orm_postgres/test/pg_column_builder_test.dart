@@ -1,3 +1,4 @@
+import 'package:aim_orm/aim_orm.dart';
 import 'package:aim_orm_postgres/aim_orm_postgres.dart';
 import 'package:test/test.dart';
 
@@ -29,15 +30,43 @@ void main() {
       }
     });
 
-    // SerialColumn.copyWith() accepts a `defaultValue` argument (the
-    // Column<T, Self> contract requires the parameter) but never forwards
-    // it to the SerialColumn constructor, which always passes
-    // `defaultValue: null` to the super constructor. So
-    // `serial('id').withDefault(x)` silently returns a column whose
-    // defaultValue is still null -- withDefault() has no visible effect for
-    // this type, and nothing reports that the call did nothing. See the
-    // report for details; that behaviour is deliberately left untested
-    // here rather than asserted as correct.
+    test('carries integer values, the type SERIAL stores', () {
+      // The value type decides what every comparison on the column takes.
+      // Typed as text, a serial key took strings while the database held
+      // integers and the code generator wrote int.
+      expect(serial('id'), isA<Column<int, SerialColumn>>());
+    });
+  });
+
+  group('SerialColumn - withDefault()', () {
+    test('is refused, naming what the server would answer', () {
+      expect(
+        () => serial('id').withDefault(1),
+        throwsA(
+          isA<UnsupportedError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('multiple default values'),
+              contains('Remove the default'),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('is refused through copyWith as well', () {
+      expect(
+        () => serial('id').copyWith(defaultValue: 1),
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
+
+    test('leaves the other modifiers working through copyWith', () {
+      final col = serial('id').copyWith(isPrimaryKey: true);
+      expect(col.isPrimaryKey, isTrue);
+      expect(col.defaultValue, isNull);
+    });
   });
 
   group('uuid() - defaults', () {

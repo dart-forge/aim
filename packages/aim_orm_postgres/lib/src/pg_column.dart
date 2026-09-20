@@ -12,9 +12,12 @@ import 'package:aim_orm/aim_orm.dart';
 /// final id = serial('id').primaryKey();
 /// ```
 ///
-/// Note: SERIAL columns should not have a default value set manually as
-/// PostgreSQL handles the auto-increment automatically.
-class SerialColumn extends Column<String, SerialColumn> {
+/// A serial column takes no default of its own: `SERIAL` already means
+/// `integer NOT NULL DEFAULT nextval(...)`, and PostgreSQL answers a column
+/// definition carrying a second default with "multiple default values
+/// specified for column". Asking for one throws rather than being dropped
+/// in silence.
+class SerialColumn extends Column<int, SerialColumn> {
   /// Creates a new serial column with the given [name].
   const SerialColumn({
     required super.name,
@@ -23,18 +26,29 @@ class SerialColumn extends Column<String, SerialColumn> {
     super.isUnique,
   }) : super(defaultValue: null);
 
+  static const String _defaultRefused =
+      'A serial column takes its value from the sequence PostgreSQL creates '
+      'for it, so its definition cannot carry a default as well: the server '
+      'answers "multiple default values specified for column". Remove the '
+      'default from the column.';
+
   @override
   SerialColumn copyWith({
     bool? isPrimaryKey,
     bool? isNullable,
     bool? isUnique,
-    String? defaultValue,
-  }) => SerialColumn(
-    name: name,
-    isPrimaryKey: isPrimaryKey ?? this.isPrimaryKey,
-    isNullable: isNullable ?? this.isNullable,
-    isUnique: isUnique ?? this.isUnique,
-  );
+    int? defaultValue,
+  }) {
+    // withDefault() reaches this through the base class, so refusing here
+    // covers both ways of asking.
+    if (defaultValue != null) throw UnsupportedError(_defaultRefused);
+    return SerialColumn(
+      name: name,
+      isPrimaryKey: isPrimaryKey ?? this.isPrimaryKey,
+      isNullable: isNullable ?? this.isNullable,
+      isUnique: isUnique ?? this.isUnique,
+    );
+  }
 
   @override
   String toSql() => 'SERIAL';

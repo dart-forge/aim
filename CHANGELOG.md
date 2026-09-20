@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+- `aim_orm_postgres`: `SerialColumn` is `Column<int, SerialColumn>` where it was `Column<String, SerialColumn>`. `SERIAL` stores a 4-byte integer, the code generator already maps it to `int`, and the class's own documentation said so — only the type parameter disagreed, which made every comparison on a serial key take a string. Three things follow for anyone who had written code against the old type: comparisons such as `users.id.eq('1')` become `users.id.eq(1)`; a foreign key pointing at a serial column has to have the same value type, so `varchar('user_id').references(() => users.id)` becomes `integer('user_id').references(() => users.id)`; and `defaultValue`, along with `copyWith`'s `defaultValue` parameter, is `int?` where it was `String?`.
+- `aim_orm_postgres`: asking a serial column for a default now throws `UnsupportedError` instead of being ignored. `SERIAL` already means `integer NOT NULL DEFAULT nextval(...)`, and PostgreSQL answers a second default with "multiple default values specified for column". `aim db:generate` refuses the same thing when it reads the schema, because it reads the source rather than running it.
+
 ## 0.2.0
 
 Second beta. Aim now runs on Cloudflare workerd as well as the Dart VM, `aim_postgres` pools connections, and the per-request variable type follows Hono's naming. This release contains breaking changes; see the [Migration Guide](https://aim-dart.dev/server/guides/migration) for step-by-step instructions.

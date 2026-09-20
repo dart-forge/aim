@@ -695,6 +695,49 @@ final child = (
   });
 
   group('db:generate - nothing the schema declares is dropped in silence', () {
+    test('a serial column asking for a default stops the command', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('things')
+final things = (
+  id: serial('id').withDefault(1),
+  name: varchar('name', length: 20),
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('serial'))
+              .having((e) => e.message, 'message', contains('id'))
+              .having(
+                (e) => e.message,
+                'message',
+                contains('Remove the default'),
+              ),
+        ),
+      );
+    });
+
+    test('a serial column without one is written as SERIAL', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('things')
+final things = (
+  id: serial('id').primaryKey(),
+  name: varchar('name', length: 20),
+);
+''');
+      await generate('first');
+
+      final up = upOf('first');
+      expect(up, contains('id SERIAL PRIMARY KEY'));
+      expect(up, isNot(contains('DEFAULT')));
+    });
+
     test('a reference through an import prefix is read', () async {
       writeSchemaFile('users.dart', '''
 import 'package:aim_orm/aim_orm.dart';
