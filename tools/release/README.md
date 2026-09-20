@@ -8,3 +8,5 @@ Release steps for aim.
     dart run release:create_release 0.3.0                      # GitHub release from the root CHANGELOG section
 
 Tags have no `v` prefix (docs deploy and create_release expect `0.3.0`).
+
+To hold a package back from a release, add `publish_to: none` to its pubspec.yaml. `bump` still updates its version and its `aim_*` constraints, so lockstep holds, but leaves its CHANGELOG alone. `publish` keeps it in the dependency graph for ordering but does not push it to pub.dev, and refuses to publish anything if a package that will be published depends on one that is held back. Remove the line to release it.
