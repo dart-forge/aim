@@ -62,11 +62,13 @@ class CreateCommand extends Command {
       );
     }
 
-    print('📦 Creating project "$projectName"...');
-
+    // Settle every input before announcing the work, so a rejected project id
+    // is not preceded by "Creating project".
     final firebaseProject = target == 'functions'
         ? _resolveFirebaseProject()
         : '';
+
+    print('📦 Creating project "$projectName"...');
 
     try {
       // Create directory structure
