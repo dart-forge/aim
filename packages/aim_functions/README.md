@@ -41,6 +41,13 @@ including how to try it locally without a real Firebase project.
 
 ## Status: Dart on Cloud Functions is experimental
 
+Requires **`firebase_functions` 0.8.0 or later**. On 0.6.x the local routing
+does not remove the function name before dispatch, so an app whose routes are
+written as `/` cannot be reached locally: the function root hands your handler
+`/api/`, and deeper paths never arrive. Measured against both versions with
+nothing else changed. `firebase init` has been seen to scaffold `^0.6.0`, so
+check `functions/pubspec.yaml` rather than assuming.
+
 `firebase_functions` itself calls its Dart support experimental — this
 adapter inherits that. Only `onRequest` is supported; there is no
 `serveFunction`-style helper for `onCall`. `onCall` is Firebase's RPC

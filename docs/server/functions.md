@@ -36,6 +36,7 @@ void main(List<String> args) {
 - Dart 3.13 or later.
 - The [Firebase CLI](https://firebase.google.com/docs/cli).
 - A Firebase project for deploying. Local development doesn't need a real one — see [Routes and the function name](#routes-and-the-function-name) below.
+- **`firebase_functions` 0.8.0 or later.** This is not a formality: on 0.6.x the local routing does not remove the function name before dispatching, so an app whose routes are written as `/` is unreachable locally — the function's root answers 404 because your handler is asked for `/api/`, and any deeper path is rejected by the SDK before your handler runs at all. Measured by running the same application against both versions and changing nothing else. `firebase init` has been seen to scaffold `^0.6.0`, so check what your `functions/pubspec.yaml` says rather than assuming.
 
 ## Create a project
 
