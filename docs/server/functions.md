@@ -67,7 +67,7 @@ Write your routes without the function name as a prefix — `/`, not `/api/`; `/
 
 That's true for two different reasons depending on where the request comes from, and only one of them was checked against a running process:
 
-- **Locally**, `firebase_functions` runs every registered function in one shared process and routes by path, stripping the function name before the request reaches your handler. This was run and confirmed with curl: starting the app above locally and requesting `GET /api/` and `GET /api/users/42` reached the app's `/` and `/users/:id` routes.
+- **Locally**, `firebase_functions` runs every registered function in one shared process and routes by path, stripping the function name before the request reaches your handler. Confirmed through `firebase emulators:start` against a project the Firebase CLI scaffolded: `GET /<project>/us-central1/api` and `.../api/users/42` reached the app's `/` and `/users/:id` routes, and `.../api/nope` came back as the app's own 404 rather than the emulator's. Also confirmed by running the entry point directly, without the emulator.
 - **In production**, a deployed function is its own Cloud Run service — one function per service — so the function name lives in the service's URL rather than in the request path, and nothing needs to strip a prefix. This part is read from how `firebase_functions` is built to be deployed (the SDK takes a different, untouched-request code path once Cloud Run sets an internal target variable), not something observed against a real deployed function — this adapter's test suite has no Firebase project to deploy to.
 
 ## Middleware
