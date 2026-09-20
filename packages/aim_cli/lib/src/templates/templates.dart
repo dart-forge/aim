@@ -486,12 +486,10 @@ Aim createApp() {
       "codebase": "default",
       "runtime": "dart3",
       "ignore": [
-        ".dart_tool",
+        "node_modules",
         ".git",
-        "build",
-        ".firebase",
-        "firebase-debug.log",
-        "firebase-debug.*.log"
+        ".dart_tool",
+        ".firebase"
       ]
     }
   ],
