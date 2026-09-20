@@ -26,15 +26,17 @@ void main() {
       );
     });
 
-    test('resolveEntry prefers the CLI override, then aim.entry, then default',
-        () {
-      final withEntry = AimConfig.parse('aim:\n  entry: bin/api.dart\n');
-      expect(withEntry.resolveEntry('bin/cli.dart'), 'bin/cli.dart');
-      expect(withEntry.resolveEntry(null), 'bin/api.dart');
+    test(
+      'resolveEntry prefers the CLI override, then aim.entry, then default',
+      () {
+        final withEntry = AimConfig.parse('aim:\n  entry: bin/api.dart\n');
+        expect(withEntry.resolveEntry('bin/cli.dart'), 'bin/cli.dart');
+        expect(withEntry.resolveEntry(null), 'bin/api.dart');
 
-      final withoutEntry = AimConfig.parse('aim:\n  target: edge\n');
-      expect(withoutEntry.resolveEntry(null), 'lib/main.dart');
-    });
+        final withoutEntry = AimConfig.parse('aim:\n  target: edge\n');
+        expect(withoutEntry.resolveEntry(null), 'lib/main.dart');
+      },
+    );
 
     test('expands env values', () {
       final config = AimConfig.parse(
@@ -98,6 +100,36 @@ void main() {
       final config = AimConfig.parse('aim:\n  database: true\n');
       expect(config.database.url, isNull);
       expect(config.database.configuredSchema, isNull);
+    });
+  });
+
+  group('functions target', () {
+    test('parses target: functions', () {
+      final config = AimConfig.parse('''
+name: my_app
+aim:
+  target: functions
+''');
+      expect(config.target, AimTarget.functions);
+      expect(config.defaultEntry, 'bin/server.dart');
+      expect(config.packageName, 'my_app');
+    });
+
+    test('an unknown target names all three in the message', () {
+      expect(
+        () => AimConfig.parse('aim:\n  target: lambda\n'),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('server'), contains('edge'), contains('functions')),
+          ),
+        ),
+      );
+    });
+
+    test('packageName is null when pubspec has no name', () {
+      expect(AimConfig.parse('aim:\n  target: server\n').packageName, isNull);
     });
   });
 

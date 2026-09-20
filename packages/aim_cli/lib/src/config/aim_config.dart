@@ -9,15 +9,21 @@ enum AimTarget {
   server,
 
   /// Cloudflare workerd with `aim_edge` (`dart compile wasm`, `wrangler dev`).
-  edge;
+  edge,
+
+  /// Cloud Functions for Firebase with `aim_functions` (the Firebase CLI
+  /// compiles and deploys; `firebase emulators:start` runs it locally).
+  functions;
 
   static AimTarget parse(String value) => switch (value) {
-        'server' => AimTarget.server,
-        'edge' => AimTarget.edge,
-        _ => throw FormatException(
-            'Unknown aim.target "$value". Expected "server" or "edge".',
-          ),
-      };
+    'server' => AimTarget.server,
+    'edge' => AimTarget.edge,
+    'functions' => AimTarget.functions,
+    _ => throw FormatException(
+      'Unknown aim.target "$value". Expected "server", "edge" or '
+      '"functions".',
+    ),
+  };
 }
 
 /// The `aim.database:` subsection of a project's pubspec.yaml.
@@ -62,6 +68,12 @@ class AimDatabaseConfig {
 class AimConfig {
   final AimTarget target;
 
+  /// The pubspec's top-level `name`, or `null` when it is absent.
+  ///
+  /// Not part of the `aim:` section. `aim dev` uses it to name the emulator's
+  /// throwaway Firebase project.
+  final String? packageName;
+
   /// `aim.entry` as written, or `null` when not configured.
   final String? configuredEntry;
 
@@ -73,6 +85,7 @@ class AimConfig {
 
   const AimConfig({
     this.target = AimTarget.server,
+    this.packageName,
     this.configuredEntry,
     this.env = const {},
     this.database = const AimDatabaseConfig(),
@@ -80,9 +93,10 @@ class AimConfig {
 
   /// Entry point used when neither `--entry` nor `aim.entry` is given.
   String get defaultEntry => switch (target) {
-        AimTarget.server => 'bin/server.dart',
-        AimTarget.edge => 'lib/main.dart',
-      };
+    AimTarget.server => 'bin/server.dart',
+    AimTarget.edge => 'lib/main.dart',
+    AimTarget.functions => 'bin/server.dart',
+  };
 
   /// `--entry` beats `aim.entry`, which beats [defaultEntry].
   String resolveEntry(String? cliOverride) =>
@@ -92,8 +106,9 @@ class AimConfig {
   static AimConfig parse(String yamlSource) {
     final doc = loadYaml(yamlSource);
     if (doc is! YamlMap) return const AimConfig();
+    final packageName = doc['name']?.toString();
     final aim = doc['aim'];
-    if (aim is! YamlMap) return const AimConfig();
+    if (aim is! YamlMap) return AimConfig(packageName: packageName);
 
     final targetValue = aim['target'];
     final target = targetValue == null
@@ -114,6 +129,7 @@ class AimConfig {
 
     return AimConfig(
       target: target,
+      packageName: packageName,
       configuredEntry: entry,
       env: env,
       database: AimDatabaseConfig.parse(aim['database']),
@@ -127,8 +143,9 @@ class AimConfig {
 
   /// Like [load], but yields defaults when [pubspecPath] does not exist, for
   /// callers that report a missing setting rather than a missing file.
-  static Future<AimConfig> loadOrDefault(
-      [String pubspecPath = 'pubspec.yaml']) async {
+  static Future<AimConfig> loadOrDefault([
+    String pubspecPath = 'pubspec.yaml',
+  ]) async {
     final file = File(pubspecPath);
     if (!await file.exists()) return const AimConfig();
     return parse(await file.readAsString());
