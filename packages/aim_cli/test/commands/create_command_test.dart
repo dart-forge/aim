@@ -58,7 +58,10 @@ void main() {
   test('scaffolds a server project by default', () async {
     await create(['my_server']);
 
-    expect(File(p.join(tmp.path, 'my_server/bin/server.dart')).existsSync(), isTrue);
+    expect(
+      File(p.join(tmp.path, 'my_server/bin/server.dart')).existsSync(),
+      isTrue,
+    );
     expect(File(p.join(tmp.path, 'my_server/Dockerfile')).existsSync(), isTrue);
     expect(
       read('my_server/pubspec.yaml'),
@@ -69,5 +72,63 @@ void main() {
 
   test('rejects an unknown target', () async {
     expect(create(['x', '--target', 'deno']), throwsA(isA<UsageException>()));
+  });
+
+  test('scaffolds a functions project', () async {
+    await create([
+      'my_fn',
+      '--target',
+      'functions',
+      '--firebase-project',
+      'my-real-project',
+    ]);
+
+    final files = Directory(p.join(tmp.path, 'my_fn'))
+        .listSync(recursive: true)
+        .whereType<File>()
+        .map((f) => p.relative(f.path, from: p.join(tmp.path, 'my_fn')))
+        .toSet();
+    expect(files, {
+      'pubspec.yaml',
+      'README.md',
+      'bin/server.dart',
+      'lib/src/server.dart',
+      'test/my_fn_test.dart',
+      '.gitignore',
+      'firebase.json',
+      '.firebaserc',
+    });
+
+    expect(read('my_fn/pubspec.yaml'), contains('target: functions'));
+    expect(read('my_fn/pubspec.yaml'), contains('aim_functions:'));
+    expect(read('my_fn/pubspec.yaml'), contains('firebase_functions: ^0.8.0'));
+    expect(read('my_fn/pubspec.yaml'), contains('build_runner:'));
+    expect(read('my_fn/pubspec.yaml'), contains('name: my_fn'));
+
+    // The Dart package and firebase.json sit side by side, so `aim dev` and
+    // the emulator agree on where the project root is.
+    expect(read('my_fn/firebase.json'), contains('"source": "."'));
+    expect(read('my_fn/firebase.json'), contains('"runtime": "dart3"'));
+    expect(read('my_fn/.firebaserc'), contains('"my-real-project"'));
+
+    expect(read('my_fn/bin/server.dart'), contains('serveFunction()'));
+    expect(
+      read('my_fn/bin/server.dart'),
+      contains("import 'package:my_fn/src/server.dart';"),
+    );
+    expect(read('my_fn/lib/src/server.dart'), contains('Aim createApp()'));
+  });
+
+  test('an empty firebase project id leaves .firebaserc out', () async {
+    await create(['my_fn', '--target', 'functions', '--firebase-project', '']);
+
+    expect(
+      File(p.join(tmp.path, 'my_fn', '.firebaserc')).existsSync(),
+      isFalse,
+    );
+    expect(
+      File(p.join(tmp.path, 'my_fn', 'firebase.json')).existsSync(),
+      isTrue,
+    );
   });
 }
