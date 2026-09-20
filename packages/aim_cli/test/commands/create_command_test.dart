@@ -131,4 +131,29 @@ void main() {
       isTrue,
     );
   });
+
+  test('rejects a --firebase-project with spaces', () async {
+    // Firebase would reject it much later, naming neither the flag nor the
+    // file it was written to.
+    expect(
+      create([
+        'my_fn',
+        '--target',
+        'functions',
+        '--firebase-project',
+        'My Project',
+      ]),
+      throwsA(isA<UsageException>()),
+    );
+    expect(Directory(p.join(tmp.path, 'my_fn')).existsSync(), isFalse);
+  });
+
+  test('rejects a --firebase-project containing a quote', () async {
+    // Interpolated as-is, this would produce malformed JSON in .firebaserc.
+    expect(
+      create(['my_fn', '--target', 'functions', '--firebase-project', 'a"b']),
+      throwsA(isA<UsageException>()),
+    );
+    expect(Directory(p.join(tmp.path, 'my_fn')).existsSync(), isFalse);
+  });
 }

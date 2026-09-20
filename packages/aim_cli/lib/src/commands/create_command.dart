@@ -104,12 +104,38 @@ class CreateCommand extends Command {
   /// directory name would name a project that does not exist, and a
   /// `.firebaserc` pointing at one is worse than none at all. Without a
   /// terminal to ask, the file is left out.
+  ///
+  /// A non-empty value is validated against Firebase's project id rule
+  /// before it is written: an id that fails the rule would either be
+  /// rejected much later by the Firebase CLI with no mention of this flag or
+  /// file, or (for a value containing `"`) break the JSON `.firebaserc`
+  /// interpolates it into.
   String _resolveFirebaseProject() {
     final fromFlag = argResults?['firebase-project'] as String?;
-    if (fromFlag != null) return fromFlag.trim();
+    if (fromFlag != null) {
+      final trimmed = fromFlag.trim();
+      if (trimmed.isEmpty) return trimmed;
+      if (!FirebaseProjectIdValidator.isValid(trimmed)) {
+        throw UsageException(
+          FirebaseProjectIdValidator.getErrorMessage(trimmed),
+          invocation,
+        );
+      }
+      return trimmed;
+    }
     if (!stdin.hasTerminal) return '';
-    stdout.write('Firebase project id (leave empty to set it up later): ');
-    return stdin.readLineSync()?.trim() ?? '';
+
+    // Capped so a non-interactive edge case (stdin closed, piped empty
+    // input, …) cannot spin forever re-asking.
+    for (var attempt = 0; attempt < 3; attempt++) {
+      stdout.write('Firebase project id (leave empty to set it up later): ');
+      final answer = stdin.readLineSync()?.trim() ?? '';
+      if (answer.isEmpty || FirebaseProjectIdValidator.isValid(answer)) {
+        return answer;
+      }
+      print(FirebaseProjectIdValidator.getErrorMessage(answer));
+    }
+    return '';
   }
 
   Future<void> _createProjectStructure(
