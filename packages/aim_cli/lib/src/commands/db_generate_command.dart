@@ -180,11 +180,9 @@ class DbGenerateCommand extends Command<void> {
   }
 
   Future<Schema> _analyzeSchema(String tablesPath) async {
-    final tables = <TableSchema>[];
+    final scanned = <_ScannedTable>[];
 
-    final collection = AnalysisContextCollection(
-      includedPaths: [tablesPath],
-    );
+    final collection = AnalysisContextCollection(includedPaths: [tablesPath]);
 
     for (final context in collection.contexts) {
       for (final filePath in context.contextRoot.analyzedFiles()) {
@@ -218,7 +216,8 @@ class DbGenerateCommand extends Command<void> {
 
               final columns = <ColumnSchema>[];
               final indexes = <IndexSchema>[];
-              final foreignKeys = <ForeignKeySchema>[];
+              final foreignKeys = <_PendingForeignKey>[];
+              final fieldToColumn = <String, String>{};
 
               for (final field in initializer.fields) {
                 if (field is! RecordLiteralNamedField) continue;
@@ -231,6 +230,7 @@ class DbGenerateCommand extends Command<void> {
                 );
 
                 columns.add(columnInfo.column);
+                fieldToColumn[fieldName] = columnInfo.column.name;
                 if (columnInfo.isIndexed) {
                   indexes.add(IndexSchema(columns: [columnInfo.column.name]));
                 }
@@ -239,19 +239,136 @@ class DbGenerateCommand extends Command<void> {
                 }
               }
 
-              tables.add(TableSchema(
-                name: tableName,
-                columns: columns,
-                indexes: indexes,
-                foreignKeys: foreignKeys,
-              ));
+              scanned.add(
+                _ScannedTable(
+                  variableName: variable.name.lexeme,
+                  filePath: filePath,
+                  table: TableSchema(
+                    name: tableName,
+                    columns: columns,
+                    indexes: indexes,
+                  ),
+                  fieldToColumn: fieldToColumn,
+                  pendingForeignKeys: foreignKeys,
+                ),
+              );
             }
           }
         }
       }
     }
 
-    return Schema(tables: tables);
+    return Schema(tables: _resolveReferences(scanned));
+  }
+
+  /// [scanned] with every foreign key's Dart names replaced by the names
+  /// the database uses.
+  ///
+  /// A reference names a Dart variable and a record field. The table name
+  /// comes from that variable's annotation and the column name from its
+  /// column definition, so this can only run once every table has been
+  /// read.
+  List<TableSchema> _resolveReferences(List<_ScannedTable> scanned) {
+    // One record per table. Two claiming the same name would each write a
+    // CREATE TABLE, and a reference to either would resolve against only
+    // one of them.
+    final byTableName = <String, _ScannedTable>{};
+    for (final scannedTable in scanned) {
+      final claimed = byTableName[scannedTable.table.name];
+      if (claimed != null) {
+        throw FormatException(
+          'Two records claim the table "${scannedTable.table.name}": '
+          '${claimed.variableName} in ${claimed.filePath}, and '
+          '${scannedTable.variableName} in ${scannedTable.filePath}.',
+        );
+      }
+      byTableName[scannedTable.table.name] = scannedTable;
+    }
+
+    final byVariable = <String, List<_ScannedTable>>{};
+    for (final scannedTable in scanned) {
+      (byVariable[scannedTable.variableName] ??= []).add(scannedTable);
+    }
+
+    return [
+      for (final scannedTable in scanned)
+        TableSchema(
+          name: scannedTable.table.name,
+          columns: scannedTable.table.columns,
+          indexes: scannedTable.table.indexes,
+          foreignKeys: [
+            for (final pending in scannedTable.pendingForeignKeys)
+              _resolveForeignKey(pending, scannedTable, byVariable),
+          ],
+        ),
+    ];
+  }
+
+  /// [pending] with its table and column names resolved.
+  ///
+  /// Throws a [FormatException] naming the file and the reference when
+  /// either cannot be resolved. An unresolvable reference is a mistake in
+  /// the schema, and carrying the Dart name through would produce SQL
+  /// naming a table or column the database does not have — which only
+  /// surfaces when the migration is applied.
+  ForeignKeySchema _resolveForeignKey(
+    _PendingForeignKey pending,
+    _ScannedTable owner,
+    Map<String, List<_ScannedTable>> byVariable,
+  ) {
+    final written =
+        'references(() => ${pending.referencesVariable}.'
+        '${pending.referencesField})';
+    final where =
+        'Cannot resolve the reference on '
+        '"${owner.table.name}.${pending.column}" in ${owner.filePath}:\n'
+        '  $written\n';
+
+    final candidates =
+        byVariable[pending.referencesVariable] ?? const <_ScannedTable>[];
+    if (candidates.isEmpty) {
+      throw FormatException(
+        '${where}No table annotated @PgTable was found for '
+        '"${pending.referencesVariable}" in the scanned path. Check the '
+        'name, or add the file holding it to the schema path.',
+      );
+    }
+
+    // A name declared in more than one file is taken to mean the one in
+    // the file that wrote the reference, which is what Dart itself would
+    // do. With no such declaration there is nothing to choose between
+    // them, and picking one would point the key at the wrong table.
+    final sameFile = candidates
+        .where((candidate) => candidate.filePath == owner.filePath)
+        .toList();
+    final pool = sameFile.isNotEmpty ? sameFile : candidates;
+    if (pool.length > 1) {
+      throw FormatException(
+        '$where"${pending.referencesVariable}" is declared more than once: '
+        '${pool.map((candidate) => '${candidate.variableName} in '
+            '${candidate.filePath} as "${candidate.table.name}"').join('; ')}. '
+        'Rename one of them, or move the reference into the file that '
+        'declares the table it means.',
+      );
+    }
+    final target = pool.single;
+
+    final column = target.fieldToColumn[pending.referencesField];
+    if (column == null) {
+      throw FormatException(
+        '$where"${pending.referencesVariable}" has no field named '
+        '"${pending.referencesField}". Its fields are: '
+        '${target.fieldToColumn.keys.join(', ')}.',
+      );
+    }
+
+    return ForeignKeySchema(
+      column: pending.column,
+      referencesTable: target.table.name,
+      referencesColumn: column,
+      onDelete: pending.onDelete,
+      onUpdate: pending.onUpdate,
+    );
   }
 
   _ColumnAnalysisResult _analyzeColumn(
@@ -267,12 +384,20 @@ class DbGenerateCommand extends Command<void> {
     bool isIndexed = false;
     int? varcharLength;
     String? defaultValue;
-    ForeignKeySchema? foreignKey;
+    _PendingForeignKey? foreignKey;
 
     // メソッドチェーンを収集
     final methods = <MethodInvocation>[];
     Expression? current = expr;
-    while (current is MethodInvocation) {
+    while (current != null) {
+      // Brackets do not change what the expression means, so the chain
+      // continues through them. Without this the walk stops and the column
+      // loses its type.
+      if (current is ParenthesizedExpression) {
+        current = current.expression;
+        continue;
+      }
+      if (current is! MethodInvocation) break;
       methods.add(current);
       current = current.target;
     }
@@ -319,43 +444,81 @@ class DbGenerateCommand extends Command<void> {
           if (args.isNotEmpty) {
             defaultValue = _extractDefaultValue(args.first.argumentExpression);
           }
+        case 'withDefaultNow':
+          // The ORM documents this as "set the default to
+          // CURRENT_TIMESTAMP", which is the same value withDefault()
+          // records for DateTime.now().
+          defaultValue = 'CURRENT_TIMESTAMP';
         case 'references':
           // references(() => users.id, onDelete: OnDeleteAction.cascade)
           final args = method.argumentList.arguments;
-          if (args.isNotEmpty) {
-            final firstArg = args.first;
-            if (firstArg is FunctionExpression) {
-              final body = firstArg.body;
-              if (body is ExpressionFunctionBody) {
-                final refExpr = body.expression;
-                String? refTable;
-                String? refColumn;
-                // PropertyAccess: users.id
-                if (refExpr is PropertyAccess) {
-                  final target = refExpr.target;
-                  if (target is SimpleIdentifier) {
-                    refTable = target.name;
-                  }
-                  refColumn = refExpr.propertyName.name;
-                }
-                // PrefixedIdentifier: users.id (fallback)
-                if (refExpr is PrefixedIdentifier) {
-                  refTable = refExpr.prefix.name;
-                  refColumn = refExpr.identifier.name;
-                }
-                if (refTable != null && refColumn != null) {
-                  foreignKey = ForeignKeySchema(
-                    column: columnName ?? fieldName,
-                    referencesTable: refTable,
-                    referencesColumn: refColumn,
-                    onDelete: _extractOnDelete(args, filePath),
-                    onUpdate: _extractOnUpdate(args, filePath),
-                  );
-                }
-              }
+          final refExpr = _referencedExpression(args);
+          String? refVariable;
+          String? refField;
+          // PropertyAccess: users.id
+          if (refExpr is PropertyAccess) {
+            final target = refExpr.target;
+            if (target is SimpleIdentifier) {
+              refVariable = target.name;
+            } else if (target is PrefixedIdentifier) {
+              // An import prefix: `u.users.id`. The prefix says which
+              // library the variable came from; the variable name is what
+              // a reference resolves on.
+              refVariable = target.identifier.name;
             }
+            refField = refExpr.propertyName.name;
           }
+          // PrefixedIdentifier: users.id (fallback)
+          if (refExpr is PrefixedIdentifier) {
+            refVariable = refExpr.prefix.name;
+            refField = refExpr.identifier.name;
+          }
+          if (refVariable == null || refField == null) {
+            // Skipping it would leave a table with no referential
+            // integrity and nothing said about it.
+            throw FormatException(
+              'Cannot read the reference on "$fieldName" in $filePath:\n'
+              '  ${method.toSource()}\n'
+              'Write it as a single-expression closure naming a table '
+              'variable and one of its fields, as in '
+              '`references(() => users.id)`. A block body, or a reference '
+              'to a function defined elsewhere, cannot be read here.',
+            );
+          }
+          foreignKey = _PendingForeignKey(
+            column: columnName ?? fieldName,
+            referencesVariable: refVariable,
+            referencesField: refField,
+            onDelete: _extractOnDelete(args, filePath),
+            onUpdate: _extractOnUpdate(args, filePath),
+          );
+        case 'copyWith':
+          throw FormatException(
+            'copyWith() on "$fieldName" in $filePath cannot be read as a '
+            'schema definition. Use the modifier for what it sets: '
+            'primaryKey(), nullable(), unique() or withDefault().',
+          );
+        default:
+          // Ignoring it would drop whatever the method was meant to
+          // declare, and the migration would be quietly short of it.
+          throw FormatException(
+            'Unknown column method "$methodName" on "$fieldName" in '
+            '$filePath. This tool does not know what it declares, so it '
+            'cannot write the column.',
+          );
       }
+    }
+
+    if (columnType == 'unknown') {
+      // No type builder was found in the expression at all: a bare
+      // identifier, a conditional, a nested record. Writing the column as
+      // TEXT would put a column in the database that the schema never
+      // asked for.
+      throw FormatException(
+        'Cannot read "$fieldName" in $filePath as a column. A field of a '
+        'table record starts with a type: integer, varchar, text, '
+        'timestamp, uuid, serial or jsonb.',
+      );
     }
 
     return _ColumnAnalysisResult(
@@ -371,6 +534,23 @@ class DbGenerateCommand extends Command<void> {
       isIndexed: isIndexed,
       foreignKey: foreignKey,
     );
+  }
+
+  /// The expression a `references(...)` call points at, or null when the
+  /// call is not the closure form this reader understands.
+  ///
+  /// The closure is the call's first positional argument, which is not
+  /// necessarily the first argument: Dart allows `references(onDelete: ...,
+  /// () => users.id)`.
+  Expression? _referencedExpression(NodeList<Argument> args) {
+    for (final arg in args) {
+      if (arg is NamedArgument) continue;
+      if (arg is! FunctionExpression) return null;
+      final body = arg.body;
+      if (body is! ExpressionFunctionBody) return null;
+      return body.expression;
+    }
+    return null;
   }
 
   String? _extractDefaultValue(Expression expr) {
@@ -587,12 +767,33 @@ class DbGenerateCommand extends Command<void> {
 
       // 追加外部キー
       for (final fk in currTable.foreignKeys) {
-        if (!prevFkMap.containsKey(fk.column)) {
-          diffs.add(_SchemaDiff(
-            type: _DiffType.addForeignKey,
-            table: currTable,
-            foreignKey: fk,
-          ));
+        final previous = prevFkMap[fk.column];
+        if (previous == null) {
+          diffs.add(
+            _SchemaDiff(
+              type: _DiffType.addForeignKey,
+              table: currTable,
+              foreignKey: fk,
+            ),
+          );
+        } else if (!_sameForeignKey(previous, fk)) {
+          // Postgres has no statement that repoints a foreign key, so the
+          // old constraint is dropped and the new one added. Both land in
+          // the phases that put the drop first.
+          diffs.add(
+            _SchemaDiff(
+              type: _DiffType.dropForeignKey,
+              table: currTable,
+              foreignKey: previous,
+            ),
+          );
+          diffs.add(
+            _SchemaDiff(
+              type: _DiffType.addForeignKey,
+              table: currTable,
+              foreignKey: fk,
+            ),
+          );
         }
       }
 
@@ -686,6 +887,27 @@ class DbGenerateCommand extends Command<void> {
               column: addDiff.column, // 新しいカラム
               oldColumn: dropDiff.column, // 古いカラム
             ));
+            // A unique constraint is named after the column it sits on,
+            // and Postgres does not rename it with the column. Left alone,
+            // it keeps the old name and a later removal of the constraint
+            // looks for a name that is not there. The statement order puts
+            // the drop before the rename and the add after it.
+            final renamedFrom = dropDiff.column!;
+            final renamedTo = addDiff.column!;
+            if (renamedFrom.isUnique && !renamedFrom.isPrimaryKey) {
+              result.add(_SchemaDiff(
+                type: _DiffType.dropUnique,
+                table: dropDiff.table,
+                column: renamedFrom,
+              ));
+            }
+            if (renamedTo.isUnique && !renamedTo.isPrimaryKey) {
+              result.add(_SchemaDiff(
+                type: _DiffType.addUnique,
+                table: dropDiff.table,
+                column: renamedTo,
+              ));
+            }
             toRemove.add(dropDiff);
             toRemove.add(addDiff);
             break; // このドロップは処理済み
@@ -735,16 +957,29 @@ class DbGenerateCommand extends Command<void> {
         case _DiffType.dropTable:
           buffer.writeln('DROP TABLE IF EXISTS ${diff.table.name};');
         case _DiffType.addColumn:
+          final col = diff.column!;
           buffer.writeln(
-            'ALTER TABLE ${diff.table.name} ADD COLUMN ${_columnToSql(diff.column!)};',
+            'ALTER TABLE ${diff.table.name} ADD COLUMN ${_columnToSql(col)};',
           );
+          if (col.isUnique && !col.isPrimaryKey) {
+            // The column definition leaves UNIQUE out so that the
+            // constraint can carry a name this generator can drop later.
+            buffer.writeln(
+              'ALTER TABLE ${diff.table.name} ADD CONSTRAINT '
+              '${_uniqueConstraintName(diff.table.name, col.name)} '
+              'UNIQUE (${col.name});',
+            );
+          }
         case _DiffType.dropColumn:
           buffer.writeln(
             'ALTER TABLE ${diff.table.name} DROP COLUMN ${diff.column!.name};',
           );
         case _DiffType.addForeignKey:
           final fk = diff.foreignKey!;
-          final constraintName = 'fk_${diff.table.name}_${fk.column}';
+          final constraintName = _foreignKeyConstraintName(
+            diff.table.name,
+            fk.column,
+          );
           var sql =
               'ALTER TABLE ${diff.table.name} ADD CONSTRAINT $constraintName '
               'FOREIGN KEY (${fk.column}) REFERENCES ${fk.referencesTable}(${fk.referencesColumn})';
@@ -757,10 +992,19 @@ class DbGenerateCommand extends Command<void> {
           buffer.writeln('$sql;');
         case _DiffType.dropForeignKey:
           final fk = diff.foreignKey!;
-          final constraintName = 'fk_${diff.table.name}_${fk.column}';
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} DROP CONSTRAINT $constraintName;',
-          );
+          // Two names are tried: the one this generator writes, and the one
+          // Postgres gives a constraint created without a name. A table
+          // created before the generator started naming them carries the
+          // second, so whichever exists is the one that gets dropped.
+          for (final constraintName in [
+            _foreignKeyConstraintName(diff.table.name, fk.column),
+            _postgresForeignKeyName(diff.table.name, fk.column),
+          ]) {
+            buffer.writeln(
+              'ALTER TABLE ${diff.table.name} '
+              'DROP CONSTRAINT IF EXISTS $constraintName;',
+            );
+          }
         case _DiffType.addIndex:
           final idx = diff.index!;
           final indexName = 'idx_${diff.table.name}_${idx.columns.join('_')}';
@@ -808,16 +1052,24 @@ class DbGenerateCommand extends Command<void> {
           );
         case _DiffType.addUnique:
           final col = diff.column!;
-          final constraintName = 'uq_${diff.table.name}_${col.name}';
+          final constraintName = _uniqueConstraintName(
+            diff.table.name,
+            col.name,
+          );
           buffer.writeln(
             'ALTER TABLE ${diff.table.name} ADD CONSTRAINT $constraintName UNIQUE (${col.name});',
           );
         case _DiffType.dropUnique:
           final col = diff.column!;
-          final constraintName = 'uq_${diff.table.name}_${col.name}';
-          buffer.writeln(
-            'ALTER TABLE ${diff.table.name} DROP CONSTRAINT $constraintName;',
-          );
+          for (final constraintName in [
+            _uniqueConstraintName(diff.table.name, col.name),
+            _postgresUniqueName(diff.table.name, col.name),
+          ]) {
+            buffer.writeln(
+              'ALTER TABLE ${diff.table.name} '
+              'DROP CONSTRAINT IF EXISTS $constraintName;',
+            );
+          }
         case _DiffType.renameColumn:
           final oldName = diff.oldColumn!.name;
           final newName = diff.column!.name;
@@ -879,10 +1131,25 @@ class DbGenerateCommand extends Command<void> {
       columnDefs.add('  ${_columnToSql(col)}');
     }
 
+    // Unique constraints are written here as named table constraints
+    // rather than as a keyword after the column. Postgres names an unnamed
+    // constraint itself, and the statement that drops it later is written
+    // from this generator's own naming. A primary key is already unique,
+    // so it gets no second constraint.
+    for (final col in table.columns) {
+      if (!col.isUnique || col.isPrimaryKey) continue;
+      columnDefs.add(
+        '  CONSTRAINT ${_uniqueConstraintName(table.name, col.name)} '
+        'UNIQUE (${col.name})',
+      );
+    }
+
     // 外部キー制約
     for (final fk in table.foreignKeys) {
       var fkDef =
-          '  FOREIGN KEY (${fk.column}) REFERENCES ${fk.referencesTable}(${fk.referencesColumn})';
+          '  CONSTRAINT ${_foreignKeyConstraintName(table.name, fk.column)} '
+          'FOREIGN KEY (${fk.column}) '
+          'REFERENCES ${fk.referencesTable}(${fk.referencesColumn})';
       if (fk.onDelete != null) {
         fkDef += ' ON DELETE ${_onDeleteKeyword(fk.onDelete!)}';
       }
@@ -934,7 +1201,6 @@ class DbGenerateCommand extends Command<void> {
     }
 
     if (col.isPrimaryKey) parts.add('PRIMARY KEY');
-    if (col.isUnique) parts.add('UNIQUE');
     if (!col.isNullable && !col.isPrimaryKey) parts.add('NOT NULL');
     if (col.defaultValue != null && col.defaultValue != _hasDefaultSentinel) {
       parts.add('DEFAULT ${col.defaultValue}');
@@ -1095,10 +1361,62 @@ class ForeignKeySchema {
       };
 }
 
+/// A foreign key as it was written in Dart, before the names in it have
+/// been resolved to the names the database uses.
+///
+/// `references(() => users.id)` names a Dart variable and a record field.
+/// Neither is necessarily the name of the table or the column: the table
+/// name comes from the `@PgTable` annotation and the column name from the
+/// column definition. Resolving them needs every table in the schema, so
+/// it cannot happen while one table is still being read.
+class _PendingForeignKey {
+  final String column;
+  final String referencesVariable;
+  final String referencesField;
+  final String? onDelete;
+  final String? onUpdate;
+
+  _PendingForeignKey({
+    required this.column,
+    required this.referencesVariable,
+    required this.referencesField,
+    this.onDelete,
+    this.onUpdate,
+  });
+}
+
+/// One table as the scan found it: the schema without its foreign keys,
+/// plus what resolving those keys needs.
+class _ScannedTable {
+  /// Name of the Dart variable holding the record, which is what a
+  /// reference from another table names.
+  final String variableName;
+
+  /// File the declaration was read from, so an unresolvable reference can
+  /// say where to look.
+  final String filePath;
+
+  final TableSchema table;
+
+  /// Record field name to column name, for resolving the field a reference
+  /// names.
+  final Map<String, String> fieldToColumn;
+
+  final List<_PendingForeignKey> pendingForeignKeys;
+
+  _ScannedTable({
+    required this.variableName,
+    required this.filePath,
+    required this.table,
+    required this.fieldToColumn,
+    required this.pendingForeignKeys,
+  });
+}
+
 class _ColumnAnalysisResult {
   final ColumnSchema column;
   final bool isIndexed;
-  final ForeignKeySchema? foreignKey;
+  final _PendingForeignKey? foreignKey;
 
   _ColumnAnalysisResult({
     required this.column,
@@ -1411,6 +1729,39 @@ List<_SchemaDiff> _orderTablesByReference(List<_SchemaDiff> tables) {
   }
   return ordered;
 }
+
+/// The name this generator gives a foreign key on [column] of [table].
+String _foreignKeyConstraintName(String table, String column) =>
+    'fk_${table}_$column';
+
+/// Whether [a] and [b] describe the same foreign key.
+///
+/// The column the key sits on is how the two are paired up, so what is
+/// left to compare is where it points and what it does on a change there.
+/// Any difference needs the constraint replaced.
+bool _sameForeignKey(ForeignKeySchema a, ForeignKeySchema b) =>
+    a.referencesTable == b.referencesTable &&
+    a.referencesColumn == b.referencesColumn &&
+    a.onDelete == b.onDelete &&
+    a.onUpdate == b.onUpdate;
+
+/// The name this generator gives a unique constraint on [column] of
+/// [table].
+String _uniqueConstraintName(String table, String column) =>
+    'uq_${table}_$column';
+
+/// The name Postgres gives a single-column foreign key that was created
+/// without one.
+///
+/// Tables created before this generator started naming its constraints
+/// carry this instead, and a migration has to be able to drop either.
+String _postgresForeignKeyName(String table, String column) =>
+    '${table}_${column}_fkey';
+
+/// The name Postgres gives a single-column unique constraint that was
+/// created without one.
+String _postgresUniqueName(String table, String column) =>
+    '${table}_${column}_key';
 
 /// Convert string to snake_case for migration file names
 String _toSnakeCase(String input) {
