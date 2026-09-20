@@ -411,4 +411,170 @@ npx wrangler@4 deploy
 
 Bindings declared in `wrangler.jsonc` are available in handlers as `c.env`.
 ''';
+
+  static const functionsPubspec = '''name: {{projectName}}
+description: An Aim application running on Cloud Functions for Firebase
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  aim_functions: ^0.1.0
+  firebase_functions: ^0.8.0
+
+dev_dependencies:
+  build_runner: ^2.4.0
+  lints: ^6.0.0
+  test: ^1.25.6
+
+aim:
+  target: functions
+  entry: bin/server.dart
+''';
+
+  static const functionsServer =
+      '''import 'package:aim_functions/aim_functions.dart';
+import 'package:firebase_functions/firebase_functions.dart' as ff;
+import 'package:{{projectName}}/src/server.dart';
+
+void main(List<String> args) {
+  final app = createApp();
+
+  ff.runFunctions((firebase) {
+    // The name becomes part of the URL: /<project>/<region>/api/...
+    // The app's own routes are written without it; see lib/src/server.dart.
+    firebase.https.onRequest(name: 'api', app.serveFunction());
+  });
+}
+''';
+
+  static const functionsApp =
+      '''import 'package:aim_functions/aim_functions.dart';
+
+/// Creates the Aim application.
+///
+/// Routes are written without the function name: `/`, not `/api/`. The name
+/// passed to `onRequest` is removed before the request reaches the app, both
+/// under the emulator and in a deployed function.
+Aim createApp() {
+  final app = Aim();
+
+  app.get(
+    '/',
+    (c) async => c.json({
+      'message': 'Welcome to {{projectName}}!',
+      'framework': 'Aim',
+    }),
+  );
+
+  app.get('/users/:id', (c) async => c.json({'userId': c.param('id')}));
+
+  app.notFound(
+    (c) async => c.json({'error': 'Not Found', 'path': c.path}, statusCode: 404),
+  );
+
+  return app;
+}
+''';
+
+  static const functionsFirebaseJson = '''{
+  "functions": [
+    {
+      "source": ".",
+      "codebase": "default",
+      "runtime": "dart3",
+      "ignore": [
+        ".dart_tool",
+        ".git",
+        "build",
+        ".firebase",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
+    }
+  ],
+  "emulators": {
+    "functions": {
+      "port": 5001
+    },
+    "ui": {
+      "enabled": true
+    },
+    "singleProjectMode": true
+  }
+}
+''';
+
+  static const functionsFirebaserc = '''{
+  "projects": {
+    "default": "{{firebaseProject}}"
+  }
+}
+''';
+
+  static const functionsGitignore = '''
+# Dart
+.dart_tool/
+build/
+pubspec.lock
+
+# Firebase
+.firebase/
+*.local
+firebase-debug.log
+firebase-debug.*.log
+ui-debug.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+''';
+
+  static const functionsReadme = '''# {{projectName}}
+
+An [Aim](https://aim-dart.dev) application running on Cloud Functions for
+Firebase.
+
+## Prerequisites
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase experiments:enable dartfunctions
+```
+
+Dart support in the Firebase CLI sits behind that experiment. Without it both
+the emulator and `firebase deploy` refuse the `dart3` runtime.
+
+## Development
+
+```bash
+dart pub get
+aim dev
+```
+
+`aim dev` starts the Firebase emulator, which rebuilds the function on file
+changes by itself. The app answers at
+`http://localhost:5001/<project>/us-central1/api`. Change the port in
+`firebase.json` under `emulators.functions.port`.
+
+## Deploy
+
+```bash
+firebase use --add    # only needed once, if no Firebase project is bound yet
+firebase deploy --only functions
+```
+
+There is no build step to run first: the Firebase CLI compiles for Linux on
+this machine and uploads the result.
+
+## Routes
+
+Routes in `lib/src/server.dart` are written without the function name — `/`,
+not `/api/`. The name passed to `onRequest` in `bin/server.dart` is removed
+before the request reaches the app.
+''';
 }

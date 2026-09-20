@@ -1,5 +1,6 @@
-# Several command tests (create_command_test.dart, db_generate_command_test.dart)
-# exercise CLI commands that resolve relative paths from Directory.current.
+# Several command tests (create_command_test.dart, db_generate_command_test.dart,
+# build_command_test.dart, dev_command_test.dart) exercise CLI commands that
+# resolve relative paths from Directory.current.
 # That setter is a single OS-process attribute, not isolate-local, so letting
 # `dart test` run those files concurrently (its default) races: one test's
 # `Directory.current = tmp` clobbers another's mid-run. Forcing serial

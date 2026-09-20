@@ -38,3 +38,21 @@ class ProjectNameValidator {
     return 'Invalid project name';
   }
 }
+
+/// Validates Firebase project ids, e.g. for `.firebaserc`.
+class FirebaseProjectIdValidator {
+  static final _pattern = RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$');
+
+  /// Check if valid as a Firebase project id.
+  ///
+  /// An empty id is not valid by this rule, but callers that let an empty
+  /// value mean "skip `.firebaserc`" should check for that themselves before
+  /// calling this.
+  static bool isValid(String id) => _pattern.hasMatch(id);
+
+  /// Generate error message describing the rule.
+  static String getErrorMessage(String id) =>
+      'Firebase project id "$id" is invalid: it must be 6-30 characters, '
+      'start with a lowercase letter, end with a lowercase letter or digit, '
+      'and contain only lowercase letters, digits and hyphens.';
+}

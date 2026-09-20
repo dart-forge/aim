@@ -34,32 +34,73 @@ void main(List<String> args) {
 ## Prerequisites
 
 - Dart 3.13 or later.
-- The [Firebase CLI](https://firebase.google.com/docs/cli).
-- A Firebase project for deploying. Local development doesn't need a real one — see [Routes and the function name](#routes-and-the-function-name) below.
-- **`firebase_functions` 0.8.0 or later.** This is not a formality: on 0.6.x the local routing does not remove the function name before dispatching, so an app whose routes are written as `/` is unreachable locally — the function's root answers 404 because your handler is asked for `/api/`, and any deeper path is rejected by the SDK before your handler runs at all. Measured by running the same application against both versions and changing nothing else. `firebase init` has been seen to scaffold `^0.6.0`, so check what your `functions/pubspec.yaml` says rather than assuming.
+- The [Firebase CLI](https://firebase.google.com/docs/cli), logged in:
+
+```bash
+npm install -g firebase-tools
+firebase login
+```
+
+- **Dart support switched on.** It sits behind an experiment flag; without it both the emulator and `firebase deploy` refuse the `dart3` runtime:
+
+```bash
+firebase experiments:enable dartfunctions
+```
+
+- A Firebase project for deploying. Local development doesn't need one — `aim dev` falls back to a `demo-` project id derived from your package name, which the emulator suite keeps entirely offline. Confirmed against a project with no `.firebaserc` at all: the emulator logged `Detected demo project ID "demo-probe-api"` and served normally.
+- **`firebase_functions` 0.8.0 or later.** This is not a formality: on 0.6.x the local routing does not remove the function name before dispatching, so an app whose routes are written as `/` is unreachable locally — the function's root answers 404 because your handler is asked for `/api/`, and any deeper path is rejected by the SDK before your handler runs at all. Measured by running the same application against both versions and changing nothing else. `firebase init` has been seen to scaffold `^0.6.0`; `aim create --target functions` writes `^0.8.0`.
 
 ## Create a project
 
 ```bash
-firebase init functions   # choose Dart when prompted for a language
+aim create my_api --target functions
 ```
 
-This creates a `functions` codebase with `functions/bin/server.dart` as its entry point. Write your app there, and pass `app.serveFunction()` to `firebase.https.onRequest`:
+It asks for a Firebase project id and writes it to `.firebaserc`; leave the answer empty to skip that file and bind a project later with `firebase use --add`. Pass `--firebase-project <id>` to answer without the prompt.
+
+The result is flat — `firebase.json` sits next to `pubspec.yaml`, with `"source": "."` in its functions entry, so `aim dev` and the Firebase CLI agree on where the project root is:
+
+```
+my_api/
+├── pubspec.yaml           # aim.target: functions
+├── firebase.json
+├── .firebaserc            # only when a Firebase project id was given
+├── .gitignore
+├── README.md
+├── bin/server.dart        # runFunctions + onRequest
+├── lib/src/server.dart    # createApp(): your routes
+└── test/my_api_test.dart  # starter test
+```
+
+`bin/server.dart` hands the app to Firebase:
 
 ```dart
 import 'package:aim_functions/aim_functions.dart';
 import 'package:firebase_functions/firebase_functions.dart' as ff;
+import 'package:my_api/src/server.dart';
 
 void main(List<String> args) {
-  final app = Aim()
-    ..get('/', (c) async => c.text('Hello from Dart!'))
-    ..get('/users/:id', (c) async => c.json({'id': c.param('id')}));
+  final app = createApp();
 
   ff.runFunctions((firebase) {
     firebase.https.onRequest(name: 'api', app.serveFunction());
   });
 }
 ```
+
+## Run it locally
+
+```bash
+aim dev
+```
+
+This starts `firebase emulators:start --only functions`, forwarding `aim.env` from `pubspec.yaml` to the emulator process, which the function process it spawns inherits. The emulator runs `build_runner watch` for Dart functions itself, so edits to `lib/src/server.dart` are picked up while `aim dev` keeps running, without the CLI adding a second rebuild loop — which is why `--hot-reload` and `--watch` have no effect for this target. The first build takes on the order of 20 seconds before the emulator starts serving; a later edit is picked up in the tens of seconds, not instantly. The port comes from `firebase.json` (`emulators.functions.port`, 5001 by default) — `aim dev --port` is rejected for this target with an error pointing at that setting.
+
+Requests reach the app at `http://localhost:5001/<project-id>/us-central1/api`; see [Routes and the function name](#routes-and-the-function-name) below.
+
+## No build step
+
+`aim build` does nothing for `target: functions` and says so — see [Deploy](#deploy) below for why.
 
 ## Routes and the function name
 
@@ -91,7 +132,7 @@ So streaming request bodies is real end-to-end once deployed, and not true for a
 firebase deploy --only functions
 ```
 
-This is the one genuinely unusual step compared to Node.js or Python functions: the Firebase CLI compiles your Dart code **on your machine** and uploads the resulting artifact, rather than pushing source for Cloud Build to compile remotely. There is no `aim build` step and no build target for Cloud Functions — the Firebase CLI does its own build, using whichever local Dart toolchain command it picks for your project's declared SDK constraint.
+This is the one genuinely unusual step compared to Node.js or Python functions: the Firebase CLI compiles your Dart code **on your machine** and uploads the resulting artifact, rather than pushing source for Cloud Build to compile remotely. `aim build` does nothing for this target ([see above](#no-build-step)) — the Firebase CLI does its own build, using whichever local Dart toolchain command it picks for your project's declared SDK constraint.
 
 ## Limitations
 
@@ -101,7 +142,7 @@ This is the one genuinely unusual step compared to Node.js or Python functions: 
 
 ## Next Steps
 
-- [Installation](/server/installation) - How Cloud Functions differs from `aim create` / `aim build`
+- [Installation](/server/installation) - `aim create --target functions` alongside the other targets
 - [Context](/server/concepts/context) - `c.variables` and the response helpers
 - [Middleware](/server/middleware/) - Packages that run on every adapter
 - [Cloud Functions for Firebase documentation](https://firebase.google.com/docs/functions/) - triggers, configuration, and the Firebase CLI

@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:aim_cli/src/config/aim_config.dart';
 import 'package:aim_cli/src/edge/wasm_builder.dart';
 import 'package:args/command_runner.dart';
@@ -18,15 +19,16 @@ class BuildCommand extends Command {
     argParser.addOption(
       'entry',
       abbr: 'e',
-      help:
-          'Server entry point (default: pubspec.yaml aim.entry or bin/server.dart)',
+      help: 'Server entry point (default: pubspec.yaml aim.entry or bin/server.dart)',
     );
 
     argParser.addOption(
       'output',
       abbr: 'o',
-      help: 'Output path (default: build/server, or the build/edge '
-          'directory for target: edge)',
+      help:
+          'Output path (default: build/server, or the build/edge '
+          'directory for target: edge; ignored for target: functions, '
+          'which has nothing to build)',
     );
   }
 
@@ -43,6 +45,25 @@ class BuildCommand extends Command {
 
     // Determine entry point
     final config = await AimConfig.load();
+
+    if (config.target == AimTarget.functions) {
+      // Nothing here reads the entry point: `firebase deploy` resolves it
+      // itself, the same way `firebase emulators:start` does for `aim dev`.
+      // Checking it first would report "Entry point not found" for a
+      // project that simply has nothing to build.
+      print('ℹ️  Nothing to build for target: functions.');
+      print('');
+      print('`firebase deploy --only functions` compiles the function for');
+      print('Linux on this machine and uploads the result, so a build here');
+      print('would only leave behind an artifact the deploy never reads.');
+      print('');
+      print('Next steps:');
+      print('  aim dev                            # run it in the emulator');
+      print('  firebase deploy --only functions   # compile and deploy');
+      print('');
+      return;
+    }
+
     final entryPoint = config.resolveEntry(argResults?['entry'] as String?);
 
     // Check if entry point file exists

@@ -1,7 +1,9 @@
 import 'dart:io';
+
 import 'package:args/command_runner.dart';
 import 'package:aim_cli/src/config/aim_config.dart';
 import 'package:aim_cli/src/edge/edge_dev_runner.dart';
+import 'package:aim_cli/src/functions/functions_dev_runner.dart';
 import 'package:aim_cli/src/hot_reload/hot_reloader.dart';
 
 class DevCommand extends Command {
@@ -47,6 +49,60 @@ class DevCommand extends Command {
 
     // Determine entry point
     final config = await AimConfig.load();
+
+    if (config.target == AimTarget.functions) {
+      // `firebase emulators:start` has no way to receive an entry point:
+      // Firebase resolves it from firebase.json plus its own convention. So
+      // this branch must not touch `--entry` / `aim.entry`, and it runs
+      // before the entry-point resolution below, which is for the other
+      // targets only.
+      if (argResults?['port'] != null) {
+        throw UsageException(
+          '--port is not supported for target: functions. The Firebase '
+          'emulator takes its port from firebase.json; set '
+          'emulators.functions.port there.',
+          invocation,
+        );
+      }
+      final firebaseJson = File('firebase.json');
+      if (!await firebaseJson.exists()) {
+        throw UsageException(
+          'firebase.json not found. It is required next to pubspec.yaml for '
+          'the functions target. `aim create --target functions` writes '
+          'one.',
+          invocation,
+        );
+      }
+      // Omit --project when .firebaserc names one, so the user's own choice
+      // wins over a throwaway id.
+      final hasFirebaserc = await File('.firebaserc').exists();
+      final runner = FunctionsDevRunner(
+        projectId: emulatorProjectId(
+          hasFirebaserc: hasFirebaserc,
+          packageName: config.packageName,
+        ),
+        environment: config.env,
+      );
+      print('🚀 Starting the Firebase emulator (functions)...');
+      if (config.env.isNotEmpty) {
+        print('🔧 Environment variables: ${config.env.keys.join(', ')}');
+      }
+      print('');
+      ProcessSignal.sigint.watch().listen((_) async {
+        print('\n🛑 Stopping the emulator...');
+        await runner.stop();
+        print('✅ Stopped');
+        exit(0);
+      });
+      try {
+        await runner.start();
+      } catch (e) {
+        print('❌ Error: ${e is StateError ? e.message : e}');
+        exit(1);
+      }
+      return;
+    }
+
     final entryPoint = config.resolveEntry(argResults?['entry'] as String?);
 
     // Check if entry point file exists
@@ -59,12 +115,15 @@ class DevCommand extends Command {
     // Hot reload configuration
     final hotReloadEnabled = argResults?['hot-reload'] as bool? ?? true;
     final watchPathsArg = argResults?['watch'] as String?;
-    final watchPaths = watchPathsArg?.split(',') ??
+    final watchPaths =
+        watchPathsArg?.split(',') ??
         (config.target == AimTarget.edge ? ['lib'] : ['lib', 'bin']);
 
     if (config.target == AimTarget.edge) {
       if (config.env.isNotEmpty) {
-        print('⚠️  aim.env is ignored for target: edge. Use vars in wrangler.jsonc.');
+        print(
+          '⚠️  aim.env is ignored for target: edge. Use vars in wrangler.jsonc.',
+        );
       }
       final portArg = argResults?['port'] as String?;
       int? port;

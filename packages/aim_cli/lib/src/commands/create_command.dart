@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:args/command_runner.dart';
 import 'package:path/path.dart' as path;
 import 'package:aim_cli/src/utils/validators.dart';
@@ -18,9 +19,18 @@ class CreateCommand extends Command {
   CreateCommand() {
     argParser.addOption(
       'target',
-      allowed: ['server', 'edge'],
+      allowed: ['server', 'edge', 'functions'],
       defaultsTo: 'server',
-      help: 'Runtime target: server (dart:io) or edge (Cloudflare workerd)',
+      help:
+          'Runtime target: server (dart:io), edge (Cloudflare workerd) or '
+          'functions (Cloud Functions for Firebase)',
+    );
+    argParser.addOption(
+      'firebase-project',
+      help:
+          'Firebase project id written to .firebaserc (target: functions). '
+          'Pass an empty value to skip .firebaserc and bind the project later '
+          'with `firebase use --add`.',
     );
   }
 
@@ -52,11 +62,17 @@ class CreateCommand extends Command {
       );
     }
 
+    // Settle every input before announcing the work, so a rejected project id
+    // is not preceded by "Creating project".
+    final firebaseProject = target == 'functions'
+        ? _resolveFirebaseProject()
+        : '';
+
     print('📦 Creating project "$projectName"...');
 
     try {
       // Create directory structure
-      await _createProjectStructure(projectName, target);
+      await _createProjectStructure(projectName, target, firebaseProject);
 
       print('');
       print('✅ Project created successfully!');
@@ -68,39 +84,106 @@ class CreateCommand extends Command {
       if (target == 'edge') {
         print('  # requires Node: npx wrangler@4 is downloaded on first run');
       }
+      if (target == 'functions') {
+        print('  # requires the Firebase CLI:');
+        print('  #   npm install -g firebase-tools');
+        print('  #   firebase login');
+        print('  #   firebase experiments:enable dartfunctions');
+        if (firebaseProject.isEmpty) {
+          print('  # then bind a Firebase project: firebase use --add');
+        }
+      }
       print('');
     } catch (e) {
       throw Exception('Failed to create project: $e');
     }
   }
 
+  /// The Firebase project id for `.firebaserc`, or an empty string when there
+  /// is none to write.
+  ///
+  /// Nothing else can supply this value: a project id guessed from the
+  /// directory name would name a project that does not exist, and a
+  /// `.firebaserc` pointing at one is worse than none at all. Without a
+  /// terminal to ask, the file is left out.
+  ///
+  /// A non-empty value is validated against Firebase's project id rule
+  /// before it is written: an id that fails the rule would either be
+  /// rejected much later by the Firebase CLI with no mention of this flag or
+  /// file, or (for a value containing `"`) break the JSON `.firebaserc`
+  /// interpolates it into.
+  String _resolveFirebaseProject() {
+    final fromFlag = argResults?['firebase-project'] as String?;
+    if (fromFlag != null) {
+      final trimmed = fromFlag.trim();
+      if (trimmed.isEmpty) return trimmed;
+      if (!FirebaseProjectIdValidator.isValid(trimmed)) {
+        throw UsageException(
+          FirebaseProjectIdValidator.getErrorMessage(trimmed),
+          invocation,
+        );
+      }
+      return trimmed;
+    }
+    if (!stdin.hasTerminal) return '';
+
+    // Capped so a non-interactive edge case (stdin closed, piped empty
+    // input, …) cannot spin forever re-asking.
+    for (var attempt = 0; attempt < 3; attempt++) {
+      stdout.write('Firebase project id (leave empty to set it up later): ');
+      final answer = stdin.readLineSync()?.trim() ?? '';
+      if (answer.isEmpty || FirebaseProjectIdValidator.isValid(answer)) {
+        return answer;
+      }
+      print(FirebaseProjectIdValidator.getErrorMessage(answer));
+    }
+    return '';
+  }
+
   Future<void> _createProjectStructure(
     String projectName,
     String target,
+    String firebaseProject,
   ) async {
     final workerName = projectName.replaceAll('_', '-');
-    final variables = {'projectName': projectName, 'workerName': workerName};
+    final variables = {
+      'projectName': projectName,
+      'workerName': workerName,
+      'firebaseProject': firebaseProject,
+    };
 
     // Get templates from string constants and generate
-    final templates = target == 'edge'
-        ? {
-            'pubspec.yaml': Templates.edgePubspec,
-            'README.md': Templates.edgeReadme,
-            'lib/main.dart': Templates.edgeMain,
-            'src/index.mjs': Templates.edgeIndexMjs,
-            'wrangler.jsonc': Templates.edgeWranglerJsonc,
-            '.gitignore': Templates.edgeGitignore,
-          }
-        : {
-            'pubspec.yaml': Templates.projectPubspec,
-            'README.md': Templates.projectReadme,
-            'bin/server.dart': Templates.binServer,
-            'lib/src/server.dart': Templates.libSrcServer,
-            'test/${projectName}_test.dart': Templates.testTest,
-            '.gitignore': Templates.gitignore,
-            'Dockerfile': Templates.dockerfile,
-            '.dockerignore': Templates.dockerignore,
-          };
+    final templates = switch (target) {
+      'edge' => {
+        'pubspec.yaml': Templates.edgePubspec,
+        'README.md': Templates.edgeReadme,
+        'lib/main.dart': Templates.edgeMain,
+        'src/index.mjs': Templates.edgeIndexMjs,
+        'wrangler.jsonc': Templates.edgeWranglerJsonc,
+        '.gitignore': Templates.edgeGitignore,
+      },
+      'functions' => {
+        'pubspec.yaml': Templates.functionsPubspec,
+        'README.md': Templates.functionsReadme,
+        'bin/server.dart': Templates.functionsServer,
+        'lib/src/server.dart': Templates.functionsApp,
+        'test/${projectName}_test.dart': Templates.testTest,
+        '.gitignore': Templates.functionsGitignore,
+        'firebase.json': Templates.functionsFirebaseJson,
+        if (firebaseProject.isNotEmpty)
+          '.firebaserc': Templates.functionsFirebaserc,
+      },
+      _ => {
+        'pubspec.yaml': Templates.projectPubspec,
+        'README.md': Templates.projectReadme,
+        'bin/server.dart': Templates.binServer,
+        'lib/src/server.dart': Templates.libSrcServer,
+        'test/${projectName}_test.dart': Templates.testTest,
+        '.gitignore': Templates.gitignore,
+        'Dockerfile': Templates.dockerfile,
+        '.dockerignore': Templates.dockerignore,
+      },
+    };
 
     for (final entry in templates.entries) {
       final filePath = path.join(projectName, entry.key);

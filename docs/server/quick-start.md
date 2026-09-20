@@ -279,5 +279,6 @@ Now that you have a basic application running, explore:
 - [Context](/server/concepts/context) - Deep dive into the Context API
 - [Middleware Packages](/server/middleware/) - Add CORS, auth, and more
 - [Cloudflare Workers](/server/edge) - Deploy the same app to the edge with `aim create --target edge`
+- [Cloud Functions for Firebase](/server/functions) - Deploy the same app to Cloud Functions with `aim create --target functions`
 
 Happy coding with Aim!
