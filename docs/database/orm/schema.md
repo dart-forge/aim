@@ -94,7 +94,7 @@ updatedAt: timestamp('updated_at').withDefaultNow(),
 | `.primaryKey()` | Set as primary key |
 | `.unique()` | Add unique constraint |
 | `.nullable()` | Allow NULL values |
-| `.withDefault(value)` | Set default value |
+| `.withDefault(value)` | Set default value (not on `serial()`: the sequence already provides one) |
 | `.withDefaultNow()` | Set default to NOW() (timestamp only) |
 
 ## Multiple Tables

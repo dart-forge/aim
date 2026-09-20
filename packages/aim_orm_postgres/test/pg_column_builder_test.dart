@@ -31,11 +31,10 @@ void main() {
     });
 
     test('carries integer values, the type SERIAL stores', () {
-      // The assignment is the assertion: it only compiles while the value
-      // type is int. A serial column typed as text made every generated
-      // comparison on a serial key take a string.
-      final Column<int, SerialColumn> col = serial('id');
-      expect(col.eq(1), isA<Condition>());
+      // The value type decides what every comparison on the column takes.
+      // Typed as text, a serial key took strings while the database held
+      // integers and the code generator wrote int.
+      expect(serial('id'), isA<Column<int, SerialColumn>>());
     });
   });
 
@@ -49,7 +48,7 @@ void main() {
             'message',
             allOf(
               contains('multiple default values'),
-              contains('withDefault()'),
+              contains('Remove the default'),
             ),
           ),
         ),

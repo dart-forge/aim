@@ -529,8 +529,8 @@ class DbGenerateCommand extends Command<void> {
       throw FormatException(
         'The serial column "$fieldName" in $filePath asks for a default. A '
         'serial column takes its value from the sequence PostgreSQL creates '
-        'for it, and the server refuses a second default. Remove '
-        'withDefault() from the column.',
+        'for it, and the server refuses a definition carrying a second '
+        'default. Remove the default from the column.',
       );
     }
 

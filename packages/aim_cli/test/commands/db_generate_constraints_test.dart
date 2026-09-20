@@ -712,7 +712,11 @@ final things = (
           isA<FormatException>()
               .having((e) => e.message, 'message', contains('serial'))
               .having((e) => e.message, 'message', contains('id'))
-              .having((e) => e.message, 'message', contains('withDefault()')),
+              .having(
+                (e) => e.message,
+                'message',
+                contains('Remove the default'),
+              ),
         ),
       );
     });

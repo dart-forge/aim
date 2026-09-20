@@ -80,12 +80,13 @@ Future<void> createUser({
 
 ```dart
 Future<void> createPost({
+  required int id,
   required String userId,
   required String title,
   required String content,
 }) async {
   await db.posts.insert().values(
-    id: 0,  // SERIAL auto-increments
+    id: id,
     userId: userId,
     title: title,
     content: content,
@@ -93,6 +94,27 @@ Future<void> createPost({
   );
 }
 ```
+
+::: warning
+A `serial()` column is not left out of the statement the builder writes: the
+generated `values()` takes it like any other column and the `INSERT` names
+it. Passing `0` inserts a literal zero, and the second row to do so fails on
+the primary key. To let the sequence assign the value, write the statement
+yourself and leave the column out:
+
+```dart
+await db.execute(
+  'INSERT INTO posts (user_id, title, content, created_at) '
+  'VALUES (:userId, :title, :content, :createdAt)',
+  params: {
+    'userId': userId,
+    'title': title,
+    'content': content,
+    'createdAt': DateTime.now(),
+  },
+);
+```
+:::
 
 ## Next Steps
 
