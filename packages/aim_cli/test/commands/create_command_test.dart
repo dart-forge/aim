@@ -109,6 +109,12 @@ void main() {
     // the emulator agree on where the project root is.
     expect(read('my_fn/firebase.json'), contains('"source": "."'));
     expect(read('my_fn/firebase.json'), contains('"runtime": "dart3"'));
+
+    // build/ must stay in the deploy package: the functions.yaml that
+    // build_runner generates points its command at
+    // ./build/cli/linux_x64/bundle/bin/server, which is the artifact the
+    // Firebase CLI uploads.
+    expect(read('my_fn/firebase.json'), isNot(contains('"build"')));
     expect(read('my_fn/.firebaserc'), contains('"my-real-project"'));
 
     expect(read('my_fn/bin/server.dart'), contains('serveFunction()'));
