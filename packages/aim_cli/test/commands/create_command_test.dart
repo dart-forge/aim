@@ -29,8 +29,8 @@ void main() {
   String read(String relative) =>
       File(p.join(tmp.path, relative)).readAsStringSync();
 
-  test('scaffolds an edge project', () async {
-    await create(['my_edge', '--target', 'edge']);
+  test('scaffolds a workers project', () async {
+    await create(['my_edge', '--target', 'workers']);
 
     final files = Directory(p.join(tmp.path, 'my_edge'))
         .listSync(recursive: true)
@@ -46,13 +46,48 @@ void main() {
       '.gitignore',
     });
 
-    expect(read('my_edge/pubspec.yaml'), contains('target: edge'));
-    expect(read('my_edge/pubspec.yaml'), contains('aim_edge:'));
+    expect(read('my_edge/pubspec.yaml'), contains('target: workers'));
+    expect(read('my_edge/pubspec.yaml'), contains('aim_workers:'));
     expect(read('my_edge/pubspec.yaml'), contains('name: my_edge'));
-    expect(read('my_edge/lib/main.dart'), contains('app.serveEdge();'));
+    expect(read('my_edge/lib/main.dart'), contains('app.serveWorkers();'));
     expect(read('my_edge/wrangler.jsonc'), contains('"name": "my-edge"'));
     expect(read('my_edge/wrangler.jsonc'), contains('"main": "src/index.mjs"'));
-    expect(read('my_edge/src/index.mjs'), contains('build/edge/main.wasm'));
+    expect(read('my_edge/src/index.mjs'), contains('build/workers/main.wasm'));
+  });
+
+  test('scaffolds a supabase project', () async {
+    await create(['my_api', '--target', 'supabase']);
+
+    final files = Directory(p.join(tmp.path, 'my_api'))
+        .listSync(recursive: true)
+        .whereType<File>()
+        .map((f) => p.relative(f.path, from: p.join(tmp.path, 'my_api')))
+        .toSet();
+    expect(files, {
+      'pubspec.yaml',
+      'README.md',
+      'lib/main.dart',
+      'supabase/functions/my_api/index.ts',
+      'supabase/config.toml',
+      '.gitignore',
+    });
+
+    expect(read('my_api/pubspec.yaml'), contains('target: supabase'));
+    expect(read('my_api/pubspec.yaml'), contains('aim_deno:'));
+    expect(read('my_api/pubspec.yaml'), contains('name: my_api'));
+    expect(
+      read('my_api/lib/main.dart'),
+      contains("app.serveDeno(basePath: 'my_api');"),
+    );
+    expect(read('my_api/supabase/config.toml'), contains('[functions.my_api]'));
+    expect(
+      read('my_api/supabase/config.toml'),
+      contains('./functions/my_api/main.wasm'),
+    );
+    expect(
+      read('my_api/supabase/functions/my_api/index.ts'),
+      contains('__aimFetch'),
+    );
   });
 
   test('scaffolds a server project by default', () async {
@@ -67,7 +102,7 @@ void main() {
       read('my_server/pubspec.yaml'),
       matches(RegExp(r'aim_server: \^\d+\.\d+\.\d+')),
     );
-    expect(read('my_server/pubspec.yaml'), isNot(contains('target: edge')));
+    expect(read('my_server/pubspec.yaml'), isNot(contains('target: workers')));
   });
 
   test('rejects an unknown target', () async {

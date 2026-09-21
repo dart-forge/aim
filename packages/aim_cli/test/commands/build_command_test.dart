@@ -51,4 +51,26 @@ aim:
       expect(Directory(p.join(tmp.path, 'build')).existsSync(), isFalse);
     },
   );
+
+  test(
+    'the supabase target reports a missing pubspec name before compiling',
+    () async {
+      // The function name (and its supabase/functions/<name>/ output
+      // directory) comes from pubspec.yaml's "name". This must fail before
+      // `dart compile wasm` runs, not after a slow compile.
+      File(p.join(tmp.path, 'pubspec.yaml')).writeAsStringSync('''
+aim:
+  target: supabase
+  entry: lib/main.dart
+''');
+      Directory(p.join(tmp.path, 'lib')).createSync();
+      File(p.join(tmp.path, 'lib', 'main.dart'))
+          .writeAsStringSync('void main() {}\n');
+
+      final runner = CommandRunner<void>('aim', 'test')
+        ..addCommand(BuildCommand());
+      expect(runner.run(['build']), throwsA(isA<UsageException>()));
+      expect(Directory(p.join(tmp.path, 'supabase')).existsSync(), isFalse);
+    },
+  );
 }

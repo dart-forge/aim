@@ -1,4 +1,4 @@
-# edge-sample
+# workers-sample
 
 Aim running on Cloudflare workerd, compiled to WebAssembly.
 

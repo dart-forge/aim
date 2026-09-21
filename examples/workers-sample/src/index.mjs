@@ -1,12 +1,12 @@
-import mod from '../build/edge/main.wasm';
-import { CompiledApp } from '../build/edge/main.mjs';
+import mod from '../build/workers/main.wasm';
+import { CompiledApp } from '../build/workers/main.mjs';
 
 let ready;
 
 async function init() {
   const instance = await new CompiledApp(mod, { builtins: ['js-string'] })
     .instantiate({});
-  instance.invokeMain(); // runs Dart main(), which calls app.serveEdge()
+  instance.invokeMain(); // runs Dart main(), which calls app.serveWorkers()
 }
 
 export default {

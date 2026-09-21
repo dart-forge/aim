@@ -28,7 +28,8 @@ workspace:
   - packages/aim_orm_postgres
   - examples/basic-sample
   - examples/orm-sample
-  - examples/edge-sample
+  - examples/workers-sample
+  - examples/supabase-sample
   - examples/functions-sample
   - tools/release
   - packages/aim_orm_codegen/test/golden/fixtures/simple_table

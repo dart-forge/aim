@@ -1,0 +1,16 @@
+
+# Dart
+.dart_tool/
+.packages
+build/
+pubspec.lock
+
+# Supabase build artifacts and local stack
+supabase/functions/*/main.wasm
+supabase/functions/*/main.mjs
+supabase/.temp/
+
+# IDE
+.idea/
+.vscode/
+*.iml

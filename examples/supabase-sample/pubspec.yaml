@@ -1,0 +1,19 @@
+name: supabase_sample
+description: Aim on Supabase Edge Functions sample (dart compile wasm + supabase functions serve).
+version: 1.0.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  aim_deno:
+    path: ../../packages/aim_deno
+
+dev_dependencies:
+  lints: ^6.0.0
+
+aim:
+  target: supabase
+  entry: lib/main.dart

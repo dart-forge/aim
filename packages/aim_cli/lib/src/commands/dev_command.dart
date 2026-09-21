@@ -5,6 +5,7 @@ import 'package:aim_cli/src/config/aim_config.dart';
 import 'package:aim_cli/src/edge/edge_dev_runner.dart';
 import 'package:aim_cli/src/functions/functions_dev_runner.dart';
 import 'package:aim_cli/src/hot_reload/hot_reloader.dart';
+import 'package:aim_cli/src/supabase/supabase_dev_runner.dart';
 
 class DevCommand extends Command {
   @override
@@ -117,12 +118,16 @@ class DevCommand extends Command {
     final watchPathsArg = argResults?['watch'] as String?;
     final watchPaths =
         watchPathsArg?.split(',') ??
-        (config.target == AimTarget.edge ? ['lib'] : ['lib', 'bin']);
+        (config.target == AimTarget.workers ||
+                config.target == AimTarget.supabase
+            ? ['lib']
+            : ['lib', 'bin']);
 
-    if (config.target == AimTarget.edge) {
+    if (config.target == AimTarget.workers) {
       if (config.env.isNotEmpty) {
         print(
-          '⚠️  aim.env is ignored for target: edge. Use vars in wrangler.jsonc.',
+          '⚠️  aim.env is ignored for target: workers. Use vars in '
+          'wrangler.jsonc.',
         );
       }
       final portArg = argResults?['port'] as String?;
@@ -138,7 +143,7 @@ class DevCommand extends Command {
       }
       final runner = EdgeDevRunner(
         entry: entryPoint,
-        outputDir: 'build/edge',
+        outputDir: 'build/workers',
         watchPaths: watchPaths,
         port: port,
         watch: hotReloadEnabled,
@@ -156,6 +161,55 @@ class DevCommand extends Command {
         await runner.start();
       } catch (e) {
         print('❌ Error: $e');
+        exit(1);
+      }
+      return;
+    }
+
+    if (config.target == AimTarget.supabase) {
+      if (argResults?['port'] != null) {
+        throw UsageException(
+          '--port is not supported for target: supabase. '
+          '`supabase functions serve` takes its port from '
+          'supabase/config.toml.',
+          invocation,
+        );
+      }
+      if (config.env.isNotEmpty) {
+        print(
+          '⚠️  aim.env is ignored for target: supabase. Set environment '
+          'variables with `supabase secrets set` or the local stack\'s own '
+          'configuration.',
+        );
+      }
+      final functionName = config.packageName;
+      if (functionName == null || functionName.isEmpty) {
+        throw UsageException(
+          'pubspec.yaml has no "name". The supabase target uses it as the '
+          'function name passed to `supabase functions serve`.',
+          invocation,
+        );
+      }
+      final runner = SupabaseDevRunner(
+        entry: entryPoint,
+        functionName: functionName,
+        outputDir: 'supabase/functions/$functionName',
+        watchPaths: watchPaths,
+        watch: hotReloadEnabled,
+      );
+      print('🚀 Starting `supabase functions serve`...');
+      print('📁 Entry point: $entryPoint');
+      print('');
+      ProcessSignal.sigint.watch().listen((_) async {
+        print('\n🛑 Stopping `supabase functions serve`...');
+        await runner.stop();
+        print('✅ Stopped');
+        exit(0);
+      });
+      try {
+        await runner.start();
+      } catch (e) {
+        print('❌ Error: ${e is StateError ? e.message : e}');
         exit(1);
       }
       return;

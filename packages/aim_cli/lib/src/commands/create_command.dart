@@ -19,11 +19,12 @@ class CreateCommand extends Command {
   CreateCommand() {
     argParser.addOption(
       'target',
-      allowed: ['server', 'edge', 'functions'],
+      allowed: ['server', 'workers', 'supabase', 'functions'],
       defaultsTo: 'server',
       help:
-          'Runtime target: server (dart:io), edge (Cloudflare workerd) or '
-          'functions (Cloud Functions for Firebase)',
+          'Runtime target: server (dart:io), workers (Cloudflare workerd), '
+          'supabase (Supabase Edge Functions) or functions (Cloud Functions '
+          'for Firebase)',
     );
     argParser.addOption(
       'firebase-project',
@@ -81,8 +82,14 @@ class CreateCommand extends Command {
       print('  cd $projectName');
       print('  dart pub get');
       print('  aim dev');
-      if (target == 'edge') {
+      if (target == 'workers') {
         print('  # requires Node: npx wrangler@4 is downloaded on first run');
+      }
+      if (target == 'supabase') {
+        print('  # requires the Supabase CLI and Docker:');
+        print('  #   npm install -g supabase');
+        print('  #   docker info');
+        print('  #   supabase start');
       }
       if (target == 'functions') {
         print('  # requires the Firebase CLI:');
@@ -154,13 +161,21 @@ class CreateCommand extends Command {
 
     // Get templates from string constants and generate
     final templates = switch (target) {
-      'edge' => {
-        'pubspec.yaml': Templates.edgePubspec,
-        'README.md': Templates.edgeReadme,
-        'lib/main.dart': Templates.edgeMain,
-        'src/index.mjs': Templates.edgeIndexMjs,
-        'wrangler.jsonc': Templates.edgeWranglerJsonc,
-        '.gitignore': Templates.edgeGitignore,
+      'workers' => {
+        'pubspec.yaml': Templates.workersPubspec,
+        'README.md': Templates.workersReadme,
+        'lib/main.dart': Templates.workersMain,
+        'src/index.mjs': Templates.workersIndexMjs,
+        'wrangler.jsonc': Templates.workersWranglerJsonc,
+        '.gitignore': Templates.workersGitignore,
+      },
+      'supabase' => {
+        'pubspec.yaml': Templates.supabasePubspec,
+        'README.md': Templates.supabaseReadme,
+        'lib/main.dart': Templates.supabaseMain,
+        'supabase/functions/$projectName/index.ts': Templates.supabaseIndexTs,
+        'supabase/config.toml': Templates.supabaseConfigToml,
+        '.gitignore': Templates.supabaseGitignore,
       },
       'functions' => {
         'pubspec.yaml': Templates.functionsPubspec,

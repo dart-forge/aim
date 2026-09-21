@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:aim_edge/aim_edge.dart';
+import 'package:aim_workers/aim_workers.dart';
 import 'package:aim_server_cors/aim_server_cors.dart';
 
 void main() {
@@ -66,5 +66,5 @@ void main() {
     return c.json({'error': error.toString()}, statusCode: 500);
   });
 
-  app.serveEdge();
+  app.serveWorkers();
 }
