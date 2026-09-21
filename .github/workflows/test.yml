@@ -21,7 +21,7 @@ jobs:
         with:
           sdk: stable
 
-      - name: Setup Node (wrangler for aim_edge tests)
+      - name: Setup Node (wrangler for aim_workers tests)
         uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -77,9 +77,9 @@ jobs:
           done
           exit $fail
 
-      - name: Test aim_edge integration (wrangler dev)
+      - name: Test aim_workers integration (wrangler dev)
         # Node is set up and wrangler is already warmed above.
-        working-directory: packages/aim_edge
+        working-directory: packages/aim_workers
         run: dart test -t integration --run-skipped
 
       - name: Docker is reachable

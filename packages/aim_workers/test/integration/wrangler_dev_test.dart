@@ -6,8 +6,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-/// Path of examples/edge-sample relative to packages/aim_edge (the CWD of
-/// `dart test`).
+/// Path of examples/edge-sample relative to packages/aim_workers (the CWD
+/// of `dart test`).
 const _exampleDir = '../../examples/edge-sample';
 
 int? _port;
@@ -202,8 +202,7 @@ void main() {
     expect(body, isEmpty);
   });
 
-  test('sends 304 without a body even after middleware set headers',
-      () async {
+  test('sends 304 without a body even after middleware set headers', () async {
     final res = await get('/not-modified');
     final body = await utf8.decodeStream(res);
     expect(res.statusCode, 304);
@@ -221,7 +220,10 @@ void main() {
     expect(res.statusCode, 200);
     final body = jsonDecode(await utf8.decodeStream(res)) as Map;
     expect(body['country'], isA<String>().having((s) => s.length, 'length', 2));
-    expect(body['colo'], isA<String>().having((s) => s.isNotEmpty, 'non-empty', isTrue));
+    expect(
+      body['colo'],
+      isA<String>().having((s) => s.isNotEmpty, 'non-empty', isTrue),
+    );
     expect(body['asn'], anyOf(isNull, isA<int>()));
     expect(body['latitude'], anyOf(isNull, isA<num>()));
   });
