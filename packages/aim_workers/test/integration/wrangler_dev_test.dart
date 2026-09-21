@@ -6,9 +6,9 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-/// Path of examples/edge-sample relative to packages/aim_workers (the CWD
+/// Path of examples/workers-sample relative to packages/aim_workers (the CWD
 /// of `dart test`).
-const _exampleDir = '../../examples/edge-sample';
+const _exampleDir = '../../examples/workers-sample';
 
 int? _port;
 Process? _wrangler;
