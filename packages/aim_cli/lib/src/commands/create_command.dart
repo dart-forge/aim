@@ -81,15 +81,20 @@ class CreateCommand extends Command {
       print('Next steps:');
       print('  cd $projectName');
       print('  dart pub get');
-      print('  aim dev');
-      if (target == 'workers') {
-        print('  # requires Node: npx wrangler@4 is downloaded on first run');
-      }
       if (target == 'supabase') {
-        print('  # requires the Supabase CLI and Docker:');
+        // `supabase start` reads the function's imports, so the build has to
+        // come first: without main.mjs it fails before the stack is up.
+        print('  aim build');
+        print('  supabase start');
+        print('  aim dev');
+        print('  # requires the Supabase CLI and a running Docker daemon:');
         print('  #   npm install -g supabase');
         print('  #   docker info');
-        print('  #   supabase start');
+      } else {
+        print('  aim dev');
+      }
+      if (target == 'workers') {
+        print('  # requires Node: npx wrangler@4 is downloaded on first run');
       }
       if (target == 'functions') {
         print('  # requires the Firebase CLI:');
