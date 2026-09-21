@@ -18,11 +18,13 @@ import 'package:aim_cli/src/utils/process_tree.dart';
 /// `main.wasm` on its own.
 ///
 /// This also never runs `supabase start`. That command brings up Postgres,
-/// auth and the rest of the local stack, which is too slow to start on every
-/// `aim dev` and would change state outside the user's project. When the
-/// stack is not already running, `supabase functions serve` exits
-/// immediately, and the [ProcessException] handler below only names the
-/// command the user needs to run first.
+/// auth and the rest of the local stack, which is too slow to start on
+/// every `aim dev` and would change state outside the user's project.
+/// Instead, two failure paths below name `docker info` and
+/// `supabase start` for the user to run first: a missing Supabase CLI
+/// surfaces as a [ProcessException] from `Process.start` itself, while a
+/// CLI that is present but a stack that is not already running lets
+/// `supabase functions serve` start and then exit non-zero.
 class SupabaseDevRunner {
   final String entry;
 
@@ -86,7 +88,13 @@ class SupabaseDevRunner {
     await _watcher?.stop();
     if (_stopping) return;
     if (exitCode != 0) {
-      throw StateError('supabase functions serve exited with code $exitCode');
+      throw StateError(
+        '`supabase functions serve` exited with code $exitCode. The '
+        'supabase target needs the Supabase CLI 2.7.0 or later, a running '
+        'Docker daemon, and the local stack already up:\n'
+        '  docker info\n'
+        '  supabase start',
+      );
     }
   }
 

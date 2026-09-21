@@ -75,6 +75,9 @@ aim:
       Directory(p.join(tmp.path, 'lib')).createSync();
       File(p.join(tmp.path, 'lib', 'main.dart'))
           .writeAsStringSync('void main() {}\n');
+      Directory(p.join(tmp.path, 'supabase')).createSync();
+      File(p.join(tmp.path, 'supabase', 'config.toml'))
+          .writeAsStringSync('[api]\nport = 54321\n');
     });
 
     test('--port is refused', () {
@@ -87,6 +90,20 @@ aim:
             (e) => e.message,
             'message',
             allOf(contains('supabase'), contains('config.toml')),
+          ),
+        ),
+      );
+    });
+
+    test('a missing supabase/config.toml is reported before serve starts', () {
+      File(p.join(tmp.path, 'supabase', 'config.toml')).deleteSync();
+      expect(
+        dev([]),
+        throwsA(
+          isA<UsageException>().having(
+            (e) => e.message,
+            'message',
+            contains('supabase/config.toml'),
           ),
         ),
       );

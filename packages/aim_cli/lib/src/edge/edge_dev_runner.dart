@@ -5,7 +5,7 @@ import 'package:aim_cli/src/edge/wasm_builder.dart';
 import 'package:aim_cli/src/hot_reload/file_watcher.dart';
 import 'package:aim_cli/src/utils/process_tree.dart';
 
-/// Development loop for `aim.target: edge`.
+/// Development loop for `aim.target: workers`.
 ///
 /// Compiles the entry to wasm, starts `wrangler dev`, and recompiles on
 /// file changes. wrangler reloads by itself because the JS entry module
@@ -37,20 +37,26 @@ class EdgeDevRunner {
     print('');
 
     try {
-      _wrangler = await Process.start(
-        'npx',
-        ['--yes', 'wrangler@4', 'dev', if (port != null) ...['--port', '$port']],
-        mode: ProcessStartMode.inheritStdio,
-      );
+      _wrangler = await Process.start('npx', [
+        '--yes',
+        'wrangler@4',
+        'dev',
+        if (port != null) ...['--port', '$port'],
+      ], mode: ProcessStartMode.inheritStdio);
     } on ProcessException catch (e) {
       throw StateError(
         'Could not start `npx wrangler@4 dev` (${e.message}). Node.js is '
-        'required for the edge target; install Node and retry.',
+        'required for the workers target; install Node and retry.',
       );
     }
 
     if (watch) {
-      _watcher = FileWatcher(watchPaths: watchPaths, onChanged: () { _rebuild(); });
+      _watcher = FileWatcher(
+        watchPaths: watchPaths,
+        onChanged: () {
+          _rebuild();
+        },
+      );
       await _watcher!.start();
       print('👀 Watching: ${watchPaths.join(', ')}');
     }
@@ -90,7 +96,9 @@ class EdgeDevRunner {
         final stopwatch = Stopwatch()..start();
         try {
           await buildWasm(entry: entry, outputDir: outputDir);
-          print('✅ Recompiled (${stopwatch.elapsedMilliseconds}ms); wrangler will reload');
+          print(
+            '✅ Recompiled (${stopwatch.elapsedMilliseconds}ms); wrangler will reload',
+          );
         } on WasmBuildException catch (e) {
           print('❌ $e (keeping the previous build)');
         }

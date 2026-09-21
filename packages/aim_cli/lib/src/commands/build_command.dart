@@ -129,6 +129,9 @@ class BuildCommand extends Command {
       print('');
       print('Next steps:');
       print(
+        '  supabase start                           # reads this build\'s main.mjs',
+      );
+      print(
         '  aim dev                                  # supabase functions serve --no-verify-jwt',
       );
       print(

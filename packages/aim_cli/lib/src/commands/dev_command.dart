@@ -175,11 +175,22 @@ class DevCommand extends Command {
           invocation,
         );
       }
+      final supabaseConfig = File('supabase/config.toml');
+      if (!await supabaseConfig.exists()) {
+        throw UsageException(
+          'supabase/config.toml not found. It is required next to '
+          'pubspec.yaml for the supabase target — `supabase functions '
+          'serve` takes its port from it. `aim create --target supabase` '
+          'writes one, or run `supabase init`.',
+          invocation,
+        );
+      }
       if (config.env.isNotEmpty) {
         print(
           '⚠️  aim.env is ignored for target: supabase. Set environment '
-          'variables with `supabase secrets set` or the local stack\'s own '
-          'configuration.',
+          'variables locally in supabase/functions/.env (or with '
+          '`supabase functions serve --env-file`), and after deploy with '
+          '`supabase secrets set`.',
         );
       }
       final functionName = config.packageName;
