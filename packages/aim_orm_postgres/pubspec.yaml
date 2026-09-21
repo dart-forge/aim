@@ -1,6 +1,6 @@
 name: aim_orm_postgres
 description: PostgreSQL ORM implementation for Dart with Record syntax table definitions and type-safe query builders.
-version: 0.2.0
+version: 0.3.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 
@@ -8,8 +8,8 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_orm: ^0.2.0
-  aim_postgres: ^0.2.0
+  aim_orm: ^0.3.0
+  aim_postgres: ^0.3.0
 
 dev_dependencies:
   lints: ^6.0.0

@@ -1,6 +1,6 @@
 name: aim_core
 description: Platform-independent core of the Aim web framework. Routing, middleware, request and response types with no dart:io dependency.
-version: 0.2.0
+version: 0.3.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 

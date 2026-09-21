@@ -1,3 +1,7 @@
+## 0.3.0
+
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.3.0)
+
 ## 0.2.0
 
 - **Breaking:** `c.req.workerEnv` / `c.req.workerContext` are replaced by `c.env` / `c.executionContext` (extension on `Context`).

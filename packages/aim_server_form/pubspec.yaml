@@ -1,6 +1,6 @@
 name: aim_server_form
 description: Form data parsing for aim_server framework. Supports application/x-www-form-urlencoded format.
-version: 0.2.0
+version: 0.3.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 
@@ -8,9 +8,9 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_core: ^0.2.0
+  aim_core: ^0.3.0
 
 dev_dependencies:
-  aim_server: ^0.2.0
+  aim_server: ^0.3.0
   lints: ^6.0.0
   test: ^1.25.6
