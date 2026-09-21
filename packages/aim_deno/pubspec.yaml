@@ -1,0 +1,18 @@
+name: aim_deno
+description: "Deno adapter for Aim: runs an Aim app on Supabase Edge Functions and other Deno runtimes."
+version: 0.3.0
+repository: https://github.com/dart-forge/aim
+
+environment:
+  sdk: ^3.13.0
+
+resolution: workspace
+
+dependencies:
+  aim_core: ^0.3.0
+  aim_edge: ^0.3.0
+  web: ^1.1.1
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6
