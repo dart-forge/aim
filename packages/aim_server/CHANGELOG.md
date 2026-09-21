@@ -1,3 +1,7 @@
+## 0.3.0
+
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.3.0)
+
 ## 0.2.0
 
 - **Breaking:** follows `aim_core`'s rename of `Env` → `Variables` and `envFactory` → `variablesFactory` (re-exported).

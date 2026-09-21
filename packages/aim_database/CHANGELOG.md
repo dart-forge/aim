@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.0
 
 - Document the value contract on `Database` / `Transaction`: drivers return
   Dart-typed values, `DateTime` is always UTC, `execute()` returns affected rows.

@@ -1,6 +1,6 @@
 name: aim_server
 description: Run Aim web applications on the Dart VM with dart:io HttpServer. Re-exports aim_core.
-version: 0.2.0
+version: 0.3.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 
@@ -8,7 +8,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_core: ^0.2.0
+  aim_core: ^0.3.0
 
 dev_dependencies:
   lints: ^6.0.0

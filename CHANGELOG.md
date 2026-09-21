@@ -1,11 +1,25 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
+
+Third beta. The same application now runs on Cloud Functions for Firebase as well as on the Dart VM and Cloudflare workerd, and `aim_cli` scaffolds, runs and deploys such a project end to end. One breaking change, to serial columns; see below.
+
+### Highlights
+
+- **`aim_functions`** (new): run an app as a Cloud Functions for Firebase `onRequest` HTTP function. `app.serveFunction()` returns a plain shelf handler, so the package's only runtime dependencies are `aim_core` and `shelf` — `firebase_functions` is something your own entry point needs, not the adapter. Requires `firebase_functions` 0.8.0 or later: on 0.6.x the function name is not stripped before dispatch, which leaves an app whose routes are written as `/` unreachable locally. Verified against the Firebase emulator and against a deployed function. Only `onRequest` is supported; `onCall` is Firebase's own RPC convention and does not fit an HTTP-in, HTTP-out adapter.
+- **`aim_cli`**: `aim: target: functions` in `pubspec.yaml`. `aim create --target functions` scaffolds a Cloud Functions project and asks for the Firebase project id — flat, with `firebase.json` next to `pubspec.yaml`, so the CLI and the Firebase CLI agree on where the project root is. `aim dev` starts `firebase emulators:start --only functions` and adds no watcher of its own, because the emulator rebuilds Dart functions itself. `aim build` does nothing for this target: `firebase deploy` compiles on your machine and uploads the artifact.
+- Dart support in Firebase is experimental, and a deploy needs the Cloud Run Admin API enabled — a Dart function is deployed as a Cloud Run service, and `firebase deploy` does not switch that API on for you.
 
 ### Breaking changes
 
 - `aim_orm_postgres`: `SerialColumn` is `Column<int, SerialColumn>` where it was `Column<String, SerialColumn>`. `SERIAL` stores a 4-byte integer, the code generator already maps it to `int`, and the class's own documentation said so — only the type parameter disagreed, which made every comparison on a serial key take a string. Three things follow for anyone who had written code against the old type: comparisons such as `users.id.eq('1')` become `users.id.eq(1)`; a foreign key pointing at a serial column has to have the same value type, so `varchar('user_id').references(() => users.id)` becomes `integer('user_id').references(() => users.id)`; and `defaultValue`, along with `copyWith`'s `defaultValue` parameter, is `int?` where it was `String?`.
 - `aim_orm_postgres`: asking a serial column for a default now throws `UnsupportedError` instead of being ignored. `SERIAL` already means `integer NOT NULL DEFAULT nextval(...)`, and PostgreSQL answers a second default with "multiple default values specified for column". `aim db:generate` refuses the same thing when it reads the schema, because it reads the source rather than running it.
+
+### Packages in this release
+
+`aim_functions` 0.3.0 (new), and `aim_core`, `aim_server`, `aim_edge`, `aim_cli`, `aim_server_cors`, `aim_server_cookie`, `aim_server_form`, `aim_server_multipart`, `aim_server_static`, `aim_server_logger`, `aim_server_sse`, `aim_server_jwt`, `aim_server_basic_auth`, `aim_server_testing`, `aim_database`, `aim_postgres`, `aim_orm`, `aim_orm_postgres`, `aim_orm_codegen` — all 0.3.0.
+
+`aim_sqlite` is in the repository but held back from this release.
 
 ## 0.2.0
 

@@ -1,3 +1,7 @@
+## 0.3.0
+
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.3.0)
+
 ## 0.2.0
 
 - **Breaking:** `UploadedFile.saveTo()` moved to the `UploadedFileIO` extension in `package:aim_server_multipart/aim_server_multipart_io.dart`. Add that import to keep using it.
