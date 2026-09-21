@@ -485,12 +485,14 @@ static_files = [ "./functions/{{projectName}}/main.wasm" ]
 # Dart
 .dart_tool/
 .packages
-build/
 pubspec.lock
 
 # Supabase build artifacts and local stack
 supabase/functions/*/main.wasm
 supabase/functions/*/main.mjs
+supabase/functions/*/main.support.js
+supabase/functions/*/main.wasm.map
+supabase/functions/*/.staging-*/
 supabase/.temp/
 
 # IDE
@@ -509,14 +511,24 @@ Functions.
 ```bash
 npm install -g supabase
 docker info      # Docker must be running
-supabase start    # brings up the local Postgres/auth stack
 ```
 
 ## Development
 
 ```bash
 dart pub get
-aim dev           # compiles to wasm, starts `supabase functions serve`, recompiles on change
+aim build          # writes supabase/functions/{{projectName}}/main.wasm + main.mjs
+supabase start     # reads the function's imports, so it needs the build above
+aim dev            # compiles to wasm, starts `supabase functions serve`, recompiles on change
+```
+
+`supabase start` reads the function's source and follows its imports down to
+`main.mjs`, so it fails on a fresh checkout until `aim build` has written one.
+
+The function answers on `http://localhost:54321/functions/v1/{{projectName}}/...`:
+
+```bash
+curl http://localhost:54321/functions/v1/{{projectName}}/
 ```
 
 `aim dev` does not run `supabase start` for you: that command brings up

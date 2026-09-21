@@ -1,2 +1,14 @@
+# Dart
+.dart_tool/
+.packages
+build/
+pubspec.lock
+
+# wrangler / node
 .wrangler/
 node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.iml
