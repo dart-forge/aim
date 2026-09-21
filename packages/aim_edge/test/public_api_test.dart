@@ -35,15 +35,21 @@ void main() {
 
   test('adapter.dart exposes what an adapter needs, and nothing else', () {
     final source = File('lib/adapter.dart').readAsStringSync();
-    for (final name in [
-      'EdgeEnv',
-      'EdgeRaw',
-      'toAimRequest',
-      'toWebResponse',
-      'handleEdgeFetch',
-    ]) {
-      expect(source, contains(name), reason: 'adapter.dart must export $name');
-    }
+    final exports =
+        RegExp(
+              r'''^export\s+['"]([^'"]+)['"](\s+show\s+([^;]+))?;''',
+              multiLine: true,
+            )
+            .allMatches(source)
+            .map((m) => (uri: m.group(1)!, show: m.group(3)?.trim()))
+            .toList();
+
+    expect(exports, hasLength(5));
+    expect(exports[0], (uri: 'src/edge_env.dart', show: 'EdgeEnv'));
+    expect(exports[1], (uri: 'src/edge_raw.dart', show: 'EdgeRaw'));
+    expect(exports[2], (uri: 'src/edge_request.dart', show: 'toAimRequest'));
+    expect(exports[3], (uri: 'src/edge_response.dart', show: 'toWebResponse'));
+    expect(exports[4], (uri: 'src/handle_fetch.dart', show: 'handleEdgeFetch'));
   });
 
   test('aim_edge.dart never re-grows Cloudflare-only names', () {
@@ -56,17 +62,21 @@ void main() {
     expect(source, isNot(contains('serveEdge')));
   });
 
-  test('no source file mentions Cloudflare-only concepts', () {
-    final offenders = <String>[];
-    for (final file in Directory(
-      'lib',
-    ).listSync(recursive: true).whereType<File>()) {
-      if (!file.path.endsWith('.dart')) continue;
-      final text = file.readAsStringSync();
-      if (text.contains('CfProperties') || text.contains("getProperty('cf'")) {
-        offenders.add(file.path);
+  test(
+    'no source file mentions the Cloudflare-only CfProperties/cf binding',
+    () {
+      final offenders = <String>[];
+      for (final file in Directory(
+        'lib',
+      ).listSync(recursive: true).whereType<File>()) {
+        if (!file.path.endsWith('.dart')) continue;
+        final text = file.readAsStringSync();
+        if (text.contains('CfProperties') ||
+            text.contains("getProperty('cf'")) {
+          offenders.add(file.path);
+        }
       }
-    }
-    expect(offenders, isEmpty);
-  });
+      expect(offenders, isEmpty);
+    },
+  );
 }

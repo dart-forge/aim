@@ -15,3 +15,11 @@ String stripBasePath(String path, String? basePath) {
   final rest = path.substring(prefix.length);
   return rest.isEmpty ? '/' : rest;
 }
+
+/// [url] with [basePath] removed from the front of its path.
+///
+/// Everything else about the URI — query string, fragment, host — is kept.
+Uri stripUriBasePath(Uri url, String? basePath) {
+  final path = stripBasePath(url.path, basePath);
+  return path == url.path ? url : url.replace(path: path);
+}

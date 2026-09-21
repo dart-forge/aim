@@ -14,11 +14,7 @@ final class DenoRaw implements EdgeRaw {
   final String? basePath;
 
   @override
-  Uri get uri {
-    final url = Uri.parse(request.url);
-    final path = stripBasePath(url.path, basePath);
-    return path == url.path ? url : url.replace(path: path);
-  }
+  Uri get uri => stripUriBasePath(Uri.parse(request.url), basePath);
 
   @override
   EdgeEnv get env => const DenoEnv();

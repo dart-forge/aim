@@ -30,4 +30,41 @@ void main() {
       expect(stripBasePath('/my_api_v2/users', '/my_api'), '/my_api_v2/users');
     });
   });
+
+  group('stripUriBasePath', () {
+    test('keeps the query string', () {
+      expect(
+        stripUriBasePath(
+          Uri.parse('/my_api/users/42?q=1'),
+          '/my_api',
+        ).toString(),
+        '/users/42?q=1',
+      );
+    });
+
+    test('keeps the fragment', () {
+      expect(
+        stripUriBasePath(
+          Uri.parse('/my_api/users/42#frag'),
+          '/my_api',
+        ).toString(),
+        '/users/42#frag',
+      );
+    });
+
+    test('keeps both the query string and the fragment', () {
+      expect(
+        stripUriBasePath(
+          Uri.parse('/my_api/users/42?q=1#frag'),
+          '/my_api',
+        ).toString(),
+        '/users/42?q=1#frag',
+      );
+    });
+
+    test('leaves the URL alone when there is no base path', () {
+      final url = Uri.parse('/users/42?q=1#frag');
+      expect(stripUriBasePath(url, null), url);
+    });
+  });
 }

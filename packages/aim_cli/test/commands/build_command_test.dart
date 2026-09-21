@@ -69,7 +69,7 @@ aim:
 
       final runner = CommandRunner<void>('aim', 'test')
         ..addCommand(BuildCommand());
-      expect(runner.run(['build']), throwsA(isA<UsageException>()));
+      await expectLater(runner.run(['build']), throwsA(isA<UsageException>()));
       expect(Directory(p.join(tmp.path, 'supabase')).existsSync(), isFalse);
     },
   );
