@@ -4,12 +4,75 @@ description: Upgrade Aim applications between releases. Breaking changes, rename
 head:
   - - meta
     - name: keywords
-      content: Aim migration, upgrade guide, breaking changes, Env to Variables, aim_core, aim_edge, Dart 3.13
+      content: Aim migration, upgrade guide, breaking changes, Env to Variables, aim_core, aim_edge, aim_workers, aim_deno, Dart 3.13
 ---
 
 # Migration Guide
 
 This page lists the breaking changes in each release and how to update your application.
+
+## 0.3.0 → 0.4.0
+
+0.4.0 splits the Cloudflare adapter, `aim_edge`, into a shared package plus a Cloudflare-specific one: `aim_edge` now holds only the plumbing common to every edge runtime, `aim_workers` is the new Cloudflare workerd adapter, and `aim_deno` is a new adapter for Deno-based runtimes (Supabase Edge Functions, Deno Deploy, Netlify Edge). The `edge` CLI target is renamed to `workers`, and a new `supabase` target builds Supabase Edge Functions projects. Only Cloudflare Workers applications need to change anything; there is no other breaking change in this release.
+
+### 1. Depend on `aim_workers` instead of `aim_edge`
+
+```yaml
+# 0.3.0
+dependencies:
+  aim_edge: ^0.3.0
+
+# 0.4.0
+dependencies:
+  aim_workers: ^0.4.0
+```
+
+### 2. Update the import
+
+```dart
+// 0.3.0
+import 'package:aim_edge/aim_edge.dart';
+
+// 0.4.0
+import 'package:aim_workers/aim_workers.dart';
+```
+
+### 3. Rename `serveEdge()` to `serveWorkers()`
+
+```dart
+// 0.3.0
+app.serveEdge();
+
+// 0.4.0
+app.serveWorkers();
+```
+
+### 4. Rename the CLI target
+
+```yaml
+# 0.3.0
+aim:
+  target: edge
+
+# 0.4.0
+aim:
+  target: workers
+```
+
+`aim.target: edge` is rejected starting in 0.4.0, with an error naming the replacement.
+
+`c.env`, `c.cf`, and `c.executionContext` are called exactly as before — only the package name, the `serveWorkers()` name, and the target name changed.
+
+### New in 0.4.0: `aim_deno` and the `supabase` target
+
+`aim_deno` runs the same `Aim` application on Deno-based runtimes, compiled with `dart compile wasm`, with `serveDeno(basePath:)` to strip the function-name segment Supabase Edge Functions prepend to every request. To try it: `aim create my_api --target supabase`, then `supabase start` and `aim dev`. See [Supabase Edge Functions](/server/supabase) and the [CLI configuration](/cli/configuration#target).
+
+### Checklist
+
+- [ ] `aim_edge` → `aim_workers` in `pubspec.yaml` (Cloudflare Workers projects only)
+- [ ] `import 'package:aim_edge/aim_edge.dart'` → `import 'package:aim_workers/aim_workers.dart'`
+- [ ] `serveEdge()` → `serveWorkers()`
+- [ ] `aim.target: edge` → `workers`
 
 ## 0.1.x → 0.2.0
 

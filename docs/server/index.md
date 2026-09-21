@@ -18,7 +18,7 @@ A lightweight, fast web framework for Dart.
 - **Middleware** - Composable middleware chain with early response support
 - **Type-Safe** - Custom `Variables` classes for type-safe context variables
 - **Modular** - Use only the middleware packages you need
-- **Runs anywhere** - The same app runs on the Dart VM (`aim_server`), on [Cloudflare Workers](/server/edge) (`aim_edge`), and, experimentally, on [Cloud Functions for Firebase](/server/functions) (`aim_functions`)
+- **Runs anywhere** - The same app runs on the Dart VM (`aim_server`), on [Cloudflare Workers](/server/workers) (`aim_workers`), on [Supabase Edge Functions](/server/supabase) (`aim_deno`), and, experimentally, on [Cloud Functions for Firebase](/server/functions) (`aim_functions`)
 
 ## Quick Start
 
@@ -94,7 +94,8 @@ void main() async {
 
 - [Installation](/server/installation) - Detailed setup guide
 - [Quick Start](/server/quick-start) - Build your first API
-- [Cloudflare Workers](/server/edge) - Deploy the same app to the edge
+- [Cloudflare Workers](/server/workers) - Deploy the same app to the edge
+- [Supabase Edge Functions](/server/supabase) - Deploy the same app on Deno
 - [Cloud Functions for Firebase](/server/functions) - Deploy the same app as an HTTP function (experimental)
 - [Routing](/server/concepts/routing) - Path parameters and wildcards
 - [Middleware](/server/concepts/middleware) - Create custom middleware

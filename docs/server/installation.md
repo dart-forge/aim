@@ -38,16 +38,30 @@ The CLI will:
 
 ### Cloudflare Workers
 
-To target Cloudflare Workers instead of the Dart VM, pass `--target edge`:
+To target Cloudflare Workers instead of the Dart VM, pass `--target workers`:
 
 ```bash
-aim create my_worker --target edge
+aim create my_worker --target workers
 cd my_worker
 dart pub get
 aim dev   # compiles to WebAssembly and starts wrangler dev
 ```
 
-This requires Node.js (the CLI runs `npx wrangler@4`). See [Cloudflare Workers](/server/edge) for bindings, deployment, and what differs from the VM.
+This requires Node.js (the CLI runs `npx wrangler@4`). See [Cloudflare Workers](/server/workers) for bindings, deployment, and what differs from the VM.
+
+### Supabase Edge Functions
+
+To target Supabase Edge Functions, pass `--target supabase`:
+
+```bash
+aim create my_api --target supabase
+cd my_api
+dart pub get
+supabase start   # requires the Supabase CLI and Docker; aim dev needs this running
+aim dev          # compiles to WebAssembly and starts supabase functions serve
+```
+
+See [Supabase Edge Functions](/server/supabase) for prerequisites, deployment, and how the function name affects routing.
 
 ### Cloud Functions
 

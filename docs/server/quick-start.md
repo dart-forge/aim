@@ -278,7 +278,8 @@ Now that you have a basic application running, explore:
 - [Middleware](/server/concepts/middleware) - Understand the middleware system
 - [Context](/server/concepts/context) - Deep dive into the Context API
 - [Middleware Packages](/server/middleware/) - Add CORS, auth, and more
-- [Cloudflare Workers](/server/edge) - Deploy the same app to the edge with `aim create --target edge`
+- [Cloudflare Workers](/server/workers) - Deploy the same app to the edge with `aim create --target workers`
+- [Supabase Edge Functions](/server/supabase) - Deploy the same app to Supabase with `aim create --target supabase`
 - [Cloud Functions for Firebase](/server/functions) - Deploy the same app to Cloud Functions with `aim create --target functions`
 
 Happy coding with Aim!

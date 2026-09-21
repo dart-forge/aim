@@ -1,5 +1,5 @@
 name: aim_edge
-description: Run Aim web applications on Cloudflare workerd (Cloudflare Workers) compiled to WebAssembly with dart compile wasm.
+description: Shared plumbing for running Aim applications on edge runtimes. Adapter authors build on this; application authors use aim_workers or aim_deno instead.
 version: 0.3.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace

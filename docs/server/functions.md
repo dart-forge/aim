@@ -9,7 +9,7 @@ head:
 
 # Cloud Functions for Firebase
 
-An Aim application is not tied to the Dart VM. The routing, middleware, and `Context` API live in `aim_core`, and a runtime adapter connects them to a platform. `aim_server` is the adapter for `dart:io`, `aim_edge` is the adapter for Cloudflare workerd, and `aim_functions` is the adapter for Cloud Functions for Firebase.
+An Aim application is not tied to the Dart VM. The routing, middleware, and `Context` API live in `aim_core`, and a runtime adapter connects them to a platform. `aim_server` is the adapter for `dart:io`, `aim_workers` is the adapter for Cloudflare workerd, `aim_deno` is the adapter for Deno-based runtimes such as Supabase Edge Functions, and `aim_functions` is the adapter for Cloud Functions for Firebase.
 
 ```dart
 import 'package:aim_functions/aim_functions.dart';
