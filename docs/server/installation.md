@@ -60,7 +60,7 @@ dart pub get
 aim dev   # starts the Firebase emulator
 ```
 
-`aim build` does nothing for this target — the Firebase CLI itself compiles your app during `firebase deploy --only functions`. See [Cloud Functions for Firebase](/server/functions) for the full setup, and note that Dart support there is experimental, and that `aim_functions` is not yet published to pub.dev — `dart pub get` fails until it is.
+`aim build` does nothing for this target — the Firebase CLI itself compiles your app during `firebase deploy --only functions`. See [Cloud Functions for Firebase](/server/functions) for the full setup; Dart support there is experimental.
 
 ## Manual Setup
 

@@ -12,9 +12,6 @@ something this package needs itself. That is why
 `test/serve_functions_test.dart` never imports `firebase_functions` at
 all.
 
-**Not yet published to pub.dev.** This README describes the intended
-interface; a `pub.dev` badge will be added once it ships.
-
 ```dart
 import 'package:aim_functions/aim_functions.dart';
 import 'package:firebase_functions/firebase_functions.dart' as ff;
