@@ -30,12 +30,12 @@ void main() {
       File(p.join(tmp.path, relative)).readAsStringSync();
 
   test('scaffolds a workers project', () async {
-    await create(['my_edge', '--target', 'workers']);
+    await create(['my_workers', '--target', 'workers']);
 
-    final files = Directory(p.join(tmp.path, 'my_edge'))
+    final files = Directory(p.join(tmp.path, 'my_workers'))
         .listSync(recursive: true)
         .whereType<File>()
-        .map((f) => p.relative(f.path, from: p.join(tmp.path, 'my_edge')))
+        .map((f) => p.relative(f.path, from: p.join(tmp.path, 'my_workers')))
         .toSet();
     expect(files, {
       'pubspec.yaml',
@@ -46,13 +46,19 @@ void main() {
       '.gitignore',
     });
 
-    expect(read('my_edge/pubspec.yaml'), contains('target: workers'));
-    expect(read('my_edge/pubspec.yaml'), contains('aim_workers:'));
-    expect(read('my_edge/pubspec.yaml'), contains('name: my_edge'));
-    expect(read('my_edge/lib/main.dart'), contains('app.serveWorkers();'));
-    expect(read('my_edge/wrangler.jsonc'), contains('"name": "my-edge"'));
-    expect(read('my_edge/wrangler.jsonc'), contains('"main": "src/index.mjs"'));
-    expect(read('my_edge/src/index.mjs'), contains('build/workers/main.wasm'));
+    expect(read('my_workers/pubspec.yaml'), contains('target: workers'));
+    expect(read('my_workers/pubspec.yaml'), contains('aim_workers:'));
+    expect(read('my_workers/pubspec.yaml'), contains('name: my_workers'));
+    expect(read('my_workers/lib/main.dart'), contains('app.serveWorkers();'));
+    expect(read('my_workers/wrangler.jsonc'), contains('"name": "my-workers"'));
+    expect(
+      read('my_workers/wrangler.jsonc'),
+      contains('"main": "src/index.mjs"'),
+    );
+    expect(
+      read('my_workers/src/index.mjs'),
+      contains('build/workers/main.wasm'),
+    );
   });
 
   test('scaffolds a supabase project', () async {

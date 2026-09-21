@@ -1,5 +1,4 @@
 // Compiled with `dart compile wasm` by wasm_smoke_test.dart.
-import 'package:aim_core/aim_core.dart';
 import 'package:aim_deno/aim_deno.dart';
 
 /// Proves that `DenoEnv implements EdgeEnv` and the `Deno.env` js_interop

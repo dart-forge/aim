@@ -1,5 +1,4 @@
 // Compiled with `dart compile wasm` by wasm_smoke_test.dart.
-import 'package:aim_core/aim_core.dart';
 import 'package:aim_workers/aim_workers.dart';
 
 /// Proves that `WorkersEnv implements EdgeEnv` and the rest of the workerd
