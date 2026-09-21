@@ -1,38 +1,30 @@
 import 'dart:js_interop';
 
 import 'package:aim_core/aim_core.dart';
+import 'package:aim_edge/src/edge_raw.dart';
 import 'package:aim_edge/src/edge_request.dart';
 import 'package:aim_edge/src/edge_response.dart';
-import 'package:aim_edge/src/interop.dart';
 import 'package:web/web.dart' as web;
 
-/// Runs an [Aim] application on Cloudflare workerd.
-extension AimEdge<E extends Variables> on Aim<E> {
-  /// Registers this application as the worker's fetch handler.
-  ///
-  /// Sets `globalThis.__aimFetch` to a function `(request, env, ctx)` that
-  /// returns a `Promise<Response>`. The JS entry module instantiates the
-  /// wasm module, calls `main()` (which calls this), then forwards every
-  /// `fetch` event to `__aimFetch`.
-  ///
-  /// Unhandled errors without an [Aim.onError] handler are written to
-  /// `console.error` and answered with a 500 response.
-  void serveEdge() {
-    aimFetchGlobal = ((web.Request request, JSObject env, JSObject ctx) =>
-        _fetch(this, request, env, ctx).toJS).toJS;
-  }
-}
-
-Future<web.Response> _fetch<E extends Variables>(
+/// Runs [app] against [raw] and produces a [web.Response].
+///
+/// For use by adapter packages implementing a runtime's fetch entry point.
+/// Two fallbacks keep a broken request or response from crashing the
+/// isolate:
+///
+/// 1. If [Aim.handle] throws, logs to `console.error` and answers 400.
+/// 2. If [toWebResponse] throws, logs to `console.error` and answers 500.
+///
+/// Unhandled errors inside a handler (with no [Aim.onError] registered) are
+/// caught by [Aim.handle]'s `onUnhandledError`, logged, and answered as 500.
+Future<web.Response> handleEdgeFetch<E extends Variables>(
   Aim<E> app,
-  web.Request request,
-  JSObject env,
-  JSObject ctx,
+  EdgeRaw raw,
 ) async {
   Response response;
   try {
     response = await app.handle(
-      await toAimRequest(request, env, ctx),
+      await toAimRequest(raw),
       onUnhandledError: _logAndRespond,
     );
   } catch (e, st) {
