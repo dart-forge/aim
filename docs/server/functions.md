@@ -28,7 +28,7 @@ void main(List<String> args) {
 `serveFunction()` turns an `Aim` app into a plain `shelf.Handler`. It doesn't call `firebase.https.onRequest` itself — you pass the handler to it, alongside whatever other triggers your Firebase project needs.
 
 ::: warning Experimental
-`firebase_functions` marks its own status as "Experimental" and says only HTTPS triggers (what `aim_functions` uses) are currently supported in production; other trigger types have varying levels of support. This adapter inherits that status. `aim_functions` itself is not yet published to pub.dev — the interface above is what's implemented and tested, not a preview of something still being designed.
+`firebase_functions` marks its own status as "Experimental" and says only HTTPS triggers (what `aim_functions` uses) are currently supported in production; other trigger types have varying levels of support. This adapter inherits that status.
 :::
 
 ## Prerequisites
