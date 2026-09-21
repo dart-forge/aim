@@ -7,7 +7,6 @@ Aim running on Supabase Edge Functions, compiled to WebAssembly.
 ```bash
 npm install -g supabase
 docker info      # Docker must be running
-supabase start    # brings up the local Postgres/auth stack
 ```
 
 ## Development
@@ -17,7 +16,10 @@ dart run ../../packages/aim_cli/bin/aim.dart dev   # inside this repo (or `aim d
 curl http://localhost:54321/functions/v1/supabase_sample/users/42
 ```
 
-`aim dev` does not run `supabase start` for you; start it yourself first.
+`aim dev` starts the local Supabase stack itself if it is not already
+running, applying this project's migrations and `seed.sql` to the local
+database. The stack stays up after `aim dev` exits — run `supabase stop`
+when you want to stop it.
 
 ## Deploy
 

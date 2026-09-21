@@ -81,7 +81,7 @@ import { CompiledApp } from '../build/workers/main.mjs';
 
 ### New in 0.4.0: `aim_deno` and the `supabase` target
 
-`aim_deno` runs the same `Aim` application on Deno-based runtimes, compiled with `dart compile wasm`, with `serveDeno(basePath:)` to strip the function-name segment Supabase Edge Functions prepend to every request. To try it: `aim create my_api --target supabase`, then `supabase start` and `aim dev`. See [Supabase Edge Functions](/server/supabase) and the [CLI configuration](/cli/configuration#target).
+`aim_deno` runs the same `Aim` application on Deno-based runtimes, compiled with `dart compile wasm`, with `serveDeno(basePath:)` to strip the function-name segment Supabase Edge Functions prepend to every request. To try it: `aim create my_api --target supabase`, then `aim dev` — it starts the local Supabase stack itself if it is not already running. See [Supabase Edge Functions](/server/supabase) and the [CLI configuration](/cli/configuration#target).
 
 ### Checklist
 

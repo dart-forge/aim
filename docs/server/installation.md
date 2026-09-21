@@ -57,9 +57,11 @@ To target Supabase Edge Functions, pass `--target supabase`:
 aim create my_api --target supabase
 cd my_api
 dart pub get
-supabase start   # requires the Supabase CLI and Docker; aim dev needs this running
-aim dev          # compiles to WebAssembly and starts supabase functions serve
+aim dev   # compiles to WebAssembly, starts the local Supabase stack if it
+          # is not already running, then supabase functions serve
 ```
+
+This requires the Supabase CLI and a running Docker daemon.
 
 See [Supabase Edge Functions](/server/supabase) for prerequisites, deployment, and how the function name affects routing.
 

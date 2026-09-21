@@ -148,8 +148,9 @@ aim dev --port 3000
 
 **With `target: supabase`:**
 - Compiles the entry point to WebAssembly (`dart compile wasm`) into `supabase/functions/<name>/`, where `<name>` is the pubspec's `name`
-- Starts `supabase functions serve <name> --no-verify-jwt`
-- Requires `supabase start` to already be running; `aim dev` fails with a reminder if it is not — it does not start the stack itself
+- Checks whether the local Supabase stack is running (`supabase status`) and runs `supabase start` itself when it is not, before starting `supabase functions serve <name> --no-verify-jwt`
+- The first run on a fresh checkout takes a few minutes: `supabase start` brings up Postgres, auth and storage, and applies this project's migrations and `seed.sql` to the local database
+- The stack is left running when `aim dev` exits, including on Ctrl-C; run `supabase stop` to stop it
 - `--port` is rejected; the function's port comes from `supabase/config.toml`
 - Changes under `lib/` trigger a recompile; `supabase functions serve` picks up the rebuilt wasm without being restarted
 - `aim.env` is ignored (with a warning) — set variables with `supabase secrets set` or `supabase/functions/.env` instead

@@ -82,10 +82,8 @@ class CreateCommand extends Command {
       print('  cd $projectName');
       print('  dart pub get');
       if (target == 'supabase') {
-        // `supabase start` reads the function's imports, so the build has to
-        // come first: without main.mjs it fails before the stack is up.
-        print('  aim build');
-        print('  supabase start');
+        // `aim dev` builds first and starts the local Supabase stack itself
+        // when it is not already running, so there is nothing else to run.
         print('  aim dev');
         print('  # requires the Supabase CLI and a running Docker daemon:');
         print('  #   npm install -g supabase');

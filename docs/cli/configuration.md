@@ -44,7 +44,7 @@ aim:
 |---|---|---|---|---|
 | `server` (default) | Dart VM with `aim_server` | `dart run` with restart on change | `dart compile exe` → `build/server` | `bin/server.dart` |
 | `workers` | Cloudflare workerd with `aim_workers` | `dart compile wasm` + `npx wrangler@4 dev`, recompiles on change | `dart compile wasm` → `build/workers/` | `lib/main.dart` |
-| `supabase` | Supabase Edge Functions with `aim_deno` | `dart compile wasm` + `supabase functions serve` (requires `supabase start` already running), recompiles on change without restarting the serve process | `dart compile wasm` → `supabase/functions/<name>/` | `lib/main.dart` |
+| `supabase` | Supabase Edge Functions with `aim_deno` | `dart compile wasm` + `supabase functions serve`, starting the local Supabase stack first if it is not already running, recompiles on change without restarting the serve process | `dart compile wasm` → `supabase/functions/<name>/` | `lib/main.dart` |
 | `functions` | Cloud Functions for Firebase with `aim_functions` | `firebase emulators:start --only functions`; the emulator rebuilds on change | nothing — `firebase deploy --only functions` compiles | n/a — Firebase resolves the entry point itself, not `aim` |
 
 `edge` is no longer a valid value: the Cloudflare target and its dependency were renamed to `workers`/`aim_workers`. A `pubspec.yaml` still saying `aim.target: edge` fails `aim dev`/`aim build` with an error naming the replacement.

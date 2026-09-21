@@ -26,8 +26,7 @@ void main() {
 
 - Dart 3.13 or later (`dart compile wasm`).
 - The [Supabase CLI](https://supabase.com/docs/guides/cli), 2.7.0 or later.
-- Docker running.
-- The local stack up: `supabase start`. `supabase functions serve` exits immediately without it.
+- Docker running. `aim dev` starts the local stack itself (see [Run it locally](#run-it-locally) below), so nothing else needs to be running first.
 
 ## Create a project
 
@@ -65,7 +64,7 @@ An alternative is to mount the whole app under a prefix with `app.route('my_api'
 aim dev
 ```
 
-This starts `supabase functions serve my_api --no-verify-jwt`. It requires `supabase start` to already be running — `aim dev` does not start it for you, and fails with a reminder if the stack is down. The function's port comes from `supabase/config.toml`; `aim dev --port` is rejected for this target.
+This builds the entry to wasm, then checks whether the local Supabase stack is running (`supabase status`) and runs `supabase start` itself when it is not, before starting `supabase functions serve my_api --no-verify-jwt`. The first run on a fresh checkout takes a few minutes: `supabase start` brings up Postgres, auth and storage, and applies this project's migrations and `seed.sql` to the local database. The stack is left running when `aim dev` exits — including on Ctrl-C — since another tool may be sharing the same local database; run `supabase stop` when you want to stop it. The function's port comes from `supabase/config.toml`; `aim dev --port` is rejected for this target.
 
 The function answers on `http://localhost:54321/functions/v1/my_api/...` — the default `supabase/config.toml` API port, `/functions/v1/`, then the function name from [Routes and the function name](#routes-and-the-function-name) above.
 

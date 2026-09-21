@@ -517,13 +517,9 @@ docker info      # Docker must be running
 
 ```bash
 dart pub get
-aim build          # writes supabase/functions/{{projectName}}/main.wasm + main.mjs
-supabase start     # reads the function's imports, so it needs the build above
-aim dev            # compiles to wasm, starts `supabase functions serve`, recompiles on change
+aim dev            # compiles to wasm, starts the local Supabase stack if it
+                   # is not already running, then `supabase functions serve`
 ```
-
-`supabase start` reads the function's source and follows its imports down to
-`main.mjs`, so it fails on a fresh checkout until `aim build` has written one.
 
 The function answers on `http://localhost:54321/functions/v1/{{projectName}}/...`:
 
@@ -531,10 +527,10 @@ The function answers on `http://localhost:54321/functions/v1/{{projectName}}/...
 curl http://localhost:54321/functions/v1/{{projectName}}/
 ```
 
-`aim dev` does not run `supabase start` for you: that command brings up
-Postgres, auth and the rest of the local stack, which is too heavy to start
-on every `aim dev` and would change state outside this project. Start it
-yourself first; `aim dev` fails with a reminder if it is not running.
+The first `aim dev` on a fresh checkout takes a few minutes: `supabase
+start` brings up Postgres, auth and storage, and applies this project's
+migrations and `seed.sql` to the local database. The stack stays up after
+`aim dev` exits — run `supabase stop` when you want to stop it.
 
 ## Deploy
 
