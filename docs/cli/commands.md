@@ -111,7 +111,7 @@ aim dev [options]
 | `--port` | `-p` | Port passed to `wrangler dev` (target: workers only; rejected for target: supabase and target: functions) | 8787 (wrangler default) |
 | `--hot-reload` | | Enable hot reload | `true` |
 | `--no-hot-reload` | | Disable hot reload | |
-| `--watch` | | Directories to watch (comma-separated) | `lib,bin` |
+| `--watch` | | Directories to watch (comma-separated) | `lib,bin`; `lib` for `target: workers` and `target: supabase` |
 
 **Examples:**
 ```bash
@@ -224,7 +224,7 @@ Next steps:
 - Compiles the entry point to WebAssembly (`dart compile wasm`)
 - Output is `supabase/functions/<name>/main.wasm` and `main.mjs`, where `<name>` is the pubspec's `name`
 - `--output` is a directory (default `supabase/functions/<name>`), not a file path
-- Next step: `supabase functions deploy <name>` — using the CLI's Docker-based deploy, not `--use-api`, which cannot deploy the `static_files` the wasm module depends on
+- Next step: `supabase functions deploy <name>`, not `--use-api` — `--use-api` skips the bundling step that places `main.wasm` next to the deployed `index.ts`, which is what `static_files` in `supabase/config.toml` depends on
 
 **With `target: functions`:**
 - Does nothing — prints a message and exits; `firebase deploy --only functions` compiles on your machine and uploads the result

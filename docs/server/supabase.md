@@ -67,6 +67,8 @@ aim dev
 
 This starts `supabase functions serve my_api --no-verify-jwt`. It requires `supabase start` to already be running — `aim dev` does not start it for you, and fails with a reminder if the stack is down. The function's port comes from `supabase/config.toml`; `aim dev --port` is rejected for this target.
 
+The function answers on `http://localhost:54321/functions/v1/my_api/...` — the default `supabase/config.toml` API port, `/functions/v1/`, then the function name from [Routes and the function name](#routes-and-the-function-name) above.
+
 Changes under `lib/` trigger a recompile to `supabase/functions/my_api/main.wasm`. Unlike the Cloudflare Workers runner, `aim dev` never restarts `supabase functions serve` after a rebuild — measured against a running stack, `supabase functions serve` picks up the rebuilt `main.wasm` on its own.
 
 ## Deploy
@@ -76,13 +78,13 @@ aim build                            # supabase/functions/my_api/main.wasm + mai
 supabase functions deploy my_api
 ```
 
-Deploy with the CLI's own Docker-based path, not `--use-api`: Supabase's documentation states that `static_files` cannot be deployed with `--use-api`, and `static_files` is what places `main.wasm` next to the deployed `index.ts`.
+Deploy with the CLI, not `--use-api`: `--use-api` skips the bundling step that places `main.wasm` next to the deployed `index.ts`, which is what `static_files` in `supabase/config.toml` depends on.
 
 ## Environment variables
 
 `c.env` returns a typed `EdgeEnv?` (a `DenoEnv` on this runtime): `c.env?.string('NAME')` reads a Deno environment variable, and `c.env?.has('NAME')` checks presence. Supabase has no resource bindings, so `c.env?.get(name)` is always `null`.
 
-`aim.env` in `pubspec.yaml` is not the mechanism for this target: `aim dev` prints a warning that it is ignored for `target: supabase`. Supabase takes environment variables from its own configuration instead:
+`aim.env` in `pubspec.yaml` does not reach a Supabase function: measured against a running local stack, a route returning `c.env?.string('AIM_PROBE')` answered `MISSING` with `AIM_PROBE` set under `aim.env`. `aim dev` prints a warning that it is ignored for `target: supabase`. Supabase takes environment variables from its own configuration instead:
 
 - Locally, from `supabase/functions/.env` and per-function `.env` files. `supabase functions serve --env-file <path>` overrides both.
 - For a deployed function, from `supabase secrets set`.
@@ -91,7 +93,6 @@ Deploy with the CLI's own Docker-based path, not `--use-api`: Supabase's documen
 
 - A real deploy to Supabase has not been verified — only the local stack (`supabase start` + `supabase functions serve`).
 - Deno Deploy and Netlify Edge, the other Deno-based runtimes `aim_deno` targets, have not been verified.
-- Whether `aim.env` values reach a deployed or locally served function has not been verified.
 
 ## Next Steps
 

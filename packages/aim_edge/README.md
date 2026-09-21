@@ -12,7 +12,7 @@ Both re-export `aim_edge`, so an application only needs to depend on the adapter
 ## Two entry points
 
 - `package:aim_edge/aim_edge.dart` — for application code. Re-exports `aim_core` plus `EdgeEnv` and the `c.env` getter.
-- `package:aim_edge/adapter.dart` — for adapter authors. Exposes `EdgeRaw`, `handleEdgeFetch`, `toAimRequest`, and `toWebResponse`, the pieces a new adapter needs to translate its runtime's `fetch` handler into an `Aim` request.
+- `package:aim_edge/adapter.dart` — for adapter authors. Exposes `EdgeEnv`, `EdgeRaw`, `handleEdgeFetch`, `toAimRequest`, and `toWebResponse`, the pieces a new adapter needs to translate its runtime's `fetch` handler into an `Aim` request.
 
 ## Writing a new adapter
 
