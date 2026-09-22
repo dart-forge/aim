@@ -140,6 +140,21 @@ final class MySqlResultSets {
   /// runs several statements: whichever one last generated an id is the
   /// one it reflects, even if a later statement in the same call (a
   /// `SELECT`, say) generated none of its own.
+  ///
+  /// The wire protocol permits this shape: while
+  /// `SERVER_MORE_RESULTS_EXISTS` stays set, the server may send as many
+  /// OK packets as it likes, each with its own `affectedRows` and
+  /// `lastInsertId`, so a set with a real id followed by one reporting
+  /// `0` is not hypothetical. It is not one a real MySQL 8.0 or 8.4
+  /// server was found to produce, though: `CALL`ing a procedure with two
+  /// plain `INSERT`s collapsed both into a single result set reporting
+  /// `affectedRows: 1` and `lastInsertId: 0`, even though both rows
+  /// genuinely landed. So this rule is pinned by constructing
+  /// [MySqlResultSets] directly in a unit test rather than through an
+  /// integration test that calls a real procedure -- the same situation
+  /// as [withReprepareRetry]'s policy, and the same answer to it: the
+  /// natural trigger does not reach this shape on these server versions,
+  /// not that nobody wrote the test.
   int get lastInsertId {
     var last = 0;
     for (final set in sets) {
@@ -427,6 +442,19 @@ Future<T> withReprepareRetry<T>(
 /// [PreparedStatement.sql] is known; a statement built directly rather
 /// than through the cache has no SQL text to re-prepare from, so it is run
 /// once, plainly, and any error -- 1615 included -- simply propagates.
+///
+/// [statement] is advisory rather than authoritative whenever its `sql`
+/// is known: every attempt, not only a retry, re-resolves the statement
+/// to run from [MySqlConnection.statements] by that text, rather than
+/// executing the object passed in directly. This is deliberate:
+/// [PreparedStatement.sql] is only ever set by the cache itself (see
+/// [statementCacheFor]), so a caller holding one with a non-null `sql`
+/// already got it from there, and the lookup is always a cache hit
+/// returning that identical object back -- harmless in the ordinary
+/// case, but worth naming, because it does mean this function cannot be
+/// used to force a specific, possibly-stale [PreparedStatement] to run:
+/// the SQL text is what is authoritative, and whatever the cache
+/// currently holds for it is what actually executes.
 Future<MySqlResultSets> executeStatement(
   MySqlConnection connection,
   PreparedStatement statement,
