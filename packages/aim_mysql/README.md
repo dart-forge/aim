@@ -143,7 +143,7 @@ before it can scan a statement's placeholders correctly.
 | `CHAR`, `VARCHAR`, `TEXT` (any size) | `String` |
 | `BINARY`, `VARBINARY`, `BLOB` (any size) | `Uint8List` |
 | `ENUM`, `SET` | `String` |
-| anything else (`GEOMETRY`, ...) | `String` |
+| `GEOMETRY`, and any other type byte MySQL has assigned that this driver does not otherwise recognise | `Uint8List` or `String`, by the same charset rule as `BLOB`/`TEXT` above -- `Uint8List` for a real `GEOMETRY` column, since it reports the binary charset |
 
 **`TIME` comes back as a `String`, never a `DateTime`.** MySQL's `TIME` is
 a signed duration from -838:59:59 to 838:59:59, not a time of day, and no
@@ -205,8 +205,9 @@ back `0`, even right after a successful insert.** `LAST_INSERT_ID()` is
 scoped to the connection that generated the value, and the pool is free to
 run that `SELECT` on a different connection than the one that ran the
 `INSERT` -- nothing failed, the `SELECT` simply landed on a connection that
-never inserted anything. Use `insert()`, which runs both as a single round
-trip on the same connection. A plain `SELECT LAST_INSERT_ID()` through
+never inserted anything. Use `insert()` instead: it reads the id straight off the `INSERT`'s own
+reply, so there is no second statement and so no second connection for it
+to land on. A plain `SELECT LAST_INSERT_ID()` through
 `tx.query()` does work correctly inside `transaction()`, because the
 transaction holds one connection for its entire body.
 
@@ -261,10 +262,15 @@ is not supported**; a server asking for it fails the connection attempt with
 
 - **A few statements cannot be prepared at all.** This driver always runs
   statements as prepared statements, with a cache per connection, and MySQL
-  refuses to prepare a handful of them -- `DROP PROCEDURE` and `CREATE
-  PROCEDURE` among them -- with errno 1295. That comes back as a
-  `MySqlException` with `errorCode` `1295`; run such statements outside
-  this driver.
+  refuses to prepare a handful of them with errno 1295: `CREATE PROCEDURE`,
+  `DROP PROCEDURE`, `START TRANSACTION`, `BEGIN`, `LOCK TABLES` and `USE`
+  among them. **`START TRANSACTION` and `BEGIN` are the ones most likely to
+  be hit by accident** -- use `db.transaction()` rather than sending either
+  through `execute()`. This comes back as a `MySqlException` with
+  `errorCode` `1295`; run any of the others outside this driver.
+  `COMMIT`, `ROLLBACK` and a parameterless `SET` are not affected -- `SET`
+  runs through the text protocol instead of being prepared, and the other
+  two prepare and run normally.
 
 ## Error handling
 

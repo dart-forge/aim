@@ -1,7 +1,6 @@
-// Captured from a real server with tool/capture_handshake.dart. These are
-// the authority for the parser: the layout in any document, including the
-// plan this was built from, is a description of them and not the other way
-// round.
+// Captured from a real server with tool/capture_handshake.dart. These bytes
+// are the authority for the parser: a written description of the layout is
+// just that -- a description of them, not the other way round.
 //
 // Recaptured whenever a new server version is added to the supported set.
 
