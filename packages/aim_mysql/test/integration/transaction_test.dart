@@ -166,7 +166,17 @@ void main() {
           await tx.execute('UPDATE accounts SET balance = 42 WHERE id = 1');
           await tx.execute('CREATE TABLE already_there (a INT)');
         }),
-        throwsA(isA<MySqlTransactionEndedByDdl>()),
+        throwsA(
+          // Unlike a successful DDL, this path only knows the transaction
+          // is gone, not that this statement is why -- the message has to
+          // say that difference rather than assert it as flatly as the
+          // success case does.
+          isA<MySqlTransactionEndedByDdl>().having(
+            (e) => e.toString(),
+            'toString',
+            contains('inferred'),
+          ),
+        ),
       );
 
       expect(
