@@ -1,3 +1,27 @@
+## Unreleased
+
+### Fixed
+
+- A named parameter whose name is a prefix of another no longer corrupts the
+  statement. With `params: {'user': ..., 'user_id': ...}` the rewrite turned
+  `:user_id` into `$1_id` — a syntax error — and then dropped `user_id`'s
+  value, because it substituted text one key at a time. The generated ORM
+  code uses column names as keys, so any table with both a `user` and a
+  `user_id` column hit it.
+- A `:name` inside a string literal, a quoted identifier or a comment is no
+  longer replaced. `WHERE note = ':id'` used to become `WHERE note = '$1'`.
+
+### Changed
+
+- `$1` is now the first placeholder in the statement rather than the first
+  key in `params`. The numbering and the values still agree, so what the
+  server receives is equivalent either way.
+- A statement using a name `params` has no value for now throws
+  `ArgumentError` naming that name, instead of being sent with a `$1` that
+  nothing binds and failing at the server with a parameter-count message.
+- Mixing a positional `?` into a statement that also uses named parameters
+  now throws `ArgumentError`.
+
 ## 0.3.0
 
 ### Breaking
