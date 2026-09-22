@@ -342,22 +342,36 @@ void main() {
       // separately. This one pins that the public-key branch also reaches
       // for the NEW scramble, since that is the branch where a stale one
       // would be hardest to notice.
+      //
+      // The server is given readableKeyPem, whose exponent is 1, so the
+      // ciphertext is the OAEP encoding itself and the test can read what
+      // went into it. An assertion on the ciphertext's LENGTH cannot do
+      // this: OAEP output is the key width whatever is inside, so a stale
+      // scramble is invisible to it. An earlier version of this test
+      // asserted only the length and passed with the stale scramble wired
+      // in on purpose.
       final transport = ScriptedTransport([
         authSwitch('caching_sha2_password', otherScramble),
         authMoreData([0x04]),
-        authMoreData(utf8.encode(samplePublicKeyPem)),
+        authMoreData(utf8.encode(readableKeyPem)),
         okPacket(),
       ]);
 
       await run(transport, plugin: 'mysql_native_password');
 
       expect(transport.sent, hasLength(4));
-      expect(
-        transport.sent[1],
-        cachingSha2FastAuthToken(password: 'secret', scramble: otherScramble),
-      );
       expect(transport.sent[2], [0x02]);
-      expect(transport.sent[3], hasLength(256));
+
+      final masked = oaepRecover(transport.sent[3]);
+      expect(xorWithScramble(masked, otherScramble), [
+        ...utf8.encode('secret'),
+        0,
+      ], reason: 'unmasking with the post-switch scramble gives the password');
+      expect(
+        xorWithScramble(masked, scramble),
+        isNot([...utf8.encode('secret'), 0]),
+        reason: 'and unmasking with the handshake scramble does not',
+      );
     });
 
     test('a plugin we do not support is named in the failure', () async {
