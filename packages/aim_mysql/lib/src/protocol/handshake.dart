@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:aim_mysql/src/exceptions.dart';
+import 'package:aim_mysql/src/protocol/packet.dart';
 import 'package:aim_mysql/src/protocol/wire.dart';
 
 /// The only protocol version this driver understands.
@@ -180,4 +181,165 @@ InitialHandshake parseInitialHandshake(Uint8List payload) {
     statusFlags: statusFlags,
     authPluginName: authPluginName,
   );
+}
+
+/// The character set this driver announces about itself in the handshake
+/// response: `utf8mb4_general_ci`.
+///
+/// The servers this driver targets announce `utf8mb4_0900_ai_ci` (255) in
+/// their own handshake -- see the fixtures in `handshake_fixtures.dart` --
+/// and matching it back to them is tempting. Don't: this field says what
+/// encoding the *client* used for the bytes it is about to send, not
+/// anything about the server, and it is not the collation later
+/// comparisons and sorts run under either -- that is a property of the
+/// table and column involved, chosen independently of this handshake.
+/// `utf8mb4_general_ci` (45) is supported on both 8.0 and 8.4, so this one
+/// value covers every server this driver targets with no need to branch on
+/// which version is on the other end -- and nothing else in this driver
+/// parses the server's version string to decide behaviour either, so this
+/// field would be the odd one out if it did.
+const int _clientCharacterSet = 45;
+
+/// Decides which capabilities this driver asks for against [handshake]:
+/// what this driver always wants, adjusted by [useTls] and [withDatabase],
+/// intersected with what the server actually announced.
+///
+/// The intersection matters as much as the wish list: asking for a bit the
+/// server never announced makes it close the connection without saying
+/// why, so nothing this driver wants is allowed through unless
+/// [handshake.capabilities] offered it first.
+///
+/// [Capabilities.localFiles] and [Capabilities.multiStatements] are never
+/// on the wish list, so they never appear in the result even when the
+/// server offers them. Local files would let the server ask this process
+/// to read and hand back an arbitrary file on disk; not asking for the
+/// capability is what makes the server answer a `LOAD DATA LOCAL INFILE`
+/// statement with an error instead of that request. Multiple statements
+/// per call would open a path this driver has no way to return results
+/// for -- it reads one result set per call, not a sequence of them. Both
+/// exclusions have tests asserting the bit stays clear; those tests are
+/// what enforces this, not a description of intent the code is free to
+/// drift away from later.
+///
+/// Throws [MySqlProtocolException] if [handshake] did not announce
+/// [Capabilities.protocol41]: everything else this driver does assumes
+/// the 4.1 protocol, so continuing would only turn one clear problem into
+/// a confusing failure much later. Also throws it if [useTls] is true but
+/// [handshake] did not announce [Capabilities.ssl] -- better to say so now
+/// than to send an SSLRequest a server that never offered TLS will not
+/// answer.
+int negotiateCapabilities(
+  InitialHandshake handshake, {
+  required bool useTls,
+  required bool withDatabase,
+}) {
+  if (handshake.capabilities & Capabilities.protocol41 == 0) {
+    throw MySqlProtocolException(
+      'server did not announce the protocol41 capability; this driver '
+      'only speaks the 4.1 protocol and cannot negotiate a connection '
+      'with a server that does not offer it',
+    );
+  }
+  if (useTls && handshake.capabilities & Capabilities.ssl == 0) {
+    throw MySqlProtocolException(
+      'TLS was requested but the server did not announce the ssl '
+      'capability; it would not answer an SSLRequest',
+    );
+  }
+
+  // Capabilities.localFiles and Capabilities.multiStatements are not in
+  // this list on purpose -- see this function's doc comment above -- and
+  // the tests named after them are what keeps that true, not this comment.
+  var wanted =
+      Capabilities.protocol41 |
+      Capabilities.secureConnection |
+      Capabilities.pluginAuth |
+      Capabilities.pluginAuthLenencClientData |
+      Capabilities.multiResults |
+      Capabilities.deprecateEof;
+
+  if (useTls) {
+    wanted |= Capabilities.ssl;
+  }
+  if (withDatabase) {
+    wanted |= Capabilities.connectWithDb;
+  }
+
+  return wanted & handshake.capabilities;
+}
+
+/// Writes the 32 bytes [buildHandshakeResponse] and [buildSslRequest]
+/// both start with: [capabilities], the max packet length this driver
+/// will receive, the character set, and 23 zero-filled padding bytes.
+void _writeHandshakeHeader(ByteWriter writer, int capabilities) {
+  writer
+    ..writeUint32(capabilities)
+    ..writeUint32(maxPayloadLength)
+    ..writeUint8(_clientCharacterSet)
+    ..writeZeroes(23);
+}
+
+/// Builds the handshake response packet's payload for the already-
+/// negotiated [capabilities] (see [negotiateCapabilities]).
+///
+/// The layout, in order:
+///
+/// | | |
+/// |---|---|
+/// | 4 bytes | [capabilities] |
+/// | 4 bytes | the max packet length this driver will receive |
+/// | 1 byte | the character set |
+/// | 23 bytes | padding, all zero |
+/// | NUL-terminated | [user] |
+/// | length-encoded | [authResponse] |
+/// | NUL-terminated | [database], only when [Capabilities.connectWithDb] is set and [database] is not null |
+/// | NUL-terminated | [authPluginName], only when [Capabilities.pluginAuth] is set |
+///
+/// [authResponse] is written as the raw bytes it is, not as text: it is a
+/// password hash, not necessarily valid UTF-8, so it cannot go through
+/// the same UTF-8 encoding step [user], [database] and [authPluginName]
+/// do. It is length-encoded rather than given a single length byte
+/// because [Capabilities.pluginAuthLenencClientData] is always among the
+/// capabilities this driver asks for, and a single byte could not hold
+/// every length an authentication plugin might produce -- `caching_sha2`
+/// alone sends 32 bytes on its fast path and the whole password, unhashed,
+/// on its full-auth path.
+Uint8List buildHandshakeResponse({
+  required int capabilities,
+  required String user,
+  required Uint8List authResponse,
+  required String authPluginName,
+  String? database,
+}) {
+  final writer = ByteWriter();
+  _writeHandshakeHeader(writer, capabilities);
+  writer
+    ..writeNulTerminatedString(user)
+    ..writeLengthEncodedInt(authResponse.length)
+    ..writeBytes(authResponse);
+
+  if ((capabilities & Capabilities.connectWithDb) != 0 && database != null) {
+    writer.writeNulTerminatedString(database);
+  }
+  if ((capabilities & Capabilities.pluginAuth) != 0) {
+    writer.writeNulTerminatedString(authPluginName);
+  }
+
+  return writer.toBytes();
+}
+
+/// Builds the SSLRequest packet's payload: the first 32 bytes of what
+/// [buildHandshakeResponse] would build for the same [capabilities], and
+/// nothing past that -- see [_writeHandshakeHeader].
+///
+/// This is sent before the TLS handshake, so the server knows to expect
+/// it; the user name and everything after it stays out because it has to
+/// travel encrypted, in the full response sent again once the socket is
+/// upgraded. [capabilities] must be the same value passed to that later
+/// call to [buildHandshakeResponse] -- a mismatch would leave the server
+/// reading the encrypted response under the wrong idea of its layout.
+Uint8List buildSslRequest(int capabilities) {
+  final writer = ByteWriter();
+  _writeHandshakeHeader(writer, capabilities);
+  return writer.toBytes();
 }
