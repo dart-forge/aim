@@ -254,8 +254,8 @@ This includes `caching_sha2_password`'s public-key path -- when the server
 asks for full authentication (rather than its faster cached form) and the
 connection is not encrypted, the password is RSA-encrypted with a public
 key the server provides, rather than sent in the clear. **`sha256_password`
-is not supported**; a server asking for it fails the connection attempt,
-naming the plugin in the error.
+is not supported**; a server asking for it fails the connection attempt with
+`UnsupportedAuthPlugin`, which names the plugin.
 
 ## Limits
 
@@ -288,6 +288,9 @@ try {
   a `BIGINT UNSIGNED` at or above 2^63).
 - `MySqlProtocolException` -- the driver could not make sense of what the
   server sent. Distinct from the server refusing a statement outright.
+- `UnsupportedAuthPlugin` -- thrown from `connect()` when the server asks
+  for an authentication plugin this driver does not implement (currently
+  just `sha256_password`); see [Authentication](#authentication).
 
 ## Scope
 

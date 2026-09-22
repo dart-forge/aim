@@ -4,12 +4,12 @@
 
 <hr />
 
-A lightweight, modular web framework for Dart with native PostgreSQL support and type-safe ORM.
+A lightweight, modular web framework for Dart with native PostgreSQL and MySQL support and type-safe ORM.
 
 ## Features
 
 - **Web Server** - Fast HTTP server with routing and middleware
-- **Database** - Native PostgreSQL driver with SSL/TLS support
+- **Database** - Native PostgreSQL and MySQL drivers with SSL/TLS support
 - **ORM** - Type-safe query builder with Dart 3 Record syntax
 - **CLI** - Project scaffolding, hot reload, and database migrations
 - **Modular** - Use only what you need
