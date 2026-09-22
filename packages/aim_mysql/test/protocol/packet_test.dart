@@ -168,13 +168,12 @@ void main() {
   });
 
   group('buffer aliasing', () {
-    // Task 2's review flagged that ByteWriter and ByteReader alias their
-    // underlying buffer instead of copying it, for speed. A reassembler is
-    // different: it holds bytes across many calls to add(), while whoever
-    // is calling it (a socket implementation, for instance) is free to
-    // reuse or overwrite its own buffer right after add() returns. This
-    // group checks add() does not keep a view onto a buffer it does not
-    // own.
+    // ByteWriter and ByteReader alias their underlying buffer for speed
+    // rather than copying it. A reassembler is different: it holds bytes
+    // across many calls to add(), while whoever is calling it (a socket
+    // implementation, for instance) is free to reuse or overwrite its own
+    // buffer right after add() returns. This group checks add() does not
+    // keep a view onto a buffer it does not own.
     test('add() copies its input, so mutating the source buffer afterwards '
         'does not change what take() returns', () {
       final buffer = Uint8List.fromList([

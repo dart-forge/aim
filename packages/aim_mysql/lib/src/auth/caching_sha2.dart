@@ -4,7 +4,13 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 /// Computes the password token for the fast path of caching_sha2_password
-/// authentication (over SSL/TLS).
+/// authentication.
+///
+/// The fast path exists precisely so clients do not need to perform full
+/// authentication every time: the server caches password hashes locally,
+/// allowing quick validation. The full authentication path forks on TLS
+/// availability: RSA encryption over unencrypted connections, or a simple
+/// exchange over TLS.
 ///
 /// Returns an empty list if the password is empty (the server reads a
 /// zero-length auth response as no password at all, not as the hash of the

@@ -75,19 +75,45 @@ void main() {
         ),
       );
     });
+
+    test('a non-ASCII password is hashed as UTF-8', () {
+      // The same property the native password tests check, and it applies
+      // here for the same reason: Latin-1 works for every ASCII password
+      // and fails for everyone else, so an ASCII-only suite cannot catch
+      // it. Both plugins need the case; only one of them had it.
+      final stage1 = sha256.convert(utf8.encode('パスワード')).bytes;
+      final stage2 = sha256.convert(stage1).bytes;
+      final withScramble = sha256.convert([
+        ...stage2,
+        ...scrambleOf(0x41),
+      ]).bytes;
+
+      expect(
+        cachingSha2FastAuthToken(password: 'パスワード', scramble: scrambleOf(0x41)),
+        [for (var i = 0; i < 32; i++) stage1[i] ^ withScramble[i]],
+      );
+    });
   });
 
   group('xorWithScramble', () {
     test('repeats the scramble to cover the data', () {
       // The password sent on the public-key path is longer than the
       // scramble, so the scramble wraps.
-      final data = Uint8List.fromList(List.filled(50, 0xff));
-      final scramble = scrambleOf(0x0f);
+      //
+      // The scramble's bytes are deliberately all different. A uniform
+      // scramble would make this test pass against a hard-coded width, an
+      // off-by-one, or almost any in-range indexing at all, because every
+      // index gives the same byte — the test would read as if it checked
+      // the wrapping while checking nothing about it.
+      final scramble = Uint8List.fromList(List.generate(20, (i) => i + 1));
+      final data = Uint8List.fromList(List.filled(50, 0x00));
 
       final result = xorWithScramble(data, scramble);
 
       expect(result, hasLength(50));
-      expect(result, everyElement(0xf0));
+      expect(result, [
+        for (var i = 0; i < 50; i++) scramble[i % 20],
+      ], reason: 'XOR with zero is the scramble itself, laid out repeating');
     });
 
     test('is its own inverse', () {
