@@ -1,0 +1,3 @@
+tags:
+  integration:
+    skip: "Needs Docker (the suites start their own MySQL containers via rig). Run with: dart test -t integration --run-skipped"
