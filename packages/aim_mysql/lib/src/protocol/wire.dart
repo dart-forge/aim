@@ -3,6 +3,19 @@ import 'dart:typed_data';
 
 import 'package:aim_mysql/src/exceptions.dart';
 
+/// Decodes [bytes] as UTF-8, turning `dart:convert`'s [FormatException] into
+/// [MySqlProtocolException]: bytes that are all present but not valid UTF-8
+/// leave the stream just as out of step as a short read does, and a caller
+/// that catches this driver's exception type should not have to catch a
+/// second, unrelated one to cover both.
+String _decodeUtf8(List<int> bytes) {
+  try {
+    return utf8.decode(bytes);
+  } on FormatException catch (e) {
+    throw MySqlProtocolException('invalid UTF-8: $e');
+  }
+}
+
 /// Reads the primitives of the MySQL wire protocol out of a fixed byte
 /// buffer: little-endian integers, length-encoded integers, and the two
 /// string shapes the protocol uses.
@@ -117,7 +130,19 @@ final class ByteReader {
       case 0xfd:
         return readUint24();
       case 0xfe:
-        return readUint64();
+        final value = readUint64();
+        if (value < 0) {
+          // readUint64 hands back a negative int for a value at or above
+          // 2^63, and no length or count this driver decodes off the wire
+          // is ever legitimately that large; treating it as a protocol
+          // error here keeps the negative number from reaching readBytes
+          // as a byte count.
+          throw MySqlProtocolException(
+            'length-encoded integer decoded to $value: at or above 2^63, '
+            'which is not a length or count that ever appears for real',
+          );
+        }
+        return value;
       default:
         throw MySqlProtocolException(
           'byte 0x${marker.toRadixString(16).padLeft(2, "0")} is not a '
@@ -137,7 +162,8 @@ final class ByteReader {
   /// Reads bytes up to the next NUL (`0x00`), decodes them as UTF-8, and
   /// consumes the NUL along with them.
   ///
-  /// Throws [MySqlProtocolException] if no NUL remains in the buffer.
+  /// Throws [MySqlProtocolException] if no NUL remains in the buffer, or if
+  /// the bytes before it are not valid UTF-8.
   String readNulTerminatedString() {
     final nulAt = _bytes.indexOf(0, _offset);
     if (nulAt == -1) {
@@ -145,7 +171,7 @@ final class ByteReader {
         'no NUL byte after offset $_offset; the string never ends',
       );
     }
-    final value = utf8.decode(_bytes.sublist(_offset, nulAt));
+    final value = _decodeUtf8(_bytes.sublist(_offset, nulAt));
     _offset = nulAt + 1;
     return value;
   }
@@ -154,13 +180,15 @@ final class ByteReader {
   /// bytes decoded as UTF-8. The length is bytes, not characters.
   ///
   /// Returns `null` when the length is the length-encoded-integer NULL
-  /// marker (`0xfb`).
+  /// marker (`0xfb`). Throws [MySqlProtocolException] if the decoded length
+  /// is at or above 2^63, or if the bytes it counts off are not valid
+  /// UTF-8.
   String? readLengthEncodedString() {
     final length = readLengthEncodedInt();
     if (length == null) {
       return null;
     }
-    return utf8.decode(readBytes(length));
+    return _decodeUtf8(readBytes(length));
   }
 
   /// Reads every byte left in the buffer.

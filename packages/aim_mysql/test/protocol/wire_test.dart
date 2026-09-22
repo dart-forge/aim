@@ -132,6 +132,59 @@ void main() {
     });
   });
 
+  group(
+    'every misread surfaces as MySqlProtocolException, not a lower-level type',
+    () {
+      test(
+        'invalid UTF-8 in a NUL-terminated string throws, not FormatException',
+        () {
+          // 0xc3 is a lead byte for a two-byte sequence; the NUL right after it
+          // means the read itself is not short, only the encoding is broken.
+          expect(
+            () => readerOf([0xc3, 0x00]).readNulTerminatedString(),
+            throwsA(isA<MySqlProtocolException>()),
+          );
+        },
+      );
+
+      test(
+        'invalid UTF-8 in a length-encoded string throws, not FormatException',
+        () {
+          // 0xff and 0xfe never appear in valid UTF-8. Both bytes the length
+          // promised are present, so this is not a short read either.
+          expect(
+            () => readerOf([0x02, 0xff, 0xfe]).readLengthEncodedString(),
+            throwsA(isA<MySqlProtocolException>()),
+          );
+        },
+      );
+
+      test('a length-encoded integer at or above 2^63 throws rather than going negative', () {
+        // 0xfe followed by eight bytes worth exactly 2^63. readUint64 hands
+        // that back as a negative int, and nothing reading a length or count
+        // off the wire should ever treat a negative result as valid.
+        final bytes = [0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80];
+
+        expect(
+          () => readerOf(bytes).readLengthEncodedInt(),
+          throwsA(isA<MySqlProtocolException>()),
+        );
+      });
+
+      test('a length-encoded string whose length is at or above 2^63 throws, not RangeError', () {
+        // Without a guard on the decoded length, this reaches
+        // Uint8List.sublistView with an end offset before its start and
+        // RangeError escapes instead of this driver's own exception type.
+        final bytes = [0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80];
+
+        expect(
+          () => readerOf(bytes).readLengthEncodedString(),
+          throwsA(isA<MySqlProtocolException>()),
+        );
+      });
+    },
+  );
+
   group('offset and remaining', () {
     test('offset follows what has been read', () {
       final reader = readerOf([0x01, 0x02, 0x03]);
