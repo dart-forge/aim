@@ -74,6 +74,29 @@ void main() {
         throwsA(isA<ValidationException>()),
       );
     });
+
+    test('coerce is one-directional: a number is not turned into a string, '
+        'even with coerce on', () {
+      final nameSchema = Schema((r) => (name: r.string('name')));
+
+      // The whole point of A4: a body shared between a route validated as
+      // JSON and one read with coerce (e.g. reused for a query schema)
+      // must not have coerce silently stringify a JSON number. `34`
+      // should stay a type error, not become the string "34".
+      expect(
+        () => nameSchema.parse({'name': 34}, coerce: true),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+
+    test('coerce does not turn a boolean into a string either', () {
+      final nameSchema = Schema((r) => (name: r.string('name')));
+
+      expect(
+        () => nameSchema.parse({'name': true}, coerce: true),
+        throwsA(isA<ValidationException>()),
+      );
+    });
   });
 
   group('DateTime', () {

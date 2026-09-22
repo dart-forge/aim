@@ -21,6 +21,56 @@ final stringListSchema = Schema(
 );
 final integerListSchema = Schema((r) => (scores: r.integerList('scores')));
 
+final stringMinLengthSchema = Schema(
+  (r) => (name: r.string('name', minLength: 3)),
+);
+final stringPatternSchema = Schema(
+  (r) => (code: r.string('code', pattern: RegExp(r'^[a-z]+$'))),
+);
+final integerMaxSchema = Schema((r) => (age: r.integer('age', max: 10)));
+
+final stringListOrNullSchema = Schema(
+  (r) => (tags: r.stringListOrNull('tags', pattern: RegExp(r'^[a-z]+$'))),
+);
+final integerListOrNullSchema = Schema(
+  (r) => (scores: r.integerListOrNull('scores')),
+);
+final numberListSchema = Schema((r) => (scores: r.numberList('scores')));
+final numberListOrNullSchema = Schema(
+  (r) => (scores: r.numberListOrNull('scores')),
+);
+final booleanListSchema = Schema((r) => (flags: r.booleanList('flags')));
+final booleanListOrNullSchema = Schema(
+  (r) => (flags: r.booleanListOrNull('flags')),
+);
+final dateTimeMinMaxSchema = Schema(
+  (r) => (
+    when: r.dateTime('when', min: DateTime.utc(2020), max: DateTime.utc(2030)),
+  ),
+);
+final dateTimeListSchema = Schema(
+  (r) => (
+    whens: r.dateTimeList(
+      'whens',
+      min: DateTime.utc(2020),
+      max: DateTime.utc(2030),
+    ),
+  ),
+);
+final dateTimeListOrNullSchema = Schema(
+  (r) => (whens: r.dateTimeListOrNull('whens')),
+);
+final enumListSchema = Schema(
+  (r) => (statuses: r.enumList('statuses', Status.values)),
+);
+final enumListOrNullSchema = Schema(
+  (r) => (statuses: r.enumListOrNull('statuses', Status.values)),
+);
+final addressSchema = Schema((r) => (city: r.string('city')));
+final objectListOrNullSchema = Schema(
+  (r) => (jobs: r.objectListOrNull('jobs', addressSchema)),
+);
+
 void main() {
   group('number', () {
     test('reads a valid number', () {
@@ -224,6 +274,231 @@ void main() {
           'scores': [1, 'two'],
         }),
         throwsA(isA<ValidationException>()),
+      );
+    });
+  });
+
+  group('string constraints', () {
+    test('enforces minLength', () {
+      expect(
+        () => stringMinLengthSchema.parse({'name': 'ab'}),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(stringMinLengthSchema.parse({'name': 'abc'}).name, 'abc');
+    });
+
+    test('enforces pattern', () {
+      expect(
+        () => stringPatternSchema.parse({'code': 'ABC'}),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(stringPatternSchema.parse({'code': 'abc'}).code, 'abc');
+    });
+  });
+
+  group('integer constraints', () {
+    test('enforces max', () {
+      expect(
+        () => integerMaxSchema.parse({'age': 11}),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(integerMaxSchema.parse({'age': 10}).age, 10);
+    });
+
+    test('accepts a double with nothing after the decimal point', () {
+      expect(integerMaxSchema.parse({'age': 3.0}).age, 3);
+    });
+
+    test('still rejects a double with a fractional part', () {
+      expect(
+        () => integerMaxSchema.parse({'age': 3.7}),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+  });
+
+  group('enumValue with no values', () {
+    test('is refused with ArgumentError, not a bare "No element" crash', () {
+      expect(
+        () =>
+            Schema((r) => (status: r.enumValue<Status>('status', const [])))
+                .parse({'status': 'active'}),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('stringListOrNull', () {
+    test('a missing field reads as null', () {
+      expect(stringListOrNullSchema.parse({}).tags, isNull);
+    });
+
+    test('enforces pattern on each element', () {
+      expect(
+        () => stringListOrNullSchema.parse({
+          'tags': ['abc', 'ABC'],
+        }),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(
+        stringListOrNullSchema.parse({
+          'tags': ['abc', 'def'],
+        }).tags,
+        ['abc', 'def'],
+      );
+    });
+  });
+
+  group('integerListOrNull', () {
+    test('a missing field reads as null', () {
+      expect(integerListOrNullSchema.parse({}).scores, isNull);
+    });
+
+    test('reads a valid list', () {
+      expect(
+        integerListOrNullSchema.parse({
+          'scores': [1, 2],
+        }).scores,
+        [1, 2],
+      );
+    });
+  });
+
+  group('numberList', () {
+    test('reads a valid list', () {
+      expect(
+        numberListSchema.parse({
+          'scores': [1.5, 2.5],
+        }).scores,
+        [1.5, 2.5],
+      );
+    });
+
+    test('rejects an element of the wrong type', () {
+      expect(
+        () => numberListSchema.parse({
+          'scores': [1.5, 'two'],
+        }),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+  });
+
+  group('numberListOrNull', () {
+    test('a missing field reads as null', () {
+      expect(numberListOrNullSchema.parse({}).scores, isNull);
+    });
+  });
+
+  group('booleanList', () {
+    test('reads a valid list', () {
+      expect(
+        booleanListSchema.parse({
+          'flags': [true, false],
+        }).flags,
+        [true, false],
+      );
+    });
+
+    test('rejects an element of the wrong type', () {
+      expect(
+        () => booleanListSchema.parse({
+          'flags': [true, 'no'],
+        }),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+  });
+
+  group('booleanListOrNull', () {
+    test('a missing field reads as null', () {
+      expect(booleanListOrNullSchema.parse({}).flags, isNull);
+    });
+  });
+
+  group('dateTime min/max', () {
+    test('enforces min and max', () {
+      expect(
+        () => dateTimeMinMaxSchema.parse({'when': '2019-01-01T00:00:00Z'}),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(
+        () => dateTimeMinMaxSchema.parse({'when': '2031-01-01T00:00:00Z'}),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(
+        dateTimeMinMaxSchema.parse({'when': '2025-01-01T00:00:00Z'}).when,
+        DateTime.parse('2025-01-01T00:00:00Z'),
+      );
+    });
+  });
+
+  group('dateTimeList', () {
+    test('reads a valid list and enforces min/max per element', () {
+      expect(
+        dateTimeListSchema.parse({
+          'whens': ['2025-01-01T00:00:00Z'],
+        }).whens,
+        [DateTime.parse('2025-01-01T00:00:00Z')],
+      );
+      expect(
+        () => dateTimeListSchema.parse({
+          'whens': ['2019-01-01T00:00:00Z'],
+        }),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+  });
+
+  group('dateTimeListOrNull', () {
+    test('a missing field reads as null', () {
+      expect(dateTimeListOrNullSchema.parse({}).whens, isNull);
+    });
+  });
+
+  group('enumList', () {
+    test('reads a valid list', () {
+      expect(
+        enumListSchema.parse({
+          'statuses': ['active', 'inactive'],
+        }).statuses,
+        [Status.active, Status.inactive],
+      );
+    });
+
+    test('rejects a value outside the enum', () {
+      expect(
+        () => enumListSchema.parse({
+          'statuses': ['deleted'],
+        }),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+  });
+
+  group('enumListOrNull', () {
+    test('a missing field reads as null', () {
+      expect(enumListOrNullSchema.parse({}).statuses, isNull);
+    });
+  });
+
+  group('objectListOrNull', () {
+    test('a missing field reads as null', () {
+      expect(objectListOrNullSchema.parse({}).jobs, isNull);
+    });
+
+    test('a populated field validates each element', () {
+      expect(
+        objectListOrNullSchema
+            .parse({
+              'jobs': [
+                {'city': 'osaka'},
+              ],
+            })
+            .jobs!
+            .first
+            .city,
+        'osaka',
       );
     });
   });
