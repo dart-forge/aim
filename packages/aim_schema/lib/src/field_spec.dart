@@ -12,6 +12,10 @@ final class FieldSpec {
     this.maxLength,
     this.min,
     this.max,
+    this.minItems,
+    this.maxItems,
+    this.values,
+    this.format,
     this.nested,
     this.itemType,
   });
@@ -30,6 +34,15 @@ final class FieldSpec {
   final int? maxLength;
   final num? min;
   final num? max;
+  final int? minItems;
+  final int? maxItems;
+
+  /// For an enum field, the allowed values, as each constant's [Enum.name].
+  final List<String>? values;
+
+  /// A JSON Schema `format` keyword, e.g. `'date-time'` for a [DateTime]
+  /// field, which is otherwise typed `'string'`.
+  final String? format;
 
   /// For `'object'`, the nested fields. For an `'array'` of objects, the
   /// item's fields.
@@ -49,6 +62,10 @@ final class FieldSpec {
     if (maxLength != null) schema['maxLength'] = maxLength;
     if (min != null) schema['minimum'] = min;
     if (max != null) schema['maximum'] = max;
+    if (minItems != null) schema['minItems'] = minItems;
+    if (maxItems != null) schema['maxItems'] = maxItems;
+    if (values != null) schema['enum'] = values;
+    if (format != null) schema['format'] = format;
 
     final nestedFields = nested;
     if (type == 'object' && nestedFields != null) {
