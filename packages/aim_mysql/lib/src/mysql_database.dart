@@ -48,9 +48,10 @@ abstract interface class MySqlQueryable {
   /// behind a pool: `LAST_INSERT_ID()` is scoped to the connection that
   /// generated the value, and that `SELECT` can land on a different
   /// connection than the `INSERT` did, silently reporting `0` instead of
-  /// the id. Running both statements as one round trip -- which [insert]
-  /// does -- is the only way to make the two land on the same connection
-  /// without pinning one for the whole call, as a transaction does.
+  /// the id. [insert] never runs a second statement at all: the id is
+  /// already sitting in the `INSERT`'s own OK packet, so reading it back
+  /// costs nothing beyond running the `INSERT` itself, on whichever
+  /// connection the pool happens to hand out.
   Future<int> insert(
     String sql, {
     Map<String, dynamic>? params,
@@ -146,7 +147,7 @@ class MySqlDatabase extends Database implements MySqlQueryable {
         params: params,
         args: args,
       );
-      return _resultsToMaps(results);
+      return (_resultsToMaps(results), results.inTransaction);
     });
   }
 
@@ -163,7 +164,7 @@ class MySqlDatabase extends Database implements MySqlQueryable {
         params: params,
         args: args,
       );
-      return results.totalAffectedRows;
+      return (results.totalAffectedRows, results.inTransaction);
     });
   }
 
@@ -180,7 +181,7 @@ class MySqlDatabase extends Database implements MySqlQueryable {
         params: params,
         args: args,
       );
-      return results.lastInsertId;
+      return (results.lastInsertId, results.inTransaction);
     });
   }
 
@@ -211,11 +212,19 @@ class MySqlDatabase extends Database implements MySqlQueryable {
   Future<T> transaction<T>(Future<T> Function(MySqlTransaction tx) fn) {
     return _withConnection((conn, discard) async {
       await conn.runTextQuery('START TRANSACTION');
+      final tx = MySqlTransaction._(conn);
       try {
-        final result = await fn(MySqlTransaction._(conn));
+        final result = await fn(tx);
+        // Set before the COMMIT, not after: a caller holding tx past this
+        // point must see it as ended even if COMMIT itself is still the
+        // very next thing to happen on the connection.
+        tx._done = true;
         await conn.runTextQuery('COMMIT');
-        return result;
+        // Already committed, so there is nothing left open for
+        // _withConnection's own inTransaction check to act on below.
+        return (result, false);
       } catch (_) {
+        tx._done = true;
         if (conn.isOpen) {
           try {
             await conn.runTextQuery('ROLLBACK');
@@ -232,20 +241,31 @@ class MySqlDatabase extends Database implements MySqlQueryable {
   }
 
   Future<T> _withConnection<T>(
-    Future<T> Function(MySqlConnection conn, void Function() discard) fn,
+    Future<(T, bool)> Function(MySqlConnection conn, void Function() discard)
+    fn,
   ) async {
     if (_pool.isClosed) throw StateError(mysqlClosedMessage);
     final conn = await _pool.acquire();
     var forceDiscard = false;
+    var leftTransactionOpen = false;
     try {
-      return await fn(conn, () => forceDiscard = true);
+      final (result, inTransaction) = await fn(conn, () => forceDiscard = true);
+      leftTransactionOpen = inTransaction;
+      return result;
     } finally {
-      // A connection released while a transaction was left open on it --
-      // which cannot happen through this class's own transaction(), but
-      // could through a caller running START TRANSACTION by hand via
-      // execute() -- would poison the next borrower, so isOpen is checked
-      // rather than assumed.
-      await _pool.release(conn, discard: forceDiscard || !conn.isOpen);
+      // isOpen catches a connection a transport failure already made
+      // unusable. leftTransactionOpen catches the other way a connection
+      // can be unfit to recycle while still reporting isOpen: a caller's
+      // own SQL -- most concretely `SET autocommit = 0`, which succeeds
+      // and is never rejected the way a bare START TRANSACTION is --
+      // leaving an explicit transaction open on it. Handing a connection
+      // like that back to the pool would poison whichever unrelated
+      // caller borrows it next: a COMMIT or ROLLBACK it never asked for
+      // would land on this caller's still-open work instead of its own.
+      await _pool.release(
+        conn,
+        discard: forceDiscard || !conn.isOpen || leftTransactionOpen,
+      );
     }
   }
 }
@@ -256,6 +276,20 @@ class MySqlTransaction implements Transaction, MySqlQueryable {
   MySqlTransaction._(this._connection);
 
   final MySqlConnection _connection;
+
+  /// Set by [MySqlDatabase.transaction] once the body it called has
+  /// returned or thrown, before it commits or rolls back.
+  ///
+  /// The pooled connection this transaction was pinned to goes back to (or
+  /// is discarded from) the pool at that same point, so a statement run on
+  /// this transaction after that would not run inside this transaction at
+  /// all -- it would land on whatever connection the pool hands out next,
+  /// including, if the pool reused this one before it was fully released,
+  /// a connection genuinely mid-COMMIT or mid-ROLLBACK for a totally
+  /// unrelated caller. [query], [execute] and [insert] all route through
+  /// [_runChecked], which checks this before touching the connection at
+  /// all.
+  bool _done = false;
 
   @override
   Future<List<Map<String, dynamic>>> query(
@@ -311,11 +345,22 @@ class MySqlTransaction implements Transaction, MySqlQueryable {
   ///
   /// Some failures are excluded from that second check rather than folded
   /// into it -- see [_alreadyExplainsTransactionEnding].
+  ///
+  /// Refuses outright, before touching the connection at all, once [_done]
+  /// is set: [MySqlDatabase.transaction]'s body has already returned or
+  /// thrown by then, so there is no transaction left here for [sql] to
+  /// run inside.
   Future<MySqlResultSets> _runChecked(
     String sql, {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   }) async {
+    if (_done) {
+      throw StateError(
+        'this transaction has already ended (its body returned or threw); '
+        'a statement run on it now would not be part of any transaction',
+      );
+    }
     MySqlResultSets results;
     try {
       results = await _runQueryable(

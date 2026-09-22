@@ -44,15 +44,29 @@ List<Object?> decodeBinaryRow(
     return (byte >> (bitPosition % 8)) & 1 != 0;
   }
 
-  return [
+  final values = [
     for (var i = 0; i < columns.length; i++)
       isNull(i) ? null : _decodeValue(reader, columns[i]),
   ];
+
+  if (!reader.atEnd) {
+    // A mis-sized read for one column silently returns wrong values for
+    // every later column, with no error anywhere -- the same reason
+    // parseInitialHandshake checks this after reading its own last field.
+    throw MySqlProtocolException(
+      'a row payload had bytes left over after every column was read: read '
+      '${reader.offset} of ${payload.length} byte(s)',
+    );
+  }
+
+  return values;
 }
 
 /// Dispatches on [column]'s type to decode the one value at the reader's
 /// current position. See the type-by-type helpers below for each shape;
-/// the mapping itself follows the design's type table.
+/// this switch, branch for branch, is the complete mapping from wire type
+/// to Dart value -- there is no separate table anywhere else it has to
+/// agree with.
 Object? _decodeValue(ByteReader reader, ColumnDefinition column) {
   switch (column.type) {
     case ColumnType.tiny:
@@ -124,11 +138,15 @@ Object? _decodeValue(ByteReader reader, ColumnDefinition column) {
     default:
       // GEOMETRY, which this driver does not model into any structured
       // type, and any type byte MySQL has assigned that this driver does
-      // not otherwise recognise. Read as a length-encoded string
-      // unconditionally, not branching on charset the way the case above
-      // does: better than refusing outright on a column the caller may not
-      // even be reading.
-      return decodeUtf8(_readLenencBytes(reader));
+      // not otherwise recognise. Charset-branched exactly like the
+      // BLOB/TEXT case above: a real GEOMETRY column reports charset 63
+      // (binaryCharsetId), and decoding its WKB bytes as UTF-8
+      // unconditionally would throw MySqlProtocolException for a value
+      // the server sent correctly -- and because that exception is a
+      // *protocol* one, the caller loses the whole connection over it, not
+      // just this value.
+      final bytes = _readLenencBytes(reader);
+      return column.isBinary ? bytes : decodeUtf8(bytes);
   }
 }
 

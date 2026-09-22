@@ -341,6 +341,24 @@ void main() {
       );
     });
 
+    test(
+      'GEOMETRY on the binary charset is raw bytes, not decoded as UTF-8',
+      () {
+        // A real GEOMETRY column reports charset 63. Real WKB geometry
+        // bytes are not valid UTF-8 in general (0xff is never a valid
+        // lead byte) -- decoding them unconditionally as text throws
+        // MySqlProtocolException, and because that is a *protocol*
+        // exception, the caller loses the whole connection over a value
+        // the server sent correctly.
+        final decoded = decodeBinaryRow(row(1, [3, 0x00, 0xff, 0x80]), [
+          column(ColumnType.geometry, charset: binaryCharsetId),
+        ]);
+
+        expect(decoded.single, isA<Uint8List>());
+        expect(decoded.single, [0x00, 0xff, 0x80]);
+      },
+    );
+
     test('so does a type byte MySQL has not assigned', () {
       expect(decodeBinaryRow(row(1, lenenc('?')), [column(0x7f)]), ['?']);
     });
@@ -475,6 +493,27 @@ void main() {
       expect(decodeBinaryRow(row(1, [0]), [column(ColumnType.time)]), [
         '00:00:00',
       ]);
+    });
+  });
+
+  group('consuming the whole row', () {
+    test('trailing bytes after every column throw, not silently drop', () {
+      // A mis-sized read for one column would otherwise return wrong
+      // values for every later column with no error anywhere. row(1, ...)
+      // builds an otherwise-correct one-column row; appending junk after
+      // it is what a short read on this row (or a longer one arriving
+      // where a shorter one was expected) would look like from here.
+      final payload = Uint8List.fromList([
+        ...row(1, [0x2a]),
+        0x01,
+        0x02,
+        0x03,
+      ]);
+
+      expect(
+        () => decodeBinaryRow(payload, [column(ColumnType.tiny)]),
+        throwsA(isA<MySqlProtocolException>()),
+      );
     });
   });
 }

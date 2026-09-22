@@ -158,16 +158,22 @@ void main() {
       );
     });
 
-    test('drops deprecateEof too when the server lacks it', () {
-      // Same shape, for the bit whose silent loss is the one this driver
-      // cannot survive.
-      final negotiated = negotiateCapabilities(
-        _handshakeWithout(Capabilities.deprecateEof),
-        useTls: false,
-        withDatabase: false,
-      );
+    test('refuses a server that does not grant deprecateEof', () {
+      // Unlike multiResults above, silently dropping this bit is not
+      // survivable: every result-set reader in this driver assumes it was
+      // granted. So, like protocol41 and ssl, losing it during the
+      // intersection has to refuse the connection rather than quietly hand
+      // back capabilities with the bit missing.
+      final withoutDeprecateEof = _handshakeWithout(Capabilities.deprecateEof);
 
-      expect(negotiated & Capabilities.deprecateEof, 0);
+      expect(
+        () => negotiateCapabilities(
+          withoutDeprecateEof,
+          useTls: false,
+          withDatabase: false,
+        ),
+        throwsA(isA<MySqlProtocolException>()),
+      );
     });
 
     test('refuses a server that cannot do the 4.1 protocol', () {

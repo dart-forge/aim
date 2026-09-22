@@ -264,7 +264,16 @@ final class MySqlConnection {
 
     var channel = _PacketChannel(socket);
     try {
-      final handshake = parseInitialHandshake(await channel.readPacket());
+      final firstPacket = await channel.readPacket();
+      if (isServerRefusalBeforeHandshake(firstPacket)) {
+        // The server is refusing the connection outright -- too many
+        // connections, a blocked host, an unprivileged one -- rather than
+        // starting a handshake at all. Reporting it as a server error
+        // rather than a bad protocol version is what lets a caller
+        // catching MySqlException read the real errno and message.
+        throw mysqlErrorFor(parseCommandPacket(firstPacket) as ErrPacket);
+      }
+      final handshake = parseInitialHandshake(firstPacket);
       final pluginName = handshake.authPluginName;
       if (pluginName == null) {
         throw MySqlProtocolException(
@@ -514,9 +523,11 @@ final class MySqlConnection {
 
   /// Runs [sql] as a `COM_QUERY`: the text protocol, for a statement that
   /// cannot be prepared at all -- `CREATE PROCEDURE`, `START TRANSACTION`,
-  /// `SET SESSION`, and the like. A caller's own SQL never goes through
-  /// this: [statements] and `executeStatement` are how every ordinary
-  /// statement runs, always as a prepared one.
+  /// `SET SESSION`, and the like. [statements] and `executeStatement` are
+  /// how every other statement runs, always as a prepared one -- but a
+  /// caller's own parameterless `SET` is routed through this method too
+  /// (see `_runQueryable` in `mysql_database.dart`), since `SET` cannot be
+  /// prepared either.
   ///
   /// Reads every result set the reply carries -- see [MySqlResultSets],
   /// looping for as long as the status flags say another one follows --

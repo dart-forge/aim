@@ -111,6 +111,27 @@ final class InitialHandshake {
   final String? authPluginName;
 }
 
+/// Whether [payload] -- the very first packet a server sends, right after
+/// the socket opens -- is the server refusing the connection outright
+/// rather than beginning a handshake at all.
+///
+/// A real server sends an ERR packet here instead of a handshake for
+/// `ER_CON_COUNT_ERROR` (1040), `ER_HOST_NOT_PRIVILEGED` (1130) and
+/// `ER_HOST_IS_BLOCKED` (1129) among others -- the most common connection
+/// failures there are. Handing that payload to [parseInitialHandshake]
+/// instead reads its `0xff` marker byte as a bogus protocol version and
+/// throws [MySqlProtocolException], discarding the errno, the SQLSTATE and
+/// the server's own message that a real [MySqlException] would have
+/// carried. [MySqlConnection.connect] checks this first and raises that
+/// instead.
+///
+/// Public (though not exported from the package barrel) specifically so
+/// this byte-level decision has its own unit test with a hand-built ERR
+/// payload -- the same reason [buildExecutePayload] is public in
+/// `statement.dart`.
+bool isServerRefusalBeforeHandshake(Uint8List payload) =>
+    payload.isNotEmpty && payload[0] == 0xff;
+
 /// Parses the initial handshake packet's payload -- everything after the
 /// 4-byte packet header, not including it.
 ///
@@ -227,7 +248,11 @@ const int _clientCharacterSet = 45;
 /// a confusing failure much later. Also throws it if [useTls] is true but
 /// [handshake] did not announce [Capabilities.ssl] -- better to say so now
 /// than to send an SSLRequest a server that never offered TLS will not
-/// answer.
+/// answer. Also throws it if [Capabilities.deprecateEof] does not survive
+/// the intersection with what [handshake] announced: every reader of a
+/// result set in this driver assumes the server never sends a legacy EOF
+/// packet, and against a server that does not grant this, it would
+/// proceed anyway and desynchronise permanently on the first one.
 int negotiateCapabilities(
   InitialHandshake handshake, {
   required bool useTls,
@@ -265,7 +290,20 @@ int negotiateCapabilities(
     wanted |= Capabilities.connectWithDb;
   }
 
-  return wanted & handshake.capabilities;
+  final negotiated = wanted & handshake.capabilities;
+  if (negotiated & Capabilities.deprecateEof == 0) {
+    // Asking is not enough: negotiateCapabilities only ever grants a bit
+    // the server actually announced (see this function's own doc
+    // comment), so a server that never offers deprecateEof would
+    // otherwise silently fall out of the wish list here, and every
+    // result-set reader downstream assumes it never happens.
+    throw MySqlProtocolException(
+      'server did not announce the deprecateEof capability; this driver '
+      'reads every result set assuming no legacy EOF packet arrives, and '
+      'cannot function without it',
+    );
+  }
+  return negotiated;
 }
 
 /// Writes the 32 bytes [buildHandshakeResponse] and [buildSslRequest]

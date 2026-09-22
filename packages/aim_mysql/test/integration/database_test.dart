@@ -4,6 +4,10 @@ library;
 import 'dart:typed_data';
 
 import 'package:aim_mysql/aim_mysql.dart';
+// mysqlClosedMessage is an internal wording convention, not part of the
+// public contract, so the barrel above does not export it -- this test
+// reaches into src/ for it the way only code inside this package can.
+import 'package:aim_mysql/src/exceptions.dart' show mysqlClosedMessage;
 import 'package:rig_mysql/rig_mysql.dart';
 import 'package:test/test.dart';
 
@@ -156,23 +160,76 @@ void main() {
     // this SET, it would keep scanning with the old rule and a literal
     // containing a backslash would end in the wrong place -- the SQL breaks
     // silently, which is very hard to trace back to here.
-    await db.execute('DROP TABLE IF EXISTS modes');
-    await db.execute('CREATE TABLE modes (id INT PRIMARY KEY, s VARCHAR(50))');
+    //
+    // :id has to sit AFTER the tricky literal, not before it: a
+    // placeholder found before the literal is found the same way under
+    // either dialect, so a version of this test with :id first (as an
+    // earlier version of this test had it) cannot fail even if sql_mode is
+    // never re-read at all. Under the default dialect, the backslash
+    // would escape the closing quote, the literal would swallow
+    // ", :t)" looking for a real one, and :t would never be found as a
+    // placeholder -- the rewritten SQL would still read ":t)" verbatim and
+    // the server would refuse it with errno 1064 near ":t)". Only under
+    // NO_BACKSLASH_ESCAPES does the literal end where it looks like it
+    // does and :t get bound.
+    await db.execute('DROP TABLE IF EXISTS modes2');
+    await db.execute('''
+      CREATE TABLE modes2 (id INT PRIMARY KEY, s VARCHAR(50), t VARCHAR(50))
+    ''');
 
     await db.transaction((tx) async {
       await tx.execute("SET SESSION sql_mode = 'NO_BACKSLASH_ESCAPES'");
 
-      // With NO_BACKSLASH_ESCAPES the literal ends at the second quote, so
-      // :id is a placeholder. Under the default it would be inside the
-      // literal and there would be nothing to bind.
       await tx.execute(
-        r"INSERT INTO modes VALUES (:id, 'a\')",
-        params: {'id': 1},
+        r"INSERT INTO modes2 VALUES (:id, 'a\', :t)",
+        params: {'id': 1, 't': 'b'},
       );
     });
 
-    expect((await db.query('SELECT id FROM modes')).single['id'], 1);
+    final row = (await db.query('SELECT id, t FROM modes2')).single;
+    expect(row['id'], 1);
+    expect(row['t'], 'b');
   });
+
+  test(
+    'a bare SET autocommit = 0 gets its connection discarded, not recycled',
+    () async {
+      // A single connection, so the next call can only be handed back this
+      // exact physical connection or a freshly opened one -- there is
+      // nowhere else for it to come from.
+      final solo = await MySqlDatabase.connect(
+        '${lease.url}?sslmode=disable',
+        maxConnections: 1,
+      );
+      addTearDown(solo.close);
+      await solo.execute('DROP TABLE IF EXISTS autocommit_t');
+      await solo.execute(
+        'CREATE TABLE autocommit_t (id INT PRIMARY KEY) ENGINE = InnoDB',
+      );
+      final destroyedBefore = solo.poolStats.destroyed;
+
+      // SET routes through the text protocol and is not blocked the way a
+      // bare START TRANSACTION is (errno 1295) -- it just quietly leaves
+      // the connection not auto-committing. The INSERT that follows then
+      // opens an explicit transaction on it.
+      await solo.execute('SET autocommit = 0');
+      await solo.execute('INSERT INTO autocommit_t VALUES (1)');
+
+      expect(
+        solo.poolStats.destroyed,
+        greaterThan(destroyedBefore),
+        reason:
+            'a connection released while a transaction is open on it must '
+            'be discarded -- handing it back would poison whichever '
+            'unrelated caller the pool gives it to next',
+      );
+
+      // The replacement connection the pool opens next comes back clean.
+      // A recycled, still-poisoned connection would answer OFF here.
+      final rows = await solo.query("SHOW VARIABLES LIKE 'autocommit'");
+      expect(rows.single['Value'], 'ON');
+    },
+  );
 
   test('the pool hands out more than one connection', () async {
     // connect opens one; four overlapping queries have to open more, which

@@ -91,6 +91,28 @@ void main() {
     expect(await db.transaction((tx) async => 42), 42);
   });
 
+  test('a transaction kept past transaction() refuses further use', () async {
+    // Holding tx and calling it after the body has returned must not
+    // reach the connection at all: by then it may already be back in
+    // the pool, possibly handed to a completely different caller.
+    late MySqlTransaction leaked;
+    await db.transaction((tx) async {
+      leaked = tx;
+    });
+
+    await expectLater(
+      leaked.execute('UPDATE accounts SET balance = 0 WHERE id = 1'),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      leaked.query('SELECT balance FROM accounts WHERE id = 1'),
+      throwsA(isA<StateError>()),
+    );
+
+    // And the UPDATE above never actually ran.
+    expect(await balanceOf(1), 100);
+  });
+
   test('insert works inside a transaction', () async {
     await db.execute(
       'CREATE TABLE IF NOT EXISTS auto (id INT AUTO_INCREMENT PRIMARY KEY, v INT)',

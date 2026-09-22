@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:aim_mysql/src/exceptions.dart';
 import 'package:aim_mysql/src/protocol/handshake.dart';
+import 'package:aim_mysql/src/protocol/packets.dart';
 import 'package:test/test.dart';
 
 import 'handshake_fixtures.dart';
@@ -107,6 +108,54 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('a server that refuses the connection before any handshake', () {
+    // ER_CON_COUNT_ERROR (1040), ER_HOST_NOT_PRIVILEGED (1130) and
+    // ER_HOST_IS_BLOCKED (1129) all arrive this way: an ERR packet where
+    // the handshake would otherwise be, before any handshake exists to
+    // send at all.
+    Uint8List err(int code, String sqlState, String message) =>
+        Uint8List.fromList([
+          0xff,
+          code & 0xff, code >> 8,
+          0x23, // '#'
+          ...sqlState.codeUnits,
+          ...message.codeUnits,
+        ]);
+
+    test('is recognised by its leading 0xff', () {
+      expect(
+        isServerRefusalBeforeHandshake(
+          err(1040, '08004', 'Too many connections'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('a real handshake is not mistaken for one', () {
+      for (final fixture in [handshake84, handshake80]) {
+        expect(
+          isServerRefusalBeforeHandshake(Uint8List.fromList(fixture)),
+          isFalse,
+        );
+      }
+    });
+
+    test('an empty payload is not mistaken for one either', () {
+      expect(isServerRefusalBeforeHandshake(Uint8List(0)), isFalse);
+    });
+
+    test('building the exception from it carries the real errno and message, '
+        'not a bogus protocol version', () {
+      final payload = err(1040, '08004', 'Too many connections');
+
+      final exception = mysqlErrorFor(parseCommandPacket(payload) as ErrPacket);
+
+      expect(exception.errorCode, 1040);
+      expect(exception.sqlState, '08004');
+      expect(exception.message, 'Too many connections');
     });
   });
 }
