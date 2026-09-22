@@ -21,10 +21,15 @@ void main() {
     await db.execute('CREATE TABLE uniq (id INT PRIMARY KEY)');
     await db.execute('INSERT INTO uniq VALUES (1)');
 
+    // Also the execute-time sql-threading site: unlike a prepare-time
+    // failure (syntax error, unknown table), this one only fails once the
+    // statement actually runs.
     await expectLater(
       db.execute('INSERT INTO uniq VALUES (1)'),
       throwsA(
-        isA<MySqlUniqueViolation>().having((e) => e.errorCode, 'errno', 1062),
+        isA<MySqlUniqueViolation>()
+            .having((e) => e.errorCode, 'errno', 1062)
+            .having((e) => e.sql, 'sql', contains('INSERT INTO uniq')),
       ),
     );
   });
@@ -158,6 +163,29 @@ void main() {
       ),
     );
   });
+
+  test(
+    'a statement that fails partway through its rows carries the sql too',
+    () async {
+      // Different from the two cases above: the reply already committed to
+      // a row shape (the header and, here, two real rows) before the
+      // BIGINT UNSIGNED underflow on the third row turns it into an error.
+      // That is a separate place in the driver that has to attach sql.
+      await db.execute(
+        'CREATE TABLE midstream (id INT PRIMARY KEY, n BIGINT UNSIGNED)',
+      );
+      await db.execute('INSERT INTO midstream VALUES (1, 5), (2, 3), (3, 1)');
+
+      await expectLater(
+        db.query('SELECT id, n - 2 FROM midstream ORDER BY id'),
+        throwsA(
+          isA<MySqlException>()
+              .having((e) => e.errorCode, 'errno', 1690)
+              .having((e) => e.sql, 'sql', contains('midstream')),
+        ),
+      );
+    },
+  );
 
   test('a deadlock is its own type', () async {
     await db.execute(

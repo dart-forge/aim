@@ -192,13 +192,14 @@ class MySqlDatabase extends Database implements MySqlQueryable {
   /// until it commits.
   ///
   /// MySQL commits a transaction implicitly when it runs DDL such as
-  /// `CREATE TABLE`. [MySqlTransaction] notices this on the statement that
-  /// caused it and raises [MySqlTransactionEndedByDdl] instead of letting
-  /// [fn] carry on believing the rest of its work is still inside a
-  /// transaction that a later failure could undo. When that happens, the
-  /// `ROLLBACK` below still runs, but there is nothing left open for it to
-  /// roll back -- the statements before the DDL are already committed and
-  /// permanent.
+  /// `CREATE TABLE` -- whether or not that statement itself goes on to
+  /// succeed. [MySqlTransaction] notices this on the statement that caused
+  /// it, success or failure alike, and raises [MySqlTransactionEndedByDdl]
+  /// instead of letting [fn] carry on believing the rest of its work is
+  /// still inside a transaction that a later failure could undo. When that
+  /// happens, the `ROLLBACK` below still runs, but there is nothing left
+  /// open for it to roll back -- the statements before the DDL are already
+  /// committed and permanent.
   ///
   /// A `ROLLBACK` sent to a connection with no open transaction is not an
   /// error either way: MySQL just answers OK. That is also what happens
@@ -298,21 +299,64 @@ class MySqlTransaction implements Transaction, MySqlQueryable {
   /// later statement: the caller must not be allowed to run another
   /// statement believing it is still inside a transaction that a failure
   /// could still roll back.
+  ///
+  /// A [sql] that *fails* needs a second check for the same thing, and
+  /// cannot use the shortcut above: MySQL's implicit commit on DDL fires
+  /// before the statement completes, so it fires just as well when the
+  /// statement goes on to fail (a table that already exists, say), and an
+  /// ERR packet carries no status flags to read it off of. See
+  /// [_endedByFailure].
+  ///
+  /// [MySqlDeadlock] is excluded from that second check, not folded into
+  /// it: a deadlock also ends the transaction, but by the server rolling
+  /// the whole thing back on its own, never by committing it. The probe
+  /// this method's own doc comment describes cannot tell those two "the
+  /// transaction is gone" cases apart -- `SERVER_STATUS_IN_TRANS` reads the
+  /// same either way -- so a [MySqlDeadlock] is trusted to already say why
+  /// it ended, correctly, and is rethrown unwrapped rather than relabelled
+  /// as DDL that committed something a deadlock just undid.
   Future<MySqlResultSets> _runChecked(
     String sql, {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   }) async {
-    final results = await _runQueryable(
-      _connection,
-      sql,
-      params: params,
-      args: args,
-    );
+    MySqlResultSets results;
+    try {
+      results = await _runQueryable(
+        _connection,
+        sql,
+        params: params,
+        args: args,
+      );
+    } catch (error) {
+      if (error is! MySqlDeadlock && await _endedByFailure()) {
+        throw MySqlTransactionEndedByDdl(sql, cause: error);
+      }
+      rethrow;
+    }
     if (!results.inTransaction) {
       throw MySqlTransactionEndedByDdl(sql);
     }
     return results;
+  }
+
+  /// Whether the transaction is gone, asked about with a fresh `SELECT 1`
+  /// rather than read off the failure that just happened -- an ERR packet
+  /// carries no status flags, so there is nothing to read otherwise.
+  ///
+  /// Answers `false` -- "no, an ordinary failure, nothing further to do"
+  /// -- both when the probe confirms the transaction is still open and
+  /// when the probe itself fails. The latter matters as much as the
+  /// former: a connection broken by whatever [sql] just did must not have
+  /// that fact reported as a diagnostic about a `SELECT 1` nobody asked
+  /// for, when [_runChecked]'s caller is about to rethrow the real error
+  /// anyway.
+  Future<bool> _endedByFailure() async {
+    try {
+      return !(await _connection.runTextQuery('SELECT 1')).inTransaction;
+    } catch (_) {
+      return false;
+    }
   }
 }
 
@@ -324,17 +368,34 @@ class MySqlTransaction implements Transaction, MySqlQueryable {
 /// along with everything the transaction did before it -- is committed and
 /// permanent. The `ROLLBACK` that [MySqlDatabase.transaction] sends once
 /// this propagates out of the body has nothing left to undo.
+///
+/// This fires whether [sql] itself succeeded or failed: MySQL's implicit
+/// commit on DDL happens before the statement completes, so a `CREATE
+/// TABLE` that goes on to fail -- the name already exists, say -- still
+/// commits everything before it. When that is why this was thrown, [cause]
+/// is the exception [sql] actually raised; `null` means [sql] succeeded
+/// and the transaction ended anyway.
 final class MySqlTransactionEndedByDdl implements Exception {
-  MySqlTransactionEndedByDdl(this.sql);
+  MySqlTransactionEndedByDdl(this.sql, {this.cause});
 
-  /// The statement whose own reply showed the transaction had ended.
+  /// The statement whose own reply -- or, when [cause] is set, whose
+  /// failure -- showed the transaction had ended.
   final String sql;
 
+  /// The exception [sql] itself raised, when this was thrown because a
+  /// *failed* statement still ended the transaction. `null` when [sql]
+  /// succeeded.
+  final Object? cause;
+
   @override
-  String toString() =>
-      'MySqlTransactionEndedByDdl: running this statement implicitly '
-      'committed the transaction. Everything before it is already '
-      'committed and cannot be rolled back.\nSQL: $sql';
+  String toString() {
+    final head =
+        'MySqlTransactionEndedByDdl: running this statement implicitly '
+        'committed the transaction. Everything before it is already '
+        'committed and cannot be rolled back.\nSQL: $sql';
+    final withCause = cause;
+    return withCause == null ? head : '$head\nCaused by: $withCause';
+  }
 }
 
 /// Runs [sql] on [connection] for [MySqlDatabase] and [MySqlTransaction]

@@ -472,7 +472,8 @@ final class MySqlConnection {
   /// a round trip restating what the server was already told. `sql_mode` is
   /// read, never written -- see [refreshSqlMode].
   Future<void> _pinSession() async {
-    await exchange<void>(_comQuery, utf8.encode("SET time_zone = '+00:00'"), (
+    const pinTimeZoneSql = "SET time_zone = '+00:00'";
+    await exchange<void>(_comQuery, utf8.encode(pinTimeZoneSql), (
       reader,
     ) async {
       final packet = parseCommandPacket(await reader.next());
@@ -480,7 +481,7 @@ final class MySqlConnection {
         case OkPacket():
           return;
         case ErrPacket err:
-          throw mysqlErrorFor(err);
+          throw mysqlErrorFor(err, sql: pinTimeZoneSql);
         case ResultSetHeader():
         case EofPacket():
         case AuthSwitchRequest():

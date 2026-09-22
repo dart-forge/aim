@@ -150,5 +150,30 @@ void main() {
         reason: 'the DDL committed it; nothing can roll it back',
       );
     });
+
+    test('a DDL that fails still ends the transaction', () async {
+      // MySQL's implicit commit fires before the statement completes, so
+      // it fires even when the statement itself then fails -- here,
+      // because the table already exists. An ERR packet carries no status
+      // flags, so this can only be noticed with a follow-up probe. The
+      // honest assertion is that the earlier write is still committed, the
+      // same as when the ending statement succeeds -- not that a failed
+      // statement somehow left the rollback able to undo it.
+      await db.execute('CREATE TABLE already_there (a INT)');
+
+      await expectLater(
+        db.transaction((tx) async {
+          await tx.execute('UPDATE accounts SET balance = 42 WHERE id = 1');
+          await tx.execute('CREATE TABLE already_there (a INT)');
+        }),
+        throwsA(isA<MySqlTransactionEndedByDdl>()),
+      );
+
+      expect(
+        await balanceOf(1),
+        42,
+        reason: 'the failed CREATE TABLE still committed it implicitly',
+      );
+    });
   });
 }
