@@ -265,24 +265,6 @@ void main() {
     });
   });
 
-  group('EOF', () {
-    test('is read when one turns up, for the status flags', () {
-      // With CLIENT_DEPRECATE_EOF the server should not send these, so one
-      // arriving is worth being able to read rather than crashing on.
-      //
-      // Status 0x0001 is SERVER_STATUS_IN_TRANS alone: EOF_Packet orders
-      // its fields as warnings then status_flags (the reverse of
-      // OK_Packet), so the third byte here is the low byte of
-      // status_flags, not of warnings.
-      final payload = Uint8List.fromList([0xfe, 0x00, 0x00, 0x01, 0x00]);
-
-      final packet = parseEofPacket(payload);
-
-      expect(packet.warnings, 0);
-      expect(packet.inTransaction, isTrue);
-    });
-  });
-
   group('against bytes a real server actually sent', () {
     // handshake_fixtures.dart also holds an OK and an ERR captured with
     // tool/capture_handshake.dart, from a real authentication exchange

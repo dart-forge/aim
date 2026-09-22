@@ -3,7 +3,18 @@ library;
 
 export 'src/auth/auth.dart' show UnsupportedAuthPlugin;
 export 'src/connection.dart' show MySqlConnectionSettings, MySqlSslMode;
-export 'src/exceptions.dart';
+export 'src/exceptions.dart'
+    show
+        MySqlAccessDenied,
+        MySqlCheckViolation,
+        MySqlDeadlock,
+        MySqlDecodeException,
+        MySqlException,
+        MySqlForeignKeyViolation,
+        MySqlLockWaitTimeout,
+        MySqlNotNullViolation,
+        MySqlProtocolException,
+        MySqlUniqueViolation;
 export 'src/mysql_database.dart'
     show
         MySqlDatabase,

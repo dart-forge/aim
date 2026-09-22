@@ -83,11 +83,16 @@ final class ErrPacket extends ServerPacket {
   final String message;
 }
 
-/// The legacy end-of-result-set marker. With `CLIENT_DEPRECATE_EOF`
-/// negotiated -- which this driver always asks for -- the server sends
-/// [OkPacket] instead, so this should not turn up in practice. Reading it
-/// rather than crashing on it costs little and means a server that sends
-/// one anyway is not fatal to talk to.
+/// The legacy end-of-result-set marker. `negotiateCapabilities` refuses
+/// the connection outright if the server does not grant
+/// `CLIENT_DEPRECATE_EOF`, so a server this driver actually talks to sends
+/// [OkPacket] here instead, never this. Nothing in this library ever
+/// constructs one: neither [parseCommandPacket] nor [parseAuthPhasePacket]
+/// produces this subtype, in either of their `0xfe` branches. It exists
+/// purely so a `switch` over [ServerPacket] stays exhaustive rather than
+/// silently missing a case if a fifth subtype were ever added -- not
+/// because reading one this way has been verified against a real server,
+/// or even attempted.
 final class EofPacket extends ServerPacket {
   EofPacket({required this.warnings, required this.statusFlags});
 
@@ -314,24 +319,4 @@ ServerPacket parseCommandPacket(Uint8List payload) {
   }
   if (marker == 0xfe && payload.length < 9) return _parseOk(payload);
   return _parseResultSetHeader(payload);
-}
-
-/// Parses a legacy EOF packet's body: `0xfe` followed by the warning
-/// count and the status flags, in that order.
-///
-/// Note the order is warnings then status flags -- the opposite of
-/// [OkPacket], which has status flags before warnings. That asymmetry is
-/// the wire format's own, not a mistake here: EOF_Packet and OK_Packet
-/// disagree about it, and both orders are implemented to match.
-///
-/// This driver negotiates `CLIENT_DEPRECATE_EOF`, so a real EOF packet
-/// should not reach this in practice -- see [EofPacket].
-EofPacket parseEofPacket(Uint8List payload) {
-  final reader = ByteReader(payload);
-  reader.readUint8(); // The 0xfe marker.
-
-  final warnings = reader.readUint16();
-  final statusFlags = reader.readUint16();
-
-  return EofPacket(warnings: warnings, statusFlags: statusFlags);
 }

@@ -56,7 +56,7 @@ abstract interface class AuthTransport {
 /// reads it nothing to act on; the name is what they need, either to
 /// configure the account differently or to know which plugin to ask for
 /// support for.
-class UnsupportedAuthPlugin implements Exception {
+final class UnsupportedAuthPlugin implements Exception {
   UnsupportedAuthPlugin(this.pluginName);
 
   /// The plugin name the server asked for, e.g. `sha256_password`.
