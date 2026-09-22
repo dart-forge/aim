@@ -4,12 +4,92 @@ description: Upgrade Aim applications between releases. Breaking changes, rename
 head:
   - - meta
     - name: keywords
-      content: Aim migration, upgrade guide, breaking changes, Env to Variables, aim_core, aim_edge, Dart 3.13
+      content: Aim migration, upgrade guide, breaking changes, Env to Variables, aim_core, aim_edge, aim_workers, aim_deno, Dart 3.13
 ---
 
 # Migration Guide
 
 This page lists the breaking changes in each release and how to update your application.
+
+## 0.3.0 → 0.4.0
+
+0.4.0 splits the Cloudflare adapter, `aim_edge`, into a shared package plus a Cloudflare-specific one: `aim_edge` now holds only the plumbing common to every edge runtime, `aim_workers` is the new Cloudflare workerd adapter, and `aim_deno` is a new adapter for Deno-based runtimes (Supabase Edge Functions, Deno Deploy, Netlify Edge). The `edge` CLI target is renamed to `workers`, and a new `supabase` target builds Supabase Edge Functions projects. Only Cloudflare Workers applications need to change anything; there is no other breaking change in this release.
+
+### 1. Depend on `aim_workers` instead of `aim_edge`
+
+```yaml
+# 0.3.0
+dependencies:
+  aim_edge: ^0.3.0
+
+# 0.4.0
+dependencies:
+  aim_workers: ^0.4.0
+```
+
+### 2. Update the import
+
+```dart
+// 0.3.0
+import 'package:aim_edge/aim_edge.dart';
+
+// 0.4.0
+import 'package:aim_workers/aim_workers.dart';
+```
+
+### 3. Rename `serveEdge()` to `serveWorkers()`
+
+```dart
+// 0.3.0
+app.serveEdge();
+
+// 0.4.0
+app.serveWorkers();
+```
+
+### 4. Rename the CLI target
+
+```yaml
+# 0.3.0
+aim:
+  target: edge
+
+# 0.4.0
+aim:
+  target: workers
+```
+
+`aim.target: edge` is rejected starting in 0.4.0, with an error naming the replacement.
+
+`c.env`, `c.cf`, and `c.executionContext` are called exactly as before — only the package name, the `serveWorkers()` name, and the target name changed.
+
+### 5. Update `src/index.mjs`
+
+The 0.3.0 scaffold's `src/index.mjs` imports the wasm build from `build/edge/`:
+
+```js
+// 0.3.0
+import mod from '../build/edge/main.wasm';
+import { CompiledApp } from '../build/edge/main.mjs';
+
+// 0.4.0
+import mod from '../build/workers/main.wasm';
+import { CompiledApp } from '../build/workers/main.mjs';
+```
+
+`aim build` for `target: workers` writes to `build/workers/`, not `build/edge/`, so `src/index.mjs` must point there too — or keep the old path working with `aim build --output build/edge`.
+
+### New in 0.4.0: `aim_deno` and the `supabase` target
+
+`aim_deno` runs the same `Aim` application on Deno-based runtimes, compiled with `dart compile wasm`, with `serveDeno(basePath:)` to strip the function-name segment Supabase Edge Functions prepend to every request. To try it: `aim create my_api --target supabase`, then `aim dev` — it starts the local Supabase stack itself if it is not already running. See [Supabase Edge Functions](/server/supabase) and the [CLI configuration](/cli/configuration#target).
+
+### Checklist
+
+- [ ] `aim_edge` → `aim_workers` in `pubspec.yaml` (Cloudflare Workers projects only)
+- [ ] `import 'package:aim_edge/aim_edge.dart'` → `import 'package:aim_workers/aim_workers.dart'`
+- [ ] `serveEdge()` → `serveWorkers()`
+- [ ] `aim.target: edge` → `workers`
+- [ ] `src/index.mjs`: `build/edge/` → `build/workers/` (or `aim build --output build/edge`)
 
 ## 0.1.x → 0.2.0
 
@@ -98,7 +178,7 @@ aim:
     PORT: "8080"
 ```
 
-- `target` defaults to `server`, so existing projects keep working without adding it. Set `target: edge` to build for Cloudflare workerd (see below).
+- `target` defaults to `server`, so existing projects keep working without adding it. Set `target: edge` to build for Cloudflare workerd (see below). (Historical: from 0.4.0 onward this target is named `workers`; `target: edge` no longer parses.)
 - `--entry` now overrides `aim.entry` for both `aim dev` and `aim build`. In 0.1.x `aim dev` ignored `--entry` when `aim.entry` was set.
 - `aim.env` values are parsed as YAML. Quote values that contain `:` or start with special characters, for example `DATABASE_URL: "postgres://user:pass@host/db"`.
 - CLI errors now exit with a non-zero status (`1`, or `64` for usage errors). Scripts that relied on `aim build` always returning `0` should check the output instead.
@@ -120,7 +200,7 @@ dart install aim_cli
 - `c.env` returns the worker's bindings (vars, secrets, KV, D1) as a `JSObject?`; `c.executionContext` returns the `ExecutionContext` for `waitUntil`.
 - Middleware packages (`aim_server_cors`, `aim_server_jwt`, and the others) depend on `aim_core` and work unchanged on both runtimes, except `aim_server_static`, which needs the file system.
 
-To try it: `aim create my_worker --target edge`, then `aim dev`. See the [CLI configuration](/cli/configuration#target) for the `target` key.
+To try it: `aim create my_worker --target edge`, then `aim dev`. See the [CLI configuration](/cli/configuration#target) for the `target` key. (Historical: from 0.4.0 onward, use `--target workers` — `--target edge` is rejected.)
 
 ### Checklist
 

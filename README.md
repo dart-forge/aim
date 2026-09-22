@@ -22,7 +22,9 @@ A lightweight, modular web framework for Dart with native PostgreSQL support and
 |---------|---------|-------------|
 | [aim_core](./packages/aim_core) | [![Pub Version](https://img.shields.io/pub/v/aim_core)](https://pub.dev/packages/aim_core) | Platform-independent core (routing, middleware, request/response) |
 | [aim_server](./packages/aim_server) | [![Pub Version](https://img.shields.io/pub/v/aim_server)](https://pub.dev/packages/aim_server) | dart:io adapter: runs an Aim app on HttpServer |
-| [aim_edge](./packages/aim_edge) | [![Pub Version](https://img.shields.io/pub/v/aim_edge)](https://pub.dev/packages/aim_edge) | Cloudflare workerd adapter (dart compile wasm) |
+| [aim_edge](./packages/aim_edge) | [![Pub Version](https://img.shields.io/pub/v/aim_edge)](https://pub.dev/packages/aim_edge) | Shared plumbing for edge runtimes (dart compile wasm); adapter authors build on this |
+| [aim_workers](./packages/aim_workers) | — | Cloudflare workerd adapter: runs an Aim app as a Worker |
+| [aim_deno](./packages/aim_deno) | — | Deno adapter: runs an Aim app on Supabase Edge Functions and other Deno runtimes |
 | [aim_functions](./packages/aim_functions) | — | Cloud Functions for Firebase adapter: runs an Aim app as an HTTP function (experimental) |
 | [aim_server_cors](./packages/aim_server_cors) | [![Pub Version](https://img.shields.io/pub/v/aim_server_cors)](https://pub.dev/packages/aim_server_cors) | CORS middleware |
 | [aim_server_cookie](./packages/aim_server_cookie) | [![Pub Version](https://img.shields.io/pub/v/aim_server_cookie)](https://pub.dev/packages/aim_server_cookie) | Cookie management |

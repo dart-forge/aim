@@ -33,7 +33,12 @@ features:
   - icon: ☁️
     title: Cloudflare Workers
     details: Compile the same app to WebAssembly and run it on Cloudflare Workers. Bindings via c.env, request metadata via c.cf.
-    link: /server/edge
+    link: /server/workers
+    linkText: Get Started
+  - icon: 🟢
+    title: Supabase Edge Functions
+    details: Compile the same app to WebAssembly and run it as a Supabase Edge Function on Deno. Verified against a local Supabase stack; a production deploy is not yet verified.
+    link: /server/supabase
     linkText: Get Started
   - icon: 🔥
     title: Cloud Functions

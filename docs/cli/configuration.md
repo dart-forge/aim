@@ -15,8 +15,8 @@ Configure Aim CLI via `pubspec.yaml`, under a top-level `aim:` key.
 
 | Key | Used by | Description | Default |
 |---|---|---|---|
-| `target` | `aim dev`, `aim build` | Where the app runs: `server`, `edge` or `functions` | `server` |
-| `entry` | `aim dev`, `aim build` | Entry point. No effect for `target: functions` — Firebase resolves the entry point itself | `bin/server.dart` for `server`, or `lib/main.dart` for `edge` |
+| `target` | `aim dev`, `aim build` | Where the app runs: `server`, `workers`, `supabase` or `functions` | `server` |
+| `entry` | `aim dev`, `aim build` | Entry point. No effect for `target: functions` — Firebase resolves the entry point itself | `bin/server.dart` for `server`, or `lib/main.dart` for `workers`/`supabase` |
 | `env` | `aim dev` | Environment variables passed to the app | none |
 | `database.url` | `aim db:*` | Database connection URL | required by `aim db:*` |
 | `database.schema` | `aim db:generate` | Path to table definitions, a file or a directory | `lib/schema` |
@@ -43,16 +43,19 @@ aim:
 | `target` | Runtime | `aim dev` | `aim build` | Default entry |
 |---|---|---|---|---|
 | `server` (default) | Dart VM with `aim_server` | `dart run` with restart on change | `dart compile exe` → `build/server` | `bin/server.dart` |
-| `edge` | Cloudflare workerd with `aim_edge` | `dart compile wasm` + `npx wrangler@4 dev`, recompiles on change | `dart compile wasm` → `build/edge/` | `lib/main.dart` |
+| `workers` | Cloudflare workerd with `aim_workers` | `dart compile wasm` + `npx wrangler@4 dev`, recompiles on change | `dart compile wasm` → `build/workers/` | `lib/main.dart` |
+| `supabase` | Supabase Edge Functions with `aim_deno` | `dart compile wasm` + `supabase functions serve`, starting the local Supabase stack first if it is not already running, recompiles on change without restarting the serve process | `dart compile wasm` → `supabase/functions/<name>/` | `lib/main.dart` |
 | `functions` | Cloud Functions for Firebase with `aim_functions` | `firebase emulators:start --only functions`; the emulator rebuilds on change | nothing — `firebase deploy --only functions` compiles | n/a — Firebase resolves the entry point itself, not `aim` |
+
+`edge` is no longer a valid value: the Cloudflare target and its dependency were renamed to `workers`/`aim_workers`. A `pubspec.yaml` still saying `aim.target: edge` fails `aim dev`/`aim build` with an error naming the replacement.
 
 ```yaml
 aim:
-  target: edge
+  target: workers
   entry: lib/main.dart
 ```
 
-`aim.env` is not applied for `target: edge`; declare vars and bindings in `wrangler.jsonc` instead and read them with `c.env`. For `target: functions`, `aim.env` is passed to the Firebase emulator process, which the function process it spawns inherits.
+`aim.env` is not applied for `target: workers`; declare vars and bindings in `wrangler.jsonc` instead and read them with `c.env`. It is likewise not applied for `target: supabase`; set variables with `supabase secrets set`, or in `supabase/functions/.env` for local development, and read them with `c.env`. For `target: functions`, `aim.env` is passed to the Firebase emulator process, which the function process it spawns inherits.
 
 ## Environment Variables
 
@@ -188,13 +191,13 @@ aim dev
 
 ## Entry Point Resolution
 
-This applies to `target: server` and `target: edge`. For `target: functions`, none of it applies — `firebase emulators:start` and `firebase deploy` resolve the entry point themselves, so `--entry` and `aim.entry` are silently ignored.
+This applies to `target: server`, `target: workers` and `target: supabase`. For `target: functions`, none of it applies — `firebase emulators:start` and `firebase deploy` resolve the entry point themselves, so `--entry` and `aim.entry` are silently ignored.
 
 Entry point is determined in this order:
 
 1. `--entry` option (`aim dev --entry bin/api.dart`)
 2. `aim.entry` in `pubspec.yaml`
-3. Target default: `bin/server.dart` for `server`, `lib/main.dart` for `edge`
+3. Target default: `bin/server.dart` for `server`, `lib/main.dart` for `workers` and `supabase`
 
 ## Watch Directories
 

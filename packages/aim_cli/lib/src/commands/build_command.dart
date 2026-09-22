@@ -26,9 +26,10 @@ class BuildCommand extends Command {
       'output',
       abbr: 'o',
       help:
-          'Output path (default: build/server, or the build/edge '
-          'directory for target: edge; ignored for target: functions, '
-          'which has nothing to build)',
+          'Output path (default: build/server; build/workers for '
+          'target: workers; supabase/functions/<name> for target: '
+          'supabase; ignored for target: functions, which has nothing to '
+          'build)',
     );
   }
 
@@ -73,8 +74,8 @@ class BuildCommand extends Command {
       exit(1);
     }
 
-    if (config.target == AimTarget.edge) {
-      final outputDir = argResults?['output'] as String? ?? 'build/edge';
+    if (config.target == AimTarget.workers) {
+      final outputDir = argResults?['output'] as String? ?? 'build/workers';
       print('🔨 Compiling to WebAssembly for Cloudflare workerd...');
       print('📁 Entry point: $entryPoint');
       print('📦 Output: $outputDir/');
@@ -94,6 +95,45 @@ class BuildCommand extends Command {
       print('Next steps:');
       print('  npx wrangler@4 dev       # run locally');
       print('  npx wrangler@4 deploy    # deploy to Cloudflare');
+      print('');
+      return;
+    }
+
+    if (config.target == AimTarget.supabase) {
+      final functionName = config.packageName;
+      if (functionName == null || functionName.isEmpty) {
+        throw UsageException(
+          'pubspec.yaml has no "name". The supabase target uses it to name '
+          'the function directory under supabase/functions/.',
+          invocation,
+        );
+      }
+      final outputDir =
+          argResults?['output'] as String? ??
+          'supabase/functions/$functionName';
+      print('🔨 Compiling to WebAssembly for Supabase Edge Functions...');
+      print('📁 Entry point: $entryPoint');
+      print('📦 Output: $outputDir/');
+      print('');
+      try {
+        await buildWasm(entry: entryPoint, outputDir: outputDir);
+      } on WasmBuildException catch (e) {
+        print('');
+        print('❌ $e');
+        exit(e.exitCode);
+      }
+      print('');
+      print('✅ Build successful!');
+      print('');
+      print('📦 Output: $outputDir/main.wasm, $outputDir/main.mjs');
+      print('');
+      print('Next steps:');
+      print(
+        '  aim dev                                  # supabase functions serve --no-verify-jwt',
+      );
+      print(
+        '  supabase functions deploy $functionName  # deploy (not --use-api; see README)',
+      );
       print('');
       return;
     }

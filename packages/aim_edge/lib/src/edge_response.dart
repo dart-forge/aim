@@ -9,7 +9,7 @@ import 'package:web/web.dart' as web;
 /// Statuses for which the Fetch spec forbids a body.
 const _nullBodyStatuses = {101, 204, 205, 304};
 
-/// Converts an Aim [Response] into a workerd [web.Response].
+/// Converts an Aim [Response] into a [web.Response].
 ///
 /// `Set-Cookie` values joined with `\n` become separate headers. Bodies are
 /// streamed through a `ReadableStream` so SSE and large responses flow
@@ -29,7 +29,8 @@ web.Response toWebResponse(Response response) {
   });
 
   final init = web.ResponseInit(status: response.statusCode, headers: headers);
-  final hasBody = response.body.contentLength != 0 &&
+  final hasBody =
+      response.body.contentLength != 0 &&
       !_nullBodyStatuses.contains(response.statusCode);
   if (!hasBody) {
     // Consume and discard the Dart body so stream producers complete.

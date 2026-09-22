@@ -63,4 +63,68 @@ aim:
       ),
     );
   });
+
+  group('supabase target', () {
+    setUp(() {
+      File(p.join(tmp.path, 'pubspec.yaml')).writeAsStringSync('''
+name: my_api
+aim:
+  target: supabase
+  entry: lib/main.dart
+''');
+      Directory(p.join(tmp.path, 'lib')).createSync();
+      File(p.join(tmp.path, 'lib', 'main.dart'))
+          .writeAsStringSync('void main() {}\n');
+      Directory(p.join(tmp.path, 'supabase')).createSync();
+      File(p.join(tmp.path, 'supabase', 'config.toml'))
+          .writeAsStringSync('[api]\nport = 54321\n');
+    });
+
+    test('--port is refused', () {
+      // `supabase functions serve` has no --port; its port comes from
+      // supabase/config.toml.
+      expect(
+        dev(['--port', '9999']),
+        throwsA(
+          isA<UsageException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('supabase'), contains('config.toml')),
+          ),
+        ),
+      );
+    });
+
+    test('a missing supabase/config.toml is reported before serve starts', () {
+      File(p.join(tmp.path, 'supabase', 'config.toml')).deleteSync();
+      expect(
+        dev([]),
+        throwsA(
+          isA<UsageException>().having(
+            (e) => e.message,
+            'message',
+            contains('supabase/config.toml'),
+          ),
+        ),
+      );
+    });
+
+    test('a missing pubspec name is reported before serve starts', () {
+      File(p.join(tmp.path, 'pubspec.yaml')).writeAsStringSync('''
+aim:
+  target: supabase
+  entry: lib/main.dart
+''');
+      expect(
+        dev([]),
+        throwsA(
+          isA<UsageException>().having(
+            (e) => e.message,
+            'message',
+            contains('"name"'),
+          ),
+        ),
+      );
+    });
+  });
 }

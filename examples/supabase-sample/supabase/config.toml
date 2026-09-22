@@ -1,0 +1,4 @@
+project_id = "supabase_sample"
+
+[functions.supabase_sample]
+static_files = [ "./functions/supabase_sample/main.wasm" ]

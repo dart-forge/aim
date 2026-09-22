@@ -306,7 +306,7 @@ test/
 .DS_Store
 ''';
 
-  static const edgePubspec = '''name: {{projectName}}
+  static const workersPubspec = '''name: {{projectName}}
 description: An Aim application running on Cloudflare workerd
 version: 1.0.0
 publish_to: none
@@ -315,18 +315,18 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_edge: ^0.3.0
+  aim_workers: ^0.3.0
 
 dev_dependencies:
   lints: ^6.0.0
   test: ^1.25.6
 
 aim:
-  target: edge
+  target: workers
   entry: lib/main.dart
 ''';
 
-  static const edgeMain = '''import 'package:aim_edge/aim_edge.dart';
+  static const workersMain = '''import 'package:aim_workers/aim_workers.dart';
 
 void main() {
   final app = Aim();
@@ -335,19 +335,20 @@ void main() {
 
   app.get('/users/:id', (c) async => c.json({'id': c.param('id')}));
 
-  app.serveEdge();
+  app.serveWorkers();
 }
 ''';
 
-  static const edgeIndexMjs = '''import mod from '../build/edge/main.wasm';
-import { CompiledApp } from '../build/edge/main.mjs';
+  static const workersIndexMjs =
+      '''import mod from '../build/workers/main.wasm';
+import { CompiledApp } from '../build/workers/main.mjs';
 
 let ready;
 
 async function init() {
   const instance = await new CompiledApp(mod, { builtins: ['js-string'] })
     .instantiate({});
-  instance.invokeMain(); // runs Dart main(), which calls app.serveEdge()
+  instance.invokeMain(); // runs Dart main(), which calls app.serveWorkers()
 }
 
 export default {
@@ -364,7 +365,7 @@ export default {
 };
 ''';
 
-  static const edgeWranglerJsonc = '''{
+  static const workersWranglerJsonc = '''{
   "name": "{{workerName}}",
   "main": "src/index.mjs",
   "compatibility_date": "2026-05-25",
@@ -374,7 +375,7 @@ export default {
 }
 ''';
 
-  static const edgeGitignore = '''
+  static const workersGitignore = '''
 # Dart
 .dart_tool/
 .packages
@@ -391,7 +392,7 @@ node_modules/
 *.iml
 ''';
 
-  static const edgeReadme = '''# {{projectName}}
+  static const workersReadme = '''# {{projectName}}
 
 An [Aim](https://aim-dart.dev) application running on Cloudflare workerd.
 
@@ -405,11 +406,146 @@ aim dev            # compiles to wasm, starts wrangler dev, recompiles on change
 ## Deploy
 
 ```bash
-aim build          # build/edge/main.wasm + main.mjs
+aim build          # build/workers/main.wasm + main.mjs
 npx wrangler@4 deploy
 ```
 
 Bindings declared in `wrangler.jsonc` are available in handlers as `c.env`.
+''';
+
+  static const supabasePubspec = '''name: {{projectName}}
+description: An Aim application running on Supabase Edge Functions
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  aim_deno: ^0.3.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6
+
+aim:
+  target: supabase
+  entry: lib/main.dart
+''';
+
+  static const supabaseMain = '''import 'package:aim_deno/aim_deno.dart';
+
+void main() {
+  final app = Aim();
+
+  app.get(
+    '/',
+    (c) async =>
+        c.text('Hello from {{projectName}} on Supabase Edge Functions'),
+  );
+
+  app.get('/users/:id', (c) async => c.json({'id': c.param('id')}));
+
+  // Supabase serves this function under /{{projectName}} and passes that
+  // segment through to the handler; strip it so routes above can be
+  // written without it.
+  app.serveDeno(basePath: '{{projectName}}');
+}
+''';
+
+  static const supabaseIndexTs = '''let ready: Promise<void> | undefined;
+
+async function init() {
+  const { compile } = await import('./main.mjs');
+  const bytes = await Deno.readFile(new URL('./main.wasm', import.meta.url));
+  const compiled = await compile(bytes);
+  const instance = await compiled.instantiate({});
+  instance.invokeMain(); // runs Dart main(), which calls app.serveDeno()
+}
+
+Deno.serve(async (request: Request) => {
+  ready ??= init();
+  try {
+    await ready;
+  } catch (e) {
+    ready = undefined; // let the next request retry initialisation
+    throw e;
+  }
+  return (globalThis as any).__aimFetch(request);
+});
+''';
+
+  static const supabaseConfigToml = '''project_id = "{{projectName}}"
+
+[functions.{{projectName}}]
+static_files = [ "./functions/{{projectName}}/main.wasm" ]
+''';
+
+  static const supabaseGitignore = '''
+# Dart
+.dart_tool/
+.packages
+pubspec.lock
+
+# Supabase build artifacts and local stack
+supabase/functions/*/main.wasm
+supabase/functions/*/main.mjs
+supabase/functions/*/main.support.js
+supabase/functions/*/main.wasm.map
+supabase/functions/*/.staging-*/
+supabase/.temp/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+''';
+
+  static const supabaseReadme = '''# {{projectName}}
+
+An [Aim](https://aim-dart.dev) application running on Supabase Edge
+Functions.
+
+## Prerequisites
+
+```bash
+npm install -g supabase
+docker info      # Docker must be running
+```
+
+## Development
+
+```bash
+dart pub get
+aim dev            # compiles to wasm, starts the local Supabase stack if it
+                   # is not already running, then `supabase functions serve`
+```
+
+The function answers on `http://localhost:54321/functions/v1/{{projectName}}/...`:
+
+```bash
+curl http://localhost:54321/functions/v1/{{projectName}}/
+```
+
+The first `aim dev` on a fresh checkout takes a few minutes: `supabase
+start` brings up Postgres, auth and storage, and applies this project's
+migrations and `seed.sql` to the local database. The stack stays up after
+`aim dev` exits — run `supabase stop` when you want to stop it.
+
+## Deploy
+
+```bash
+aim build                            # supabase/functions/{{projectName}}/main.wasm + main.mjs
+supabase functions deploy {{projectName}}
+```
+
+Deploy with the CLI, not `--use-api`: `--use-api` skips the bundling step
+that places `main.wasm` next to the deployed `index.ts`, which is what
+`static_files` in `supabase/config.toml` depends on.
+
+`c.env` returns a typed `EdgeEnv?` (a `DenoEnv` on this runtime):
+`c.env?.string('NAME')` reads an environment variable. Supabase has no
+resource bindings, so `c.env?.get(name)` is always `null`.
 ''';
 
   static const functionsPubspec = '''name: {{projectName}}

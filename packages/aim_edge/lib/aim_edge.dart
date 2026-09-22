@@ -1,11 +1,10 @@
-/// Cloudflare workerd adapter for the Aim framework.
+/// Shared pieces for running an Aim application on an edge runtime.
 ///
-/// Compile your application with `dart compile wasm` and call
-/// [AimEdge.serveEdge] from `main()`. See the package README.
+/// Pick the adapter for your runtime: `aim_workers` for Cloudflare workerd,
+/// `aim_deno` for Deno-based runtimes such as Supabase Edge Functions.
 library;
 
 export 'package:aim_core/aim_core.dart';
-export 'src/bindings.dart' show Bindings;
-export 'src/cf_properties.dart' show CfProperties;
+
 export 'src/edge_context.dart' show EdgeContext;
-export 'src/serve_edge.dart' show AimEdge;
+export 'src/edge_env.dart' show EdgeEnv;

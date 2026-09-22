@@ -13,12 +13,6 @@ void main() {
       expect(config.env, isEmpty);
     });
 
-    test('reads target: edge and switches the default entry', () {
-      final config = AimConfig.parse('aim:\n  target: edge\n');
-      expect(config.target, AimTarget.edge);
-      expect(config.defaultEntry, 'lib/main.dart');
-    });
-
     test('rejects an unknown target', () {
       expect(
         () => AimConfig.parse('aim:\n  target: deno\n'),
@@ -33,7 +27,7 @@ void main() {
         expect(withEntry.resolveEntry('bin/cli.dart'), 'bin/cli.dart');
         expect(withEntry.resolveEntry(null), 'bin/api.dart');
 
-        final withoutEntry = AimConfig.parse('aim:\n  target: edge\n');
+        final withoutEntry = AimConfig.parse('aim:\n  target: workers\n');
         expect(withoutEntry.resolveEntry(null), 'lib/main.dart');
       },
     );
@@ -61,6 +55,37 @@ void main() {
       final config = AimConfig.parse('name: my_app\naim: true\n');
       expect(config.packageName, 'my_app');
       expect(config.target, AimTarget.server);
+    });
+  });
+
+  group('workers and supabase targets', () {
+    test('parses target: workers', () {
+      final config = AimConfig.parse('name: my_app\naim:\n  target: workers\n');
+      expect(config.target, AimTarget.workers);
+      expect(config.defaultEntry, 'lib/main.dart');
+    });
+
+    test('parses target: supabase', () {
+      final config = AimConfig.parse(
+        'name: my_app\naim:\n  target: supabase\n',
+      );
+      expect(config.target, AimTarget.supabase);
+      expect(config.defaultEntry, 'lib/main.dart');
+    });
+
+    test('target: edge names its replacement rather than being accepted', () {
+      // The package moved too, so a warning would leave a half-migrated
+      // project. Fail, and say what to write instead.
+      expect(
+        () => AimConfig.parse('aim:\n  target: edge\n'),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('workers'), contains('aim_workers')),
+          ),
+        ),
+      );
     });
   });
 
@@ -127,14 +152,19 @@ aim:
       expect(config.packageName, 'my_app');
     });
 
-    test('an unknown target names all three in the message', () {
+    test('an unknown target names every valid one in the message', () {
       expect(
         () => AimConfig.parse('aim:\n  target: lambda\n'),
         throwsA(
           isA<FormatException>().having(
             (e) => e.message,
             'message',
-            allOf(contains('server'), contains('edge'), contains('functions')),
+            allOf(
+              contains('server'),
+              contains('workers'),
+              contains('supabase'),
+              contains('functions'),
+            ),
           ),
         ),
       );

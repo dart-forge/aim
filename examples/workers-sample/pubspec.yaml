@@ -1,0 +1,21 @@
+name: workers_sample
+description: Aim on Cloudflare workerd sample (dart compile wasm + wrangler).
+version: 1.0.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  aim_workers:
+    path: ../../packages/aim_workers
+  aim_server_cors:
+    path: ../../packages/aim_server_cors
+
+dev_dependencies:
+  lints: ^6.0.0
+
+aim:
+  target: workers
+  entry: lib/main.dart

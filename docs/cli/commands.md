@@ -32,8 +32,8 @@ aim create <project_name>
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--target` | Project target: `server`, `edge` or `functions` | `server` |
-| `--firebase-project` | Firebase project id written to `.firebaserc` (target: functions only — silently ignored for `server` and `edge`). Pass an empty value to skip `.firebaserc` and bind a project later with `firebase use --add` | prompts when a terminal is attached |
+| `--target` | Project target: `server`, `workers`, `supabase` or `functions` | `server` |
+| `--firebase-project` | Firebase project id written to `.firebaserc` (target: functions only — silently ignored for every other target). Pass an empty value to skip `.firebaserc` and bind a project later with `firebase use --add` | prompts when a terminal is attached |
 
 **Example:**
 ```bash
@@ -48,18 +48,33 @@ This command:
 - Generates a basic server in `bin/server.dart`
 - Prints the next steps (`dart pub get`, `aim dev`)
 
-**With `--target edge`:**
+**With `--target workers`:**
 ```bash
-aim create my_worker --target edge
+aim create my_worker --target workers
 cd my_worker
 ```
 
 This scaffolds a Cloudflare workerd project instead:
-- `lib/main.dart` - Dart entry point exporting a `CompiledApp`
+- `lib/main.dart` - Dart entry point, ends with `app.serveWorkers()`
 - `src/index.mjs` - JavaScript Worker entry point
 - `wrangler.jsonc` - Wrangler configuration
 
-The Worker name in `wrangler.jsonc` is the project name with underscores (`_`) replaced by hyphens (`-`), e.g. `my_worker` becomes `my-worker`.
+The Worker name in `wrangler.jsonc` is the project name with underscores (`_`) replaced by hyphens (`-`), e.g. `my_worker` becomes `my-worker`. See [Cloudflare Workers](/server/workers) for the full setup.
+
+**With `--target supabase`:**
+```bash
+aim create my_api --target supabase
+cd my_api
+```
+
+This scaffolds a Supabase Edge Functions project:
+- `lib/main.dart` - Dart entry point, ends with `app.serveDeno(basePath: 'my_api')`
+- `supabase/functions/my_api/index.ts` - the function's Deno entry point
+- `supabase/config.toml` - `project_id` plus a `static_files` declaration for the compiled wasm
+
+See [Supabase Edge Functions](/server/supabase) for the full setup, including why the app needs `basePath`.
+
+`--target edge` is no longer accepted; use `--target workers`. A project whose `pubspec.yaml` still has `aim.target: edge` from before this split fails `aim dev`/`aim build` with an error naming the new target and dependency (`workers`/`aim_workers`).
 
 **With `--target functions`:**
 ```bash
@@ -93,10 +108,10 @@ aim dev [options]
 |--------|-------|-------------|---------|
 | `--entry` | `-e` | Server entry point | `bin/server.dart` |
 | `--host` | | Ignored (reserved) | — |
-| `--port` | `-p` | Port passed to `wrangler dev` (target: edge only) | 8787 (wrangler default) |
+| `--port` | `-p` | Port passed to `wrangler dev` (target: workers only; rejected for target: supabase and target: functions) | 8787 (wrangler default) |
 | `--hot-reload` | | Enable hot reload | `true` |
 | `--no-hot-reload` | | Disable hot reload | |
-| `--watch` | | Directories to watch (comma-separated) | `lib,bin` |
+| `--watch` | | Directories to watch (comma-separated) | `lib,bin`; `lib` for `target: workers` and `target: supabase` |
 
 **Examples:**
 ```bash
@@ -122,7 +137,7 @@ aim dev --port 3000
 - Preserves terminal output history
 - Loads environment variables from `pubspec.yaml`
 
-**With `target: edge`:**
+**With `target: workers`:**
 - Compiles the entry point to WebAssembly (`dart compile wasm`)
 - Starts `npx wrangler@4 dev` to run the compiled Worker locally
 - `--port` is passed through to wrangler
@@ -130,6 +145,16 @@ aim dev --port 3000
 - `--no-hot-reload` disables file watching entirely
 - `aim.env` is ignored (with a warning) — configure vars and bindings in `wrangler.jsonc` instead
 - Requires Node.js to be installed (for `npx`)
+
+**With `target: supabase`:**
+- Compiles the entry point to WebAssembly (`dart compile wasm`) into `supabase/functions/<name>/`, where `<name>` is the pubspec's `name`
+- Checks whether the local Supabase stack is running (`supabase status`) and runs `supabase start` itself when it is not, before starting `supabase functions serve <name> --no-verify-jwt`
+- The first run on a fresh checkout takes a few minutes: `supabase start` brings up Postgres, auth and storage, and applies this project's migrations and `seed.sql` to the local database
+- The stack is left running when `aim dev` exits, including on Ctrl-C; run `supabase stop` to stop it
+- `--port` is rejected; the function's port comes from `supabase/config.toml`
+- Changes under `lib/` trigger a recompile; `supabase functions serve` picks up the rebuilt wasm without being restarted
+- `aim.env` is ignored (with a warning) — set variables with `supabase secrets set` or `supabase/functions/.env` instead
+- Requires the Supabase CLI (2.7.0+) and a running Docker daemon
 
 **With `target: functions`:**
 - Starts `firebase emulators:start --only functions`
@@ -190,11 +215,17 @@ Next steps:
   docker build -t my-app .
 ```
 
-**With `target: edge`:**
+**With `target: workers`:**
 - Compiles the entry point to WebAssembly (`dart compile wasm`)
-- Output is `build/edge/main.wasm` and `build/edge/main.mjs` (with `CompiledApp` already exported)
-- `--output` is a directory (default `build/edge`), not a file path
+- Output is `build/workers/main.wasm` and `build/workers/main.mjs` (with `CompiledApp` already exported)
+- `--output` is a directory (default `build/workers`), not a file path
 - Next step: `npx wrangler@4 deploy`
+
+**With `target: supabase`:**
+- Compiles the entry point to WebAssembly (`dart compile wasm`)
+- Output is `supabase/functions/<name>/main.wasm` and `main.mjs`, where `<name>` is the pubspec's `name`
+- `--output` is a directory (default `supabase/functions/<name>`), not a file path
+- Next step: `supabase functions deploy <name>`, not `--use-api` — `--use-api` skips the bundling step that places `main.wasm` next to the deployed `index.ts`, which is what `static_files` in `supabase/config.toml` depends on
 
 **With `target: functions`:**
 - Does nothing — prints a message and exits; `firebase deploy --only functions` compiles on your machine and uploads the result

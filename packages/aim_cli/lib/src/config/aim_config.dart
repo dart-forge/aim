@@ -8,8 +8,13 @@ enum AimTarget {
   /// Dart VM with `aim_server` (`dart compile exe`, `dart run`).
   server,
 
-  /// Cloudflare workerd with `aim_edge` (`dart compile wasm`, `wrangler dev`).
-  edge,
+  /// Cloudflare workerd with `aim_workers` (`dart compile wasm`,
+  /// `wrangler dev`).
+  workers,
+
+  /// Supabase Edge Functions with `aim_deno` (`dart compile wasm`,
+  /// `supabase functions serve`).
+  supabase,
 
   /// Cloud Functions for Firebase with `aim_functions` (the Firebase CLI
   /// compiles and deploys; `firebase emulators:start` runs it locally).
@@ -17,11 +22,20 @@ enum AimTarget {
 
   static AimTarget parse(String value) => switch (value) {
     'server' => AimTarget.server,
-    'edge' => AimTarget.edge,
+    'workers' => AimTarget.workers,
+    'supabase' => AimTarget.supabase,
     'functions' => AimTarget.functions,
+    // The package backing this target was split too, so accepting the old
+    // name here would leave a half-migrated project pointed at a dependency
+    // it no longer has.
+    'edge' => throw FormatException(
+      'Unknown aim.target "edge". The Cloudflare target is now "workers", '
+      'and the aim_edge dependency is now aim_workers. Expected "server", '
+      '"workers", "supabase" or "functions".',
+    ),
     _ => throw FormatException(
-      'Unknown aim.target "$value". Expected "server", "edge" or '
-      '"functions".',
+      'Unknown aim.target "$value". Expected "server", "workers", '
+      '"supabase" or "functions".',
     ),
   };
 }
@@ -94,7 +108,8 @@ class AimConfig {
   /// Entry point used when neither `--entry` nor `aim.entry` is given.
   String get defaultEntry => switch (target) {
     AimTarget.server => 'bin/server.dart',
-    AimTarget.edge => 'lib/main.dart',
+    AimTarget.workers => 'lib/main.dart',
+    AimTarget.supabase => 'lib/main.dart',
     AimTarget.functions => 'bin/server.dart',
   };
 

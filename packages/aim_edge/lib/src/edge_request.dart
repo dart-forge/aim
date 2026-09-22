@@ -1,48 +1,39 @@
 import 'dart:js_interop';
 
 import 'package:aim_core/aim_core.dart';
-import 'package:aim_edge/src/interop.dart';
+import 'package:aim_edge/src/edge_raw.dart';
 import 'package:web/web.dart' as web;
 
-/// Platform object stored in [Request.raw] by the workerd adapter.
-///
-/// Internal: exposes package:web types and must not be exported.
-class EdgeRawRequest {
-  final web.Request request;
-  final JSObject env;
-  final JSObject ctx;
-
-  EdgeRawRequest(this.request, this.env, this.ctx);
+/// `Headers.forEach` is missing from package:web 1.1.1.
+extension _HeadersForEach on web.Headers {
+  external void forEach(JSFunction callback);
 }
 
-/// Converts a workerd [web.Request] into an Aim [Request].
+/// Converts an [EdgeRaw] into an Aim [Request].
 ///
-/// The URL is already absolute. Headers are copied as-is (workerd has
-/// already joined repeated names). Bodies of non-GET/HEAD requests are read
-/// fully into memory.
-Future<Request> toAimRequest(
-  web.Request request,
-  JSObject env,
-  JSObject ctx,
-) async {
+/// The URI is taken from [EdgeRaw.uri], not re-derived from the underlying
+/// request: an adapter serving under a path prefix (e.g. a Supabase Edge
+/// Function's function name) already strips it there. Headers are copied
+/// as-is. Bodies of non-GET/HEAD requests are read fully into memory.
+Future<Request> toAimRequest(EdgeRaw raw) async {
   final headers = <String, String>{};
-  request.headers.forEach(
+  raw.request.headers.forEach(
     (String value, String key) {
       headers[key] = value;
     }.toJS,
   );
 
   Object? body;
-  if (request.method != 'GET' && request.method != 'HEAD') {
-    final buffer = await request.arrayBuffer().toDart;
+  if (raw.request.method != 'GET' && raw.request.method != 'HEAD') {
+    final buffer = await raw.request.arrayBuffer().toDart;
     body = buffer.toDart.asUint8List();
   }
 
   return Request(
-    request.method,
-    Uri.parse(request.url),
+    raw.request.method,
+    raw.uri,
     bodyContent: body,
     headers: headers,
-    raw: EdgeRawRequest(request, env, ctx),
+    raw: raw,
   );
 }

@@ -1,0 +1,8 @@
+{
+  "name": "aim-workers-sample",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-05-25",
+  "vars": {
+    "GREETING": "hello from workerd"
+  }
+}
