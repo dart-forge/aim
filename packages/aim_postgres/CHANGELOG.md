@@ -1,3 +1,9 @@
+## Unreleased
+
+- The connection pool moved into `aim_database`. `PoolOptions`, `PoolStats`
+  and `PoolTimeoutException` are re-exported from here, so nothing about
+  this package's surface changes.
+
 ## 0.4.0
 
 ### Fixed

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:aim_postgres/src/pool/pool.dart';
+import 'package:aim_database/aim_database.dart';
 import 'package:test/test.dart';
 
 class FakeConn {
