@@ -1,6 +1,6 @@
 name: aim_functions
 description: "Cloud Functions for Firebase adapter: runs an Aim app as an HTTP function."
-version: 0.3.0
+version: 0.4.0
 repository: https://github.com/dart-forge/aim
 
 environment:
@@ -9,7 +9,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  aim_core: ^0.3.0
+  aim_core: ^0.4.0
   shelf: ^1.4.2
 
 dev_dependencies:

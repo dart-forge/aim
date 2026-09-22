@@ -1,6 +1,6 @@
 name: aim_sqlite
 description: A native SQLite driver for Dart. Talks to libsqlite3 over dart:ffi and runs statements off the event loop.
-version: 0.3.0
+version: 0.4.0
 repository: https://github.com/dart-forge/aim
 publish_to: none
 resolution: workspace
@@ -9,7 +9,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_database: ^0.3.0
+  aim_database: ^0.4.0
 
 dev_dependencies:
   lints: ^6.0.0

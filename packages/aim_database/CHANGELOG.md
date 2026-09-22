@@ -1,4 +1,4 @@
-## Unreleased
+## 0.4.0
 
 - New: `scanSqlPlaceholders` finds the `:name` and `?` parameter
   placeholders in a statement and skips the ones inside a string literal, a

@@ -1,6 +1,6 @@
 name: aim_orm
 description: A type-safe ORM abstraction layer for Dart with query builders and column definitions.
-version: 0.3.0
+version: 0.4.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 
@@ -8,7 +8,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_database: ^0.3.0
+  aim_database: ^0.4.0
 
 dev_dependencies:
   lints: ^6.0.0

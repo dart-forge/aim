@@ -1,3 +1,7 @@
+## 0.4.0
+
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.4.0)
+
 ## 0.3.0
 
 - `aim.target: functions` in pubspec.yaml. `aim create --target functions` scaffolds a flat Cloud Functions for Firebase project (`firebase.json` with `"source": "."` next to `pubspec.yaml`, `bin/server.dart`, `lib/src/server.dart`, and an optional `.firebaserc`). `aim dev` starts `firebase emulators:start --only functions`; `aim build` is a no-op for this target, since the Firebase CLI compiles and deploys on its own.

@@ -8,7 +8,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_server: ^0.3.0
+  aim_server: ^0.4.0
 
 dev_dependencies:
   lints: ^6.0.0
@@ -315,7 +315,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_workers: ^0.3.0
+  aim_workers: ^0.4.0
 
 dev_dependencies:
   lints: ^6.0.0
@@ -422,7 +422,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_deno: ^0.3.0
+  aim_deno: ^0.4.0
 
 dev_dependencies:
   lints: ^6.0.0
@@ -557,7 +557,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_functions: ^0.3.0
+  aim_functions: ^0.4.0
   firebase_functions: ^0.8.0
 
 dev_dependencies:

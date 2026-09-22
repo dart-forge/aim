@@ -1,6 +1,6 @@
 name: aim_server_sse
 description: Server-Sent Events (SSE) support for aim_server with real-time streaming capabilities.
-version: 0.3.0
+version: 0.4.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 
@@ -8,10 +8,10 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_core: ^0.3.0
+  aim_core: ^0.4.0
 
 dev_dependencies:
-  aim_server: ^0.3.0
-  aim_server_testing: ^0.3.0
+  aim_server: ^0.4.0
+  aim_server_testing: ^0.4.0
   lints: ^6.0.0
   test: ^1.25.6

@@ -1,6 +1,6 @@
 name: aim_database
 description: Database abstraction layer for Aim. Provides common interfaces for database drivers like aim_postgres.
-version: 0.3.0
+version: 0.4.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 

@@ -6,11 +6,11 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_orm: ^0.3.0
-  aim_orm_postgres: ^0.3.0
-  aim_postgres: ^0.3.0
-  aim_database: ^0.3.0
+  aim_orm: ^0.4.0
+  aim_orm_postgres: ^0.4.0
+  aim_postgres: ^0.4.0
+  aim_database: ^0.4.0
 
 dev_dependencies:
-  aim_orm_codegen: ^0.3.0
+  aim_orm_codegen: ^0.4.0
   build_runner: ^2.4.0
