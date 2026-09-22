@@ -414,12 +414,31 @@ void main() {
       // Anything else means the stream is out of step, and this is the one
       // place in the exchange where being out of step could mean sending a
       // password somewhere unintended.
+      //
+      // The message is asserted, not just the type. Weakening this guard
+      // does not necessarily stop the exception: an empty or nonsense PEM
+      // reaching parsePublicKeyPem throws the same type from there, so a
+      // type-only check cannot tell the guard from its absence. "public
+      // key" alone is not a safe match either -- parsePublicKeyPem's own
+      // "not a PEM-encoded public key" message contains that exact phrase
+      // too, so it would pass under the same weakened guard it is meant to
+      // catch. "but received" names this guard's own condition (expected
+      // one thing, got another) and does not appear in that other message.
       final transport = ScriptedTransport([
         authMoreData([0x04]),
         okPacket(),
       ]);
 
-      await expectLater(run(transport), throwsA(isA<MySqlProtocolException>()));
+      await expectLater(
+        run(transport),
+        throwsA(
+          isA<MySqlProtocolException>().having(
+            (e) => e.toString(),
+            'toString',
+            contains('but received'),
+          ),
+        ),
+      );
     });
 
     test('an ERR while waiting for the public key is still an ERR', () async {
