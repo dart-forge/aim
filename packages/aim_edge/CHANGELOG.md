@@ -1,4 +1,4 @@
-## Unreleased
+## 0.4.0
 
 - **Breaking:** `aim_edge` no longer runs applications by itself. It now holds
   only the plumbing shared by every edge runtime (`EdgeContext`, `EdgeEnv`,

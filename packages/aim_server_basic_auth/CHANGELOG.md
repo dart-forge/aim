@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.4.0)
+
 ## 0.3.0
 
 See [Release Notes](https://github.com/dart-forge/aim/releases/tag/0.3.0)

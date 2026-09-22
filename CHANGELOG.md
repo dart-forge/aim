@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.0
+
+Fourth beta. The edge adapter is split by runtime, and Supabase Edge Functions joins the Dart VM, Cloudflare workerd and Cloud Functions for Firebase as a place an Aim application runs. **Breaking for `aim_edge`**: it is now the shared edge package, and the Cloudflare adapter moved to `aim_workers`. See the [Migration Guide](https://aim-dart.dev/server/guides/migration) for the five edits an existing Workers project needs.
+
+### Highlights
+
+- **`aim_deno`** (new): run an app on Deno-based runtimes. `serveDeno()`, string environment variables through `c.env`, and `basePath` for runtimes that serve a function under a path. Verified on Supabase Edge Functions both locally and against a deployed function.
+- **`aim_workers`** (new): the Cloudflare workerd adapter, split out of `aim_edge` unchanged. `serveWorkers()`, resource bindings through `c.env`, `c.cf`, `c.executionContext`. Its integration suite runs the same 13 checks through `wrangler dev` as before.
+- **`aim_edge`**: now the shared edge package — request and response translation, the fetch pipeline, and the `EdgeEnv` and `EdgeRaw` interfaces. Adapter authors get a second entry point, `package:aim_edge/adapter.dart`. Applications depend on `aim_workers` or `aim_deno`, not on this directly.
+- **`aim_cli`**: `aim.target` gains `supabase` and renames `edge` to `workers`. `aim create --target supabase` scaffolds a Supabase project, and `aim dev` starts the local Supabase stack itself when it is not running — it never stops it, since another tool may be sharing that database. `aim build` for this target writes into `supabase/functions/<name>/`, where `static_files` can carry the wasm.
+- `c.env`, `c.cf` and `c.executionContext` are called exactly as before on Cloudflare. Only the package name, `serveEdge()` → `serveWorkers()`, the target name and the wasm output path changed.
+
+### Breaking changes
+
+- `aim_edge` no longer serves an application. `serveEdge()`, `Bindings` and `CfProperties` moved to `aim_workers`, along with `c.cf` and `c.executionContext`. No compatibility shim is possible: `serveEdge()` needs the types that moved, and depending on `aim_workers` from `aim_edge` would be circular. A caret constraint on `^0.3.0` excludes `0.4.0`, so no project is upgraded into this without asking.
+- `aim.target: edge` is rejected with an error naming both `workers` and `aim_workers`, rather than warned about. The dependency changed name too, so a warning would leave a project half-migrated.
+- `aim build` for the Cloudflare target writes `build/workers/` where it wrote `build/edge/`. A project scaffolded before this release has two imports in `src/index.mjs` that name the old path.
+
+### Packages in this release
+
+`aim_workers` 0.4.0 (new), `aim_deno` 0.4.0 (new), and `aim_core`, `aim_edge`, `aim_server`, `aim_functions`, `aim_cli`, `aim_server_cors`, `aim_server_cookie`, `aim_server_form`, `aim_server_multipart`, `aim_server_static`, `aim_server_logger`, `aim_server_sse`, `aim_server_jwt`, `aim_server_basic_auth`, `aim_server_testing`, `aim_database`, `aim_postgres`, `aim_orm`, `aim_orm_postgres`, `aim_orm_codegen` — all 0.4.0.
+
+`aim_sqlite` is in the repository but held back from this release.
+
 ## 0.3.0
 
 Third beta. The same application now runs on Cloud Functions for Firebase as well as on the Dart VM and Cloudflare workerd, and `aim_cli` scaffolds, runs and deploys such a project end to end. One breaking change, to serial columns; see below.

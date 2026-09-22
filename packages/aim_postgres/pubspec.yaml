@@ -1,6 +1,6 @@
 name: aim_postgres
 description: A native PostgreSQL driver for Dart with full wire protocol implementation. Supports SSL/TLS, SCRAM-SHA-256 authentication, and parameterized queries.
-version: 0.3.0
+version: 0.4.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 
@@ -8,7 +8,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_database: ^0.3.0
+  aim_database: ^0.4.0
   crypto: ^3.0.7
 
 

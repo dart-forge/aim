@@ -1,6 +1,6 @@
 name: aim_cli
 description: Command-line tools for the Aim framework with project scaffolding, development server, and hot reload support.
-version: 0.3.0
+version: 0.4.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 
@@ -8,8 +8,8 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_orm: ^0.3.0
-  aim_postgres: ^0.3.0
+  aim_orm: ^0.4.0
+  aim_postgres: ^0.4.0
   analyzer: ^14.0.0
   args: ^2.5.0
   crypto: ^3.0.3

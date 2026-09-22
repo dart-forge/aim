@@ -1,6 +1,6 @@
 name: aim_edge
 description: Shared plumbing for running Aim applications on edge runtimes. Adapter authors build on this; application authors use aim_workers or aim_deno instead.
-version: 0.3.0
+version: 0.4.0
 repository: https://github.com/dart-forge/aim
 resolution: workspace
 
@@ -8,7 +8,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  aim_core: ^0.3.0
+  aim_core: ^0.4.0
   web: ^1.1.1
 
 dev_dependencies:
