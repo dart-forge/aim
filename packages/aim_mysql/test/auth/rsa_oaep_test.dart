@@ -52,7 +52,10 @@ void main() {
     });
 
     test('reads a real-sized key, which needs long-form lengths', () {
-      // Above 127 bytes DER switches to 0x82 followed by a two-byte length.
+      // Past 127 content bytes DER leaves the short form: 128-255 bytes use
+      // 0x81 plus one length byte, and 256 and up use 0x82 plus two. This
+      // fixture's 257-byte modulus takes the 0x82 form; the 0x81 form is
+      // covered separately below.
       // A reader that only handles the short form works on every test above
       // and fails on every real key.
       final modulus = Uint8List.fromList([
