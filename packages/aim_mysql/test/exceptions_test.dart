@@ -1,6 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:aim_mysql/src/exceptions.dart';
 import 'package:aim_mysql/src/protocol/packets.dart';
 import 'package:test/test.dart';
+
+import 'protocol/handshake_fixtures.dart';
 
 ErrPacket errno(int code, {String sqlState = 'HY000', String message = 'x'}) =>
     ErrPacket(errorCode: code, sqlState: sqlState, message: message);
@@ -87,6 +91,18 @@ void main() {
 
       expect(text, contains('1213'));
       expect(text, contains('Deadlock found'));
+    });
+
+    test('a real wrong-password ERR from a live server is access denied', () {
+      // errWrongPassword is captured bytes (tool/capture_handshake.dart),
+      // not one assembled by hand -- proof that this classification meets
+      // what a real server actually sends for errno 1045, not just what
+      // errno() above constructs for it.
+      final err = parseAuthPhasePacket(
+        Uint8List.fromList(errWrongPassword),
+      ) as ErrPacket;
+
+      expect(mysqlErrorFor(err), isA<MySqlAccessDenied>());
     });
   });
 

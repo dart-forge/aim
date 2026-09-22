@@ -4,6 +4,8 @@ import 'package:aim_mysql/src/exceptions.dart';
 import 'package:aim_mysql/src/protocol/packets.dart';
 import 'package:test/test.dart';
 
+import 'handshake_fixtures.dart';
+
 /// An OK packet body: no rows affected, no insert id, the given status.
 Uint8List ok({int status = 0x0002, int warnings = 0, String info = ''}) =>
     Uint8List.fromList([
@@ -278,6 +280,53 @@ void main() {
 
       expect(packet.warnings, 0);
       expect(packet.inTransaction, isTrue);
+    });
+  });
+
+  group('against bytes a real server actually sent', () {
+    // handshake_fixtures.dart also holds an OK and an ERR captured with
+    // tool/capture_handshake.dart, from a real authentication exchange
+    // rather than hand-assembled here. These are what a hand-built payload
+    // could silently disagree with the real layout on.
+    test('the real OK ending an authentication parses as OK', () {
+      final packet =
+          parseAuthPhasePacket(Uint8List.fromList(okAfterAuth)) as OkPacket;
+
+      expect(packet.affectedRows, 0);
+      expect(packet.lastInsertId, 0);
+      expect(packet.warnings, 0);
+      expect(packet.info, '');
+      expect(
+        packet.inTransaction,
+        isFalse,
+        reason: 'a fresh connection has autocommit on and nothing open',
+      );
+    });
+
+    test('the same OK also parses as a command reply', () {
+      // 0x00 means the same thing in both phases; this is the same
+      // underlying parse, exercised through the other entry point too.
+      expect(
+        parseCommandPacket(Uint8List.fromList(okAfterAuth)),
+        isA<OkPacket>(),
+      );
+    });
+
+    test('the real wrong-password ERR carries 1045, 28000 and its message', () {
+      final packet = parseAuthPhasePacket(
+        Uint8List.fromList(errWrongPassword),
+      ) as ErrPacket;
+
+      expect(packet.errorCode, 1045);
+      expect(packet.sqlState, '28000');
+      expect(packet.message, contains('Access denied'));
+    });
+
+    test('the same ERR also parses as a command reply', () {
+      expect(
+        parseCommandPacket(Uint8List.fromList(errWrongPassword)),
+        isA<ErrPacket>(),
+      );
     });
   });
 }
