@@ -8,7 +8,14 @@ import 'package:aim_mysql/src/exceptions.dart';
 /// leave the stream just as out of step as a short read does, and a caller
 /// that catches this driver's exception type should not have to catch a
 /// second, unrelated one to cover both.
-String _decodeUtf8(List<int> bytes) {
+///
+/// Shared by every file under `protocol/` that decodes a string off the
+/// wire, rather than each keeping its own copy: two copies of one
+/// conversion drift, most likely in this exact wording, which is what a
+/// caller actually sees. Not exported by the package's barrel file, so
+/// this stays reachable only from other libraries under `src/`, never
+/// from outside the package.
+String decodeUtf8(List<int> bytes) {
   try {
     return utf8.decode(bytes);
   } on FormatException catch (e) {
@@ -171,7 +178,7 @@ final class ByteReader {
         'no NUL byte after offset $_offset; the string never ends',
       );
     }
-    final value = _decodeUtf8(_bytes.sublist(_offset, nulAt));
+    final value = decodeUtf8(_bytes.sublist(_offset, nulAt));
     _offset = nulAt + 1;
     return value;
   }
@@ -188,7 +195,7 @@ final class ByteReader {
     if (length == null) {
       return null;
     }
-    return _decodeUtf8(readBytes(length));
+    return decodeUtf8(readBytes(length));
   }
 
   /// Reads every byte left in the buffer.

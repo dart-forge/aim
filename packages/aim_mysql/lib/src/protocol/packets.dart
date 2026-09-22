@@ -1,21 +1,7 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:aim_mysql/src/exceptions.dart';
 import 'package:aim_mysql/src/protocol/wire.dart';
-
-/// Decodes [bytes] as UTF-8, turning a [FormatException] into
-/// [MySqlProtocolException]. Mirrors the same conversion in `wire.dart`:
-/// bytes that are all present but not valid UTF-8 leave a caller of this
-/// file exactly as out of step as a short read does, so it should not have
-/// to catch a second exception type to cover both.
-String _decodeUtf8(List<int> bytes) {
-  try {
-    return utf8.decode(bytes);
-  } on FormatException catch (e) {
-    throw MySqlProtocolException('invalid UTF-8: $e');
-  }
-}
 
 /// A packet the server sends back during authentication or in reply to a
 /// command.
@@ -172,7 +158,7 @@ OkPacket _parseOk(Uint8List payload) {
 
   final statusFlags = reader.readUint16();
   final warnings = reader.readUint16();
-  final info = _decodeUtf8(reader.readRemaining());
+  final info = decodeUtf8(reader.readRemaining());
 
   return OkPacket(
     affectedRows: affectedRows,
@@ -191,8 +177,8 @@ ErrPacket _parseErr(Uint8List payload) {
 
   final errorCode = reader.readUint16();
   reader.skip(1); // The '#' SQL-state marker byte; always this exact value.
-  final sqlState = _decodeUtf8(reader.readBytes(5));
-  final message = _decodeUtf8(reader.readRemaining());
+  final sqlState = decodeUtf8(reader.readBytes(5));
+  final message = decodeUtf8(reader.readRemaining());
 
   return ErrPacket(errorCode: errorCode, sqlState: sqlState, message: message);
 }

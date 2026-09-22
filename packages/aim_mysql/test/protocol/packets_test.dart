@@ -74,6 +74,31 @@ void main() {
 
       expect(parseCommandPacket(payload), isA<OkPacket>());
     });
+
+    test('a 0xfe header with nine bytes or more is a row count', () {
+      // The other side of the same rule, and the side that makes it a
+      // LENGTH test rather than a marker test. Without this, dropping the
+      // length check entirely leaves every other test in this file passing
+      // -- which was true of an earlier version of this suite.
+      //
+      // 0xfe as a length-encoded prefix means eight bytes follow, so this
+      // payload is exactly nine bytes and encodes a column count of 3.
+      final payload = Uint8List.fromList([
+        0xfe,
+        0x03,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+      ]);
+
+      final packet = parseCommandPacket(payload) as ResultSetHeader;
+
+      expect(packet.columnCount, 3);
+    });
   });
 
   group('ERR', () {
@@ -173,6 +198,17 @@ void main() {
         throwsA(isA<MySqlProtocolException>()),
       );
     });
+
+    test('an empty payload during auth is a protocol failure too', () {
+      // Both entry points refuse an empty payload, and both need the test.
+      // Without the guard this is a RangeError rather than a
+      // MySqlProtocolException -- the wrong kind of failure, reported from
+      // the wrong layer.
+      expect(
+        () => parseAuthPhasePacket(Uint8List(0)),
+        throwsA(isA<MySqlProtocolException>()),
+      );
+    });
   });
 
   group('a command that returns rows', () {
@@ -191,13 +227,31 @@ void main() {
       expect(packet.columnCount, 300);
     });
 
-    test('a LOCAL INFILE request is a protocol failure', () {
+    test('a LOCAL INFILE request is a protocol failure, and says so', () {
       // This driver does not ask for CLIENT_LOCAL_FILES, so the server has
       // no business asking for a file. Getting one means something earlier
       // was misread.
+      //
+      // The assertion is on the MESSAGE, not only the type, and that is
+      // load-bearing. 0xfb is ALSO the length-encoded NULL marker, so a
+      // 0xfb payload that reaches the result-set-header reader trips that
+      // reader's own null guard -- which throws the same exception type from
+      // a different path with a different meaning. An earlier version of
+      // this test asserted only the type and passed with the dedicated
+      // refusal deleted.
+      //
+      // That matters beyond tidiness: this refusal is what stops a server
+      // asking this process for a file. If it silently stopped firing
+      // because the other guard happened to cover it, nothing would notice.
       expect(
         () => parseCommandPacket(Uint8List.fromList([0xfb, ...'x'.codeUnits])),
-        throwsA(isA<MySqlProtocolException>()),
+        throwsA(
+          isA<MySqlProtocolException>().having(
+            (e) => e.toString(),
+            'toString',
+            contains('LOCAL INFILE'),
+          ),
+        ),
       );
     });
 
