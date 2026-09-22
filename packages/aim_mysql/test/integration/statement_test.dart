@@ -159,10 +159,22 @@ void main() {
     expect(connection.statements.size, size);
   });
 
-  test('a changed table is re-prepared rather than failing', () async {
-    // The server invalidates prepared statements when the table changes
-    // under them. Without handling it, an application stops working after
-    // a migration until it restarts.
+  test('a schema change does not break the statements after it', () async {
+    // What this actually establishes is that adding a column does not
+    // leave a cached statement returning stale results -- and the reason
+    // it holds is that every execute reply carries fresh column
+    // definitions, which this driver reads.
+    //
+    // It is NOT evidence that the re-prepare path works. Error 1615 could
+    // not be provoked on 8.0 or 8.4 by any of eight schema changes tried:
+    // adding a column, dropping and recreating, changing a column's type,
+    // converting the charset, swapping via RENAME TABLE, truncating,
+    // adding an AUTO_INCREMENT primary key so the column order shifts, and
+    // redefining a view. The server absorbed all of them silently. The
+    // retry is kept because the protocol specifies it and it costs
+    // nothing. Its mechanics are covered by the unit tests for the retry
+    // policy (see withReprepareRetry in statement_test.dart), not by this
+    // test.
     await run('CREATE TABLE evolving (a INT)');
     await run('INSERT INTO evolving VALUES (?)', [1]);
     await run('SELECT * FROM evolving');
@@ -172,6 +184,37 @@ void main() {
     final result = await rowsOf('SELECT * FROM evolving');
 
     expect(result.columns.map((c) => c.name), ['a', 'b']);
+  });
+
+  test('INSERT reports the affected row count and the generated id', () async {
+    // Both are only exercised for the no-rows shape elsewhere in this
+    // file; reading back a generated id is an entirely ordinary thing for
+    // a caller to do, so the pass-through itself is worth asserting on a
+    // real value, not just on the absence of rows.
+    await run('DROP TABLE IF EXISTS autoinc_t');
+    await run(
+      'CREATE TABLE autoinc_t (id INT AUTO_INCREMENT PRIMARY KEY, val INT)',
+    );
+
+    final first = await run('INSERT INTO autoinc_t (val) VALUES (?)', [10]);
+    expect(first.totalAffectedRows, 1);
+    expect(first.lastInsertId, 1);
+
+    final second = await run('INSERT INTO autoinc_t (val) VALUES (?)', [20]);
+    expect(second.totalAffectedRows, 1);
+    expect(second.lastInsertId, 2);
+  });
+
+  test('an UPDATE affecting several rows reports the real count', () async {
+    await run('DROP TABLE IF EXISTS bulk_t');
+    await run('CREATE TABLE bulk_t (id INT PRIMARY KEY, val INT)');
+    await run('INSERT INTO bulk_t VALUES (?, ?)', [1, 0]);
+    await run('INSERT INTO bulk_t VALUES (?, ?)', [2, 0]);
+    await run('INSERT INTO bulk_t VALUES (?, ?)', [3, 0]);
+
+    final result = await run('UPDATE bulk_t SET val = ?', [99]);
+
+    expect(result.totalAffectedRows, 3);
   });
 
   test('a duplicate key is reported as a unique violation', () async {

@@ -18,7 +18,8 @@ const int _comStmtClose = 0x19;
 
 /// `ER_NEED_REPREPARE`: the table a prepared statement named changed shape
 /// underneath it, and the server has dropped the statement rather than run
-/// it against a definition that no longer matches. See [executeStatement].
+/// it against a definition that no longer matches. See
+/// [withReprepareRetry].
 const int _erNeedReprepare = 1615;
 
 /// `SERVER_STATUS_MORE_RESULTS_EXISTS`: set on the packet that ends a
@@ -56,8 +57,9 @@ final class PreparedStatement {
   /// for this.
   ///
   /// [executeStatement] needs this to re-prepare after error 1615
-  /// (`ER_NEED_REPREPARE`): without it, that error is simply rethrown,
-  /// since there is no SQL text left to re-prepare from.
+  /// (`ER_NEED_REPREPARE`): without it, the statement runs once and any
+  /// error -- 1615 included -- simply propagates, since there is no SQL
+  /// text left to re-prepare from.
   final String? sql;
 }
 
@@ -378,25 +380,58 @@ Future<void> _closeStatement(MySqlConnection connection, int id) {
   return connection.exchange<void>(_comStmtClose, body, (reader) async {});
 }
 
+/// Runs [attempt], and if it fails with error 1615 (`ER_NEED_REPREPARE`),
+/// calls [invalidate] and runs [attempt] exactly one more time.
+///
+/// Separate from the execution itself, and taking plain callbacks rather
+/// than a [MySqlConnection] or a [PreparedStatement] directly, for the same
+/// reason [StatementCache] takes injectable `prepare`/`close` functions:
+/// this policy cannot be driven at all without something able to produce
+/// the error, and 1615 could not be provoked against a real 8.0 or 8.4
+/// server by any of eight schema changes tried (adding a column, dropping
+/// and recreating the table, changing a column's type, converting the
+/// character set, swapping tables with `RENAME TABLE`, `TRUNCATE`, adding
+/// an `AUTO_INCREMENT` primary key that shifts column order, and
+/// redefining a view) -- the server absorbed every one of them silently.
+/// The only way this policy is ever exercised is a test that supplies the
+/// error directly, which is exactly what taking [attempt] and [invalidate]
+/// as callbacks makes possible.
+///
+/// A second 1615 right after [invalidate] and a fresh [attempt] is a real
+/// failure, not this same recoverable case again, and is not caught a
+/// second time -- [attempt] runs at most twice in total.
+Future<T> withReprepareRetry<T>(
+  Future<T> Function() attempt,
+  void Function() invalidate,
+) async {
+  try {
+    return await attempt();
+  } on MySqlException catch (e) {
+    if (e.errorCode != _erNeedReprepare) {
+      rethrow;
+    }
+    invalidate();
+    return await attempt();
+  }
+}
+
 /// Runs [statement] against [connection] with [values] bound to its
 /// placeholders, in order, and reads every result set the reply carries.
 ///
-/// Retries once, transparently, on error 1615 (`ER_NEED_REPREPARE`): the
-/// server sends this when the table a prepared statement named has
-/// changed shape underneath it, invalidating the statement. Without
-/// handling it, an application that hits this stops working after a
-/// migration until it restarts. Recovery drops the stale entry from
-/// [MySqlConnection.statements], prepares [statement.sql] again, and
-/// executes that instead -- only when [PreparedStatement.sql] is known; a
-/// statement built directly rather than through the cache has no SQL text
-/// to re-prepare from, so its 1615 is simply rethrown. A second 1615 right
-/// after a fresh prepare is a real failure, not this same recoverable case
-/// again, and is not caught a second time.
+/// Composes [withReprepareRetry] with [MySqlConnection.statements]: on
+/// error 1615, the stale cache entry for [PreparedStatement.sql] is
+/// invalidated and [attempt] is run again, which re-resolves the current
+/// statement for that SQL text from the cache -- a fresh prepare, since
+/// the stale entry was just dropped -- rather than retrying the same
+/// invalid statement id a second time. Only possible when
+/// [PreparedStatement.sql] is known; a statement built directly rather
+/// than through the cache has no SQL text to re-prepare from, so it is run
+/// once, plainly, and any error -- 1615 included -- simply propagates.
 Future<MySqlResultSets> executeStatement(
   MySqlConnection connection,
   PreparedStatement statement,
   List<Object?> values,
-) async {
+) {
   if (values.length != statement.parameterCount) {
     throw ArgumentError(
       'statement expects ${statement.parameterCount} parameter(s) but got '
@@ -404,16 +439,15 @@ Future<MySqlResultSets> executeStatement(
     );
   }
 
-  try {
-    return await _executeOnce(connection, statement, values);
-  } on MySqlException catch (e) {
-    if (e.errorCode != _erNeedReprepare || statement.sql == null) {
-      rethrow;
-    }
-    connection.statements.invalidate(statement.sql!);
-    final reprepared = await connection.statements.get(statement.sql!);
-    return await _executeOnce(connection, reprepared, values);
+  final sql = statement.sql;
+  if (sql == null) {
+    return _executeOnce(connection, statement, values);
   }
+
+  return withReprepareRetry(() async {
+    final current = await connection.statements.get(sql);
+    return _executeOnce(connection, current, values);
+  }, () => connection.statements.invalidate(sql));
 }
 
 Future<MySqlResultSets> _executeOnce(
@@ -421,7 +455,7 @@ Future<MySqlResultSets> _executeOnce(
   PreparedStatement statement,
   List<Object?> values,
 ) {
-  final payload = _buildExecutePayload(statement, values);
+  final payload = buildExecutePayload(statement, values);
   return connection.exchange<MySqlResultSets>(
     _comStmtExecute,
     payload,
@@ -441,7 +475,13 @@ Future<MySqlResultSets> _executeOnce(
 ///   parameterCount * (int1 type, int1 unsigned flag) -- unsigned is 0x80
 ///   the value of every non-NULL parameter, in order
 /// ```
-Uint8List _buildExecutePayload(
+///
+/// Public (though not exported from the package barrel) specifically so
+/// the NULL bitmap's lack of an offset -- the single most easily
+/// transposed detail in this file, see the comment on it below -- has its
+/// own byte-level unit tests that run on every `dart test`, not only
+/// under the `integration` tag this repository skips by default.
+Uint8List buildExecutePayload(
   PreparedStatement statement,
   List<Object?> values,
 ) {
