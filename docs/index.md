@@ -53,4 +53,9 @@ features:
   - icon: 🧩
     title: Modular
     details: Use what you need. Each package works independently - add only what your project requires.
+  - icon: ✅
+    title: Validation
+    details: Declare a request's shape as a procedure and read it back with static types - no cast, no code generation.
+    link: /server/validation
+    linkText: Get Started
 ---
