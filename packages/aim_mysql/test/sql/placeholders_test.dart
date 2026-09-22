@@ -80,7 +80,9 @@ void main() {
 
     test('with backslash escapes the quote is escaped, so :id is inside', () {
       // The literal runs to the end, so there is nothing to substitute.
-      expect(rewrite(sql, {'id': 1}, dialect: SqlDialect.mysql).$1, sql);
+      final noSubstitution = rewrite(sql, {'id': 1}, dialect: SqlDialect.mysql);
+      expect(noSubstitution.$1, sql);
+      expect(noSubstitution.$2, isEmpty);
     });
 
     test('without them the literal ends at the quote, so :id is outside', () {
