@@ -25,6 +25,18 @@ typedef Middleware<E extends Variables> = Future<void> Function(
 - **Context (`c`)**: Provides access to the request and response
 - **Next (`next`)**: Calls the next middleware or route handler in the chain
 
+::: warning A middleware cannot return a response
+The return type is `Future<void>`, so `return c.json(...)` does not compile: `c.json()`
+evaluates to a `Response`. The response helpers (`c.json()`, `c.text()`, ...) finalize the
+response on the context, so calling one and returning without calling `next()` is enough
+to stop the chain and send it:
+
+```dart
+c.json({'error': 'Unauthorized'}, statusCode: 401);
+return; // next() is not called - the finalized response is sent
+```
+:::
+
 ## Basic Middleware
 
 Here's a simple logging middleware:
@@ -113,8 +125,8 @@ app.use((c, next) async {
 // ✅ Return early without calling next() to stop the chain
 app.use((c, next) async {
   if (!isAuthorized(c)) {
-    return c.json({'error': 'Unauthorized'}, statusCode: 401);
-    // next() is NOT called - chain stops here
+    c.json({'error': 'Unauthorized'}, statusCode: 401);
+    return; // next() is NOT called - chain stops here
   }
   return next();
 });
@@ -183,7 +195,7 @@ Future<void> errorHandler(Context c, Next next) async {
     print('Error: $error');
     print('Stack: $stackTrace');
 
-    return c.json({
+    c.json({
       'error': 'Internal Server Error',
       'message': error.toString(),
     }, statusCode: 500);
@@ -217,14 +229,16 @@ Future<void> requireAuth(Context<AuthVariables> c, Next next) async {
   final token = c.req.headers['authorization'];
 
   if (token == null) {
-    return c.json({'error': 'Missing token'}, statusCode: 401);
+    c.json({'error': 'Missing token'}, statusCode: 401);
+    return;
   }
 
   // Verify token and extract user ID
   final userId = await verifyToken(token);
 
   if (userId == null) {
-    return c.json({'error': 'Invalid token'}, statusCode: 401);
+    c.json({'error': 'Invalid token'}, statusCode: 401);
+    return;
   }
 
   c.variables.userId = userId;
@@ -316,10 +330,11 @@ Middleware<E> ratelimit<E extends Variables>({
     requests[ip]!.removeWhere((t) => now.difference(t) > window);
 
     if (requests[ip]!.length >= maxRequests) {
-      return c.json(
+      c.json(
         {'error': 'Rate limit exceeded'},
         statusCode: 429,
       );
+      return;
     }
 
     requests[ip]!.add(now);
