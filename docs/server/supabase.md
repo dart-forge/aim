@@ -56,6 +56,8 @@ app.serveDeno(basePath: 'my_api');
 
 With `basePath` set, the same measurement gave `/` → 200, `/users/42` → 200 with `id` bound, an unknown path → the app's own 404 handler, and a `POST` with a JSON body → 200.
 
+**A deployed function behaves the same way.** Measured against a real project: `GET /functions/v1/<name>/users/42` returned `{"id":"42"}`, a route echoing back the path it received reported it with the function name already removed, and an unknown path returned the app's own 404. So `basePath` is the function name in both places — it does not have to vary by environment.
+
 An alternative is to mount the whole app under a prefix with `app.route('my_api', subApp)` instead of stripping it in `serveDeno`. Avoid this if the same routes also need to run on `aim_workers` (Cloudflare Workers): Cloudflare does not add a function-name segment, so a route tree written for one target answers 404 on the other. `serveDeno(basePath:)` keeps the route tree itself identical between targets.
 
 ## Run it locally
@@ -79,6 +81,8 @@ supabase functions deploy my_api
 
 Deploy with the CLI, not `--use-api`: `--use-api` skips the bundling step that places `main.wasm` next to the deployed `index.ts`, which is what `static_files` in `supabase/config.toml` depends on.
 
+A deployed function answers from the Dart application, so `static_files` does carry `main.wasm` through a real deploy — the function could not have started otherwise. Function names may contain underscores: a project named `hello_supabase` deployed and served under that slug.
+
 ## Environment variables
 
 `c.env` returns a typed `EdgeEnv?` (a `DenoEnv` on this runtime): `c.env?.string('NAME')` reads a Deno environment variable, and `c.env?.has('NAME')` checks presence. Supabase has no resource bindings, so `c.env?.get(name)` is always `null`.
@@ -90,8 +94,8 @@ Deploy with the CLI, not `--use-api`: `--use-api` skips the bundling step that p
 
 ## Limitations
 
-- A real deploy to Supabase has not been verified — only the local stack (`supabase start` + `supabase functions serve`).
 - Deno Deploy and Netlify Edge, the other Deno-based runtimes `aim_deno` targets, have not been verified.
+- A deployed function has been verified only for HTTP routing (the paths above) — not for cold-start time, bundle size, or any Supabase feature beyond serving requests.
 
 ## Next Steps
 
