@@ -34,4 +34,32 @@ void main() {
     expect(good.parse({'a': 'x', 'b': 1}).a, 'x');
     expect(good.parse({'a': 'y', 'b': 2}).b, 2);
   });
+
+  test('a procedure that computes on a value it reads fails with a message '
+      'about the rule, not a bare error from the placeholder value', () {
+    // Different from the branching case above: this procedure reads the
+    // same field every time, it just does substring work on it. During
+    // the recording pass that value is '' (the placeholder), so
+    // ''.substring(0, 3) throws a RangeError with no idea this package
+    // even exists.
+    final bad = Schema((r) => (code: r.string('name').substring(0, 3)));
+
+    expect(
+      () => bad.toJsonSchema(),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          allOf(contains('computes on a value'), contains('placeholder')),
+        ),
+      ),
+    );
+  });
+
+  test('the same computed-on-a-read-value failure is reported by parse, since '
+      'it also records first', () {
+    final bad = Schema((r) => (code: r.string('name').substring(0, 3)));
+
+    expect(() => bad.parse({'name': 'naoki'}), throwsA(isA<StateError>()));
+  });
 }

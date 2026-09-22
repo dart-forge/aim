@@ -35,7 +35,31 @@ final class Schema<R> {
     final cached = _cachedSpec;
     if (cached != null) return cached;
     final recorder = Recorder();
-    _read(recorder);
+    try {
+      _read(recorder);
+    } catch (error) {
+      // The recording pass has no real input, so every read returns a
+      // placeholder ('' or 0) instead of a value from a request. A
+      // procedure that computes on what it reads — DateTime.parse(r.string(
+      // 'date')), r.string('name').substring(0, 3) — runs that computation
+      // against the placeholder here and typically throws (a RangeError, a
+      // FormatException, ...). It already fails safely: nothing gets
+      // cached and the exception propagates. But the raw error names a
+      // symptom, not the rule, so it is wrapped here to say what a schema
+      // may not do. This is not the determinism check in Validator: that
+      // one is about asking for the same fields every time; this one is
+      // about not doing arithmetic or parsing on a value right after
+      // reading it.
+      throw StateError(
+        'This schema computes on a value it just read, which fails during '
+        'the recording pass because every read there returns a placeholder '
+        "('' or 0) rather than real input: $error\n"
+        'A schema must not do arithmetic, parsing, or substring work on a '
+        'value it reads — e.g. DateTime.parse(r.string(\'date\')) or '
+        "r.string('name').substring(0, 3) — it may only read fields and "
+        'hand the raw values back.',
+      );
+    }
     return _cachedSpec = recorder.fields;
   }
 
