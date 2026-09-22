@@ -35,6 +35,22 @@ void main() {
       expect(negotiated & Capabilities.multiResults, isNot(0));
     });
 
+    test('the EOF packet deprecated away, which later layers count on', () {
+      // Everything that reads a result set assumes no EOF arrives after the
+      // column definitions. If this bit were not asked for, the server
+      // would send one, every reader would be a packet out of step, and the
+      // connection would desynchronise with nothing to resynchronise
+      // against. So this is not a preference — it is a premise the rest of
+      // the driver is written on.
+      final negotiated = negotiateCapabilities(
+        serverHandshake,
+        useTls: false,
+        withDatabase: false,
+      );
+
+      expect(negotiated & Capabilities.deprecateEof, isNot(0));
+    });
+
     test('never local files', () {
       // Asking would let the server request a file from this process. Not
       // asking is what stops it: the server answers LOAD DATA LOCAL INFILE
@@ -114,6 +130,44 @@ void main() {
         0,
         reason: 'every negotiated bit has to be one the server announced',
       );
+    });
+
+    test('drops a wanted bit the server does not announce', () {
+      // The test above cannot fail: the real fixtures announce every bit
+      // this driver wants, so the intersection is a no-op against them and
+      // deleting the mask entirely would still pass. This one takes a bit
+      // away from the server and checks it stops being asked for.
+      //
+      // multiResults is the right bit to use because it is NOT one of the
+      // two the driver refuses outright — protocol41 and ssl are rejected
+      // by an explicit throw before the mask is ever reached, so neither
+      // exercises the masking at all.
+      final withoutMultiResults = _handshakeWithout(Capabilities.multiResults);
+
+      final negotiated = negotiateCapabilities(
+        withoutMultiResults,
+        useTls: false,
+        withDatabase: false,
+      );
+
+      expect(negotiated & Capabilities.multiResults, 0);
+      expect(
+        negotiated & Capabilities.pluginAuth,
+        isNot(0),
+        reason: 'and the bits the server still has are still asked for',
+      );
+    });
+
+    test('drops deprecateEof too when the server lacks it', () {
+      // Same shape, for the bit whose silent loss is the one this driver
+      // cannot survive.
+      final negotiated = negotiateCapabilities(
+        _handshakeWithout(Capabilities.deprecateEof),
+        useTls: false,
+        withDatabase: false,
+      );
+
+      expect(negotiated & Capabilities.deprecateEof, 0);
     });
 
     test('refuses a server that cannot do the 4.1 protocol', () {
@@ -216,6 +270,52 @@ void main() {
       reader.readLengthEncodedString();
 
       expect(reader.readNulTerminatedString(), 'caching_sha2_password');
+    });
+
+    test('throws when connectWithDb is set but no database was given', () {
+      // The bit alone decides the layout the server will parse. Leaving
+      // the field out here while the bit is set would make the server
+      // read the very next field -- the auth plugin name -- as the
+      // database name instead: a desync with no way back. That makes this
+      // a caller mistake, not live data, so it has to be loud rather than
+      // silently producing a payload the server will misread.
+      final capabilities = negotiateCapabilities(
+        serverHandshake,
+        useTls: false,
+        withDatabase: true,
+      );
+
+      expect(
+        () => buildHandshakeResponse(
+          capabilities: capabilities,
+          user: 'test',
+          authResponse: Uint8List.fromList(List.filled(20, 0x41)),
+          authPluginName: 'caching_sha2_password',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws when a database was given but connectWithDb is not set', () {
+      // The other direction of the same mismatch: a database the caller
+      // asked for would otherwise be silently dropped, because the server
+      // was never told via the capability bit to expect this field.
+      final capabilities = negotiateCapabilities(
+        serverHandshake,
+        useTls: false,
+        withDatabase: false,
+      );
+
+      expect(
+        () => buildHandshakeResponse(
+          capabilities: capabilities,
+          user: 'test',
+          authResponse: Uint8List.fromList(List.filled(20, 0x41)),
+          authPluginName: 'caching_sha2_password',
+          database: 'shop',
+        ),
+        throwsArgumentError,
+      );
     });
 
     test('carries an auth response of any length, length-encoded', () {

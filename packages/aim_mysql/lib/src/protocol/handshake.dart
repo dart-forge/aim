@@ -292,8 +292,24 @@ void _writeHandshakeHeader(ByteWriter writer, int capabilities) {
 /// | 23 bytes | padding, all zero |
 /// | NUL-terminated | [user] |
 /// | length-encoded | [authResponse] |
-/// | NUL-terminated | [database], only when [Capabilities.connectWithDb] is set and [database] is not null |
+/// | NUL-terminated | [database], only when [Capabilities.connectWithDb] is set |
 /// | NUL-terminated | [authPluginName], only when [Capabilities.pluginAuth] is set |
+///
+/// Whether the database field is written is decided by the
+/// [Capabilities.connectWithDb] bit in [capabilities] alone, never by
+/// whether [database] happens to be null. The server decides how to read
+/// this payload from that bit, so [database] has to agree with it: throws
+/// [ArgumentError] if it does not. The bit set with [database] null would
+/// leave the field simply missing, so the server would read the very next
+/// field -- the auth plugin name -- as the database name instead; the bit
+/// clear with [database] non-null would silently drop a database the
+/// caller asked for. Either way is a wire desync with no resynchronisation
+/// point once it happens, so this is not checked softly. The intended call
+/// shape --
+/// `negotiateCapabilities(withDatabase: database != null)` feeding
+/// straight into this [database] parameter -- can never disagree, which is
+/// why a disagreement here is always a caller mistake and not live server
+/// data, and so [ArgumentError] rather than [MySqlProtocolException].
 ///
 /// [authResponse] is written as the raw bytes it is, not as text: it is a
 /// password hash, not necessarily valid UTF-8, so it cannot go through
@@ -318,8 +334,25 @@ Uint8List buildHandshakeResponse({
     ..writeLengthEncodedInt(authResponse.length)
     ..writeBytes(authResponse);
 
-  if ((capabilities & Capabilities.connectWithDb) != 0 && database != null) {
-    writer.writeNulTerminatedString(database);
+  final wantsDatabase = (capabilities & Capabilities.connectWithDb) != 0;
+  if (wantsDatabase && database == null) {
+    throw ArgumentError.value(
+      database,
+      'database',
+      'capabilities has connectWithDb set, so the server expects a '
+          'database name in this field, but null was given',
+    );
+  }
+  if (!wantsDatabase && database != null) {
+    throw ArgumentError.value(
+      database,
+      'database',
+      'capabilities does not have connectWithDb set, so the server does '
+          'not expect a database name in this field',
+    );
+  }
+  if (wantsDatabase) {
+    writer.writeNulTerminatedString(database!);
   }
   if ((capabilities & Capabilities.pluginAuth) != 0) {
     writer.writeNulTerminatedString(authPluginName);
