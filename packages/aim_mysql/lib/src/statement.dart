@@ -72,6 +72,7 @@ final class MySqlResult {
     required this.affectedRows,
     required this.lastInsertId,
     required this.moreResults,
+    this.inTransaction = false,
   });
 
   /// Empty for a result set with no rows: an OK reply carries no column
@@ -94,6 +95,20 @@ final class MySqlResult {
   /// finished [MySqlResultSets] reads [MySqlResultSets.sets] instead of
   /// this field on any one entry.
   final bool moreResults;
+
+  /// Whether `SERVER_STATUS_IN_TRANS` was set on the packet that ended this
+  /// result set: an explicit transaction is open on the connection that ran
+  /// this statement. Defaults to `false` rather than being required, since
+  /// most of this file's own tests build a [MySqlResult] to check
+  /// [MySqlResultSets.lastInsertId] or [MySqlResultSets.totalAffectedRows]
+  /// and have no stake in this field at all.
+  ///
+  /// This is how [MySqlTransaction] (`mysql_database.dart`) notices MySQL
+  /// having committed a transaction implicitly, which DDL statements do:
+  /// the bit is set on every reply for as long as an explicit transaction
+  /// is open, so a statement whose own reply no longer has it set is the
+  /// statement that just ended one.
+  final bool inTransaction;
 }
 
 /// Every result set one `COM_STMT_EXECUTE` or `COM_QUERY` reply carried.
@@ -164,6 +179,16 @@ final class MySqlResultSets {
     }
     return last;
   }
+
+  /// The last set's [MySqlResult.inTransaction].
+  ///
+  /// The last one, not "all of them" or "any of them", for the same reason
+  /// [lastInsertId] reads the last non-zero entry: whichever statement ran
+  /// last is the one whose status is current. In practice this call's
+  /// [sets] holds exactly one entry -- the statements [MySqlTransaction]
+  /// runs are never a `CALL` -- but reading the last keeps this right even
+  /// if that ever changes.
+  bool get inTransaction => sets.last.inTransaction;
 }
 
 /// A per-connection cache of prepared statements, keyed by SQL text.
@@ -348,7 +373,7 @@ Future<PreparedStatement> _prepareStatement(
         );
       }
       if (header[0] == 0xff) {
-        throw mysqlErrorFor(parseCommandPacket(header) as ErrPacket);
+        throw mysqlErrorFor(parseCommandPacket(header) as ErrPacket, sql: sql);
       }
       if (header[0] != 0x00) {
         throw MySqlProtocolException(
@@ -487,7 +512,7 @@ Future<MySqlResultSets> _executeOnce(
   return connection.exchange<MySqlResultSets>(
     _comStmtExecute,
     payload,
-    (reader) => _readResultSets(reader, decodeBinaryRow),
+    (reader) => _readResultSets(reader, decodeBinaryRow, sql: statement.sql),
   );
 }
 
@@ -555,8 +580,13 @@ Uint8List buildExecutePayload(
 
 /// Reads every result set a `COM_QUERY` reply carries, decoding each row
 /// as [String] or `null`. See [MySqlConnection.runTextQuery].
-Future<MySqlResultSets> readTextResultSets(ResponseReader reader) =>
-    _readResultSets(reader, _decodeTextRow);
+///
+/// [sql] rides along purely to land on a thrown [MySqlException] if the
+/// server refuses the command; it plays no part in reading the reply.
+Future<MySqlResultSets> readTextResultSets(
+  ResponseReader reader, {
+  String? sql,
+}) => _readResultSets(reader, _decodeTextRow, sql: sql);
 
 /// Decodes one text-protocol row: a length-encoded string, or the
 /// length-encoded-integer NULL marker, per column -- no leading marker
@@ -592,14 +622,15 @@ List<Object?> _decodeTextRow(
 /// see these leftovers instead of that read's own answer.
 Future<MySqlResultSets> _readResultSets(
   ResponseReader reader,
-  List<Object?> Function(Uint8List, List<ColumnDefinition>) decodeRow,
-) async {
+  List<Object?> Function(Uint8List, List<ColumnDefinition>) decodeRow, {
+  String? sql,
+}) async {
   final sets = <MySqlResult>[];
   while (true) {
     final first = parseCommandPacket(await reader.next());
     switch (first) {
       case ErrPacket err:
-        throw mysqlErrorFor(err);
+        throw mysqlErrorFor(err, sql: sql);
 
       case OkPacket ok:
         sets.add(
@@ -609,6 +640,7 @@ Future<MySqlResultSets> _readResultSets(
             affectedRows: ok.affectedRows,
             lastInsertId: ok.lastInsertId,
             moreResults: ok.statusFlags & _serverMoreResultsExists != 0,
+            inTransaction: ok.inTransaction,
           ),
         );
 
@@ -617,7 +649,7 @@ Future<MySqlResultSets> _readResultSets(
           for (var i = 0; i < columnCount; i++)
             parseColumnDefinition(await reader.next()),
         ];
-        final read = await _readRows(reader, columns, decodeRow);
+        final read = await _readRows(reader, columns, decodeRow, sql: sql);
         sets.add(
           MySqlResult(
             columns: columns,
@@ -626,6 +658,7 @@ Future<MySqlResultSets> _readResultSets(
             lastInsertId: 0,
             moreResults:
                 read.terminator.statusFlags & _serverMoreResultsExists != 0,
+            inTransaction: read.terminator.inTransaction,
           ),
         );
 
@@ -671,8 +704,9 @@ bool _endsResultSet(Uint8List raw) =>
 Future<({List<List<Object?>> rows, OkPacket terminator})> _readRows(
   ResponseReader reader,
   List<ColumnDefinition> columns,
-  List<Object?> Function(Uint8List, List<ColumnDefinition>) decodeRow,
-) async {
+  List<Object?> Function(Uint8List, List<ColumnDefinition>) decodeRow, {
+  String? sql,
+}) async {
   final rows = <List<Object?>>[];
   while (true) {
     final raw = await reader.next();
@@ -685,7 +719,7 @@ Future<({List<List<Object?>> rows, OkPacket terminator})> _readRows(
       return (rows: rows, terminator: packet);
     }
     if (packet is ErrPacket) {
-      throw mysqlErrorFor(packet);
+      throw mysqlErrorFor(packet, sql: sql);
     }
     throw MySqlProtocolException(
       'expected a row or OK ending a result set, got a '

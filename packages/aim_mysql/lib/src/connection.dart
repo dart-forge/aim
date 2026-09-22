@@ -526,7 +526,7 @@ final class MySqlConnection {
     return exchange<MySqlResultSets>(
       _comQuery,
       utf8.encode(sql),
-      readTextResultSets,
+      (reader) => readTextResultSets(reader, sql: sql),
     );
   }
 
