@@ -86,7 +86,7 @@ Future<void> errorHandler(Context c, Next next) async {
         ? 'Internal Server Error'
         : error.toString();
 
-    return c.json({
+    c.json({
       'error': message,
     }, statusCode: 500);
   }
@@ -200,10 +200,11 @@ Middleware<E> ratelimit<E extends Variables>({
     requests[ip]!.removeWhere((t) => now.difference(t) > window);
 
     if (requests[ip]!.length >= maxRequests) {
-      return c.json(
+      c.json(
         {'error': 'Rate limit exceeded'},
         statusCode: 429,
       );
+      return;
     }
 
     requests[ip]!.add(now);
