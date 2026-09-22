@@ -36,6 +36,20 @@ void main() {
     List<Object?> values = const [],
   ]) async => (await run(sql, values)).withRows!;
 
+  test('executeStatement refuses a mismatched parameter count, before the '
+      'connection is ever touched', () async {
+    final statement = await connection.statements.get('SELECT ?, ?');
+
+    expect(
+      () => executeStatement(connection, statement, [1]),
+      throwsArgumentError,
+    );
+
+    // Refused synchronously, before sending anything -- the connection
+    // is still perfectly usable afterwards.
+    expect((await rowsOf('SELECT 1')).rows.single, [1]);
+  });
+
   test('a statement with no parameters returns rows', () async {
     final result = await rowsOf('SELECT 1 AS one');
 
@@ -315,6 +329,38 @@ void main() {
     expect(row[0], [0x00, 0xff, 0x80]);
     expect(row[1], 'text');
   });
+
+  test(
+    'a decode failure force-closes the connection, not just the call',
+    () async {
+      // MySqlDecodeException means the bytes were read fine but did not
+      // fit the Dart type -- but the row-reading loop that hit it may not
+      // have read the rest of the reply, so the byte stream is left at an
+      // unknown position. exchange's catch-all (everything that is not a
+      // MySqlException, the server cleanly refusing the statement) is
+      // what turns that into a dead connection instead of one the pool
+      // could later hand to someone else mid-result-set.
+      //
+      // The literal is inserted directly, not bound as a parameter: this
+      // driver always sends a Dart int as a signed BIGINT, and MySQL's
+      // strict sql_mode (the default) refuses to store -1 into a
+      // BIGINT UNSIGNED column via a parameter, which would fail the
+      // INSERT itself rather than set up the decode failure this test
+      // wants on the SELECT.
+      await run('DROP TABLE IF EXISTS decode_kills_it');
+      await run(
+        'CREATE TABLE decode_kills_it (id INT PRIMARY KEY, n BIGINT UNSIGNED)',
+      );
+      await run('INSERT INTO decode_kills_it VALUES (1, 18446744073709551615)');
+
+      await expectLater(
+        run('SELECT n FROM decode_kills_it'),
+        throwsA(isA<MySqlDecodeException>()),
+      );
+
+      expect(connection.isOpen, isFalse);
+    },
+  );
 
   test('a payload larger than one packet round-trips both ways', () async {
     // 16MB is where a packet has to be split, so this exercises splitting

@@ -69,6 +69,19 @@ void main() {
       );
     });
 
+    test('0xff is not a valid marker', () {
+      // The table in readLengthEncodedInt's own doc comment lists exactly
+      // five meanings for the leading byte; 0xff is reserved for an ERR
+      // packet and never legitimately starts a length-encoded integer.
+      // Every byte 0x00-0xfa is a value in its own right (handled above),
+      // so this is the one input that has to fall through to the
+      // "nothing else is valid" branch.
+      expect(
+        () => readerOf([0xff]).readLengthEncodedInt(),
+        throwsA(isA<MySqlProtocolException>()),
+      );
+    });
+
     test('consumes exactly the bytes the marker claims', () {
       final reader = readerOf([0xfc, 0x02, 0x01, 0x2a]);
 
@@ -246,6 +259,14 @@ void main() {
         );
         expect(reader.atEnd, isTrue, reason: 'no slack after $value');
       }
+    });
+
+    test('writeLengthEncodedInt refuses a negative value', () {
+      // Every marker in the format describes a byte count or a value to
+      // follow, and none of them can stand for "negative" -- writing one
+      // anyway would produce bytes readLengthEncodedInt was never meant to
+      // read back.
+      expect(() => ByteWriter().writeLengthEncodedInt(-1), throwsArgumentError);
     });
 
     test('strings round-trip', () {

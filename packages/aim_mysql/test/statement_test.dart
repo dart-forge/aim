@@ -1,9 +1,45 @@
 import 'dart:typed_data';
 
+import 'package:aim_mysql/src/connection.dart';
 import 'package:aim_mysql/src/exceptions.dart';
+import 'package:aim_mysql/src/protocol/wire.dart';
 import 'package:aim_mysql/src/statement.dart';
 import 'package:aim_mysql/src/types/column_type.dart';
 import 'package:test/test.dart';
+
+/// A [ResponseReader] that hands back [packets] in order, one per call to
+/// [next] -- for exercising `readTextResultSets` without a real
+/// connection.
+class _ScriptedReader implements ResponseReader {
+  _ScriptedReader(this._packets);
+
+  final List<Uint8List> _packets;
+  int _index = 0;
+
+  @override
+  Future<Uint8List> next() async => _packets[_index++];
+}
+
+/// A minimal, otherwise-valid `ColumnDefinition41` packet for one text
+/// column, built the same way a real reply's column count and rows are
+/// scripted below -- just enough for [parseColumnDefinition] to accept it.
+Uint8List _fakeTextColumn() {
+  final writer = ByteWriter()
+    ..writeLengthEncodedString('def')
+    ..writeLengthEncodedString('')
+    ..writeLengthEncodedString('')
+    ..writeLengthEncodedString('')
+    ..writeLengthEncodedString('c')
+    ..writeLengthEncodedString('')
+    ..writeLengthEncodedInt(0x0c)
+    ..writeUint16(33) // charset: a text one, not binaryCharsetId.
+    ..writeUint32(20) // column length; not read by the text-row decoder.
+    ..writeUint8(ColumnType.varString)
+    ..writeUint16(0) // flags.
+    ..writeUint8(0) // decimals.
+    ..writeZeroes(2); // filler.
+  return writer.toBytes();
+}
 
 void main() {
   group('buildExecutePayload', () {
@@ -288,6 +324,71 @@ void main() {
       ]);
 
       expect(sets.totalAffectedRows, 7);
+    });
+
+    test('inTransaction reads the last set, not the first', () {
+      // Whichever statement ran last is the one whose status is current --
+      // see MySqlResultSets.inTransaction's own doc comment. Taking the
+      // first set instead would answer true here.
+      final sets = MySqlResultSets([
+        MySqlResult(
+          columns: const [],
+          rows: const [],
+          affectedRows: 0,
+          lastInsertId: 0,
+          moreResults: true,
+          inTransaction: true,
+        ),
+        MySqlResult(
+          columns: const [],
+          rows: const [],
+          affectedRows: 0,
+          lastInsertId: 0,
+          moreResults: false,
+          inTransaction: false,
+        ),
+      ]);
+
+      expect(sets.inTransaction, isFalse, reason: '.first would say true');
+    });
+  });
+
+  group('reading a text result set', () {
+    test('a row starting with 0xfe is decoded, not mistaken for the '
+        'terminator, once it is 9 bytes or more', () async {
+      // 0xfe is also the length-encoded-integer marker for an 8-byte
+      // length, so a row whose first (and only) column's length needs
+      // that rare form starts with the exact marker byte the short
+      // deprecated-EOF OK does too. The length check in _endsResultSet
+      // is what tells them apart -- this row is the marker, an 8-byte
+      // length of 3, then 3 data bytes ("xyz"): 12 bytes, so it is a
+      // row, not the end.
+      final longFormRow = Uint8List.fromList([
+        0xfe, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+        0x78, 0x79, 0x7a, // "xyz"
+      ]);
+      // The real terminator: 0xfe, and under 9 bytes total -- the same
+      // fixture shape packets_test.dart uses for "a 0xfe header with a
+      // short payload is an OK, not an EOF".
+      final terminator = Uint8List.fromList([
+        0xfe,
+        0x00, 0x00, // affected_rows, last_insert_id
+        0x02, 0x00, // status_flags
+        0x00, 0x00, // warnings
+      ]);
+
+      final reader = _ScriptedReader([
+        Uint8List.fromList([0x01]), // ResultSetHeader: 1 column.
+        _fakeTextColumn(),
+        longFormRow,
+        terminator,
+      ]);
+
+      final sets = await readTextResultSets(reader);
+
+      expect(sets.withRows!.rows, [
+        ['xyz'],
+      ]);
     });
   });
 }
