@@ -27,6 +27,11 @@ void main() {
     expect(encodeParameter(1).type, ColumnType.longLong);
     expect(encodeParameter(1).bytes, hasLength(8));
     expect(encodeParameter(-1).bytes, List.filled(8, 0xff));
+    // Dart's int has no unsigned form to preserve, so this is always
+    // false, not merely defaulted -- including for a value like -1, whose
+    // bytes alone would read as a huge positive number under the unsigned
+    // flag this driver deliberately never sets.
+    expect(encodeParameter(-1).unsigned, isFalse);
   });
 
   test('a double is an eight-byte DOUBLE', () {

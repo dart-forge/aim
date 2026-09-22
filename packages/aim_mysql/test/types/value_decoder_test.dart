@@ -272,14 +272,34 @@ void main() {
       );
     });
 
-    test('DECIMAL is a String, digit for digit', () {
+    test('DECIMAL is a String, digit for digit, even on charset 63', () {
       // Which is the contract: no driver may round a decimal on the way
       // out.
+      //
+      // The charset here is 63, which is what a real server reports for a
+      // numeric column — it means "no character set", not "give me bytes".
+      // So DECIMAL must NOT go through the charset branch that turns BLOB
+      // into a Uint8List; it is a String unconditionally. With the default
+      // text charset this test passes either way and distinguishes
+      // nothing, which is why it is pinned to 63.
       expect(
         decodeBinaryRow(row(1, lenenc('12345.6789')), [
-          column(ColumnType.newDecimal),
+          column(ColumnType.newDecimal, charset: binaryCharsetId),
         ]),
         ['12345.6789'],
+      );
+    });
+
+    test('and DECIMAL on a text charset is still a String', () {
+      // The other direction, so neither charset can be the thing that
+      // decides. A server has no reason to send this, but the type's
+      // mapping should not depend on a field that does not mean what the
+      // BLOB case uses it for.
+      expect(
+        decodeBinaryRow(row(1, lenenc('0.5')), [
+          column(ColumnType.newDecimal, charset: 33),
+        ]),
+        ['0.5'],
       );
     });
 
