@@ -198,8 +198,10 @@ class MySqlDatabase extends Database implements MySqlQueryable {
   /// instead of letting [fn] carry on believing the rest of its work is
   /// still inside a transaction that a later failure could undo. When that
   /// happens, the `ROLLBACK` below still runs, but there is nothing left
-  /// open for it to roll back -- the statements before the DDL are already
-  /// committed and permanent.
+  /// open for it to roll back. If the statement that ended it succeeded,
+  /// the statements before it are committed and permanent; if it failed,
+  /// whether they are committed or rolled back is not something this
+  /// driver can tell -- see [MySqlTransactionEndedByDdl]'s own doc comment.
   ///
   /// A `ROLLBACK` sent to a connection with no open transaction is not an
   /// error either way: MySQL just answers OK. That is also what happens
@@ -355,39 +357,68 @@ class MySqlTransaction implements Transaction, MySqlQueryable {
   }
 }
 
-/// Whether [error]'s own type already says why the transaction might be
-/// gone, in a way [MySqlTransaction._endedByFailure]'s probe cannot tell
-/// apart from an implicit commit: `SERVER_STATUS_IN_TRANS` reads exactly
-/// the same either way, so the probe alone cannot distinguish "committed"
-/// from "rolled back" -- only "gone" from "still there".
+/// Whether [error]'s own type or errno already says why the transaction
+/// might be gone, in a way [MySqlTransaction._endedByFailure]'s probe
+/// cannot tell apart from an implicit commit: `SERVER_STATUS_IN_TRANS`
+/// reads exactly the same either way, so the probe alone cannot
+/// distinguish "committed" from "rolled back" -- only "gone" from "still
+/// there".
 ///
 /// [MySqlDeadlock] means the server rolled the *whole* transaction back
 /// itself to break the deadlock. [MySqlLockWaitTimeout] rolls back only
 /// the failing statement by default, leaving the flag set and this check
 /// moot -- but `innodb_rollback_on_timeout` can turn that into a whole-
 /// transaction rollback too, on a server this driver does not control.
-/// Either way, a type already classified as one of these is trusted over
-/// the probe, rather than let the probe's blind spot relabel a rollback as
-/// a commit -- which would be a wrong statement about durability, not
-/// just a wrong exception type.
+/// Errno 1206 (`ER_LOCK_TABLE_FULL`) does the same thing by a different
+/// route -- confirmed against a live server: run the lock table out of
+/// memory and InnoDB discards the whole transaction, not just the
+/// statement that hit the limit -- but has no dedicated exception type of
+/// its own to check for, only the generic [MySqlException] that every
+/// errno without one falls to, so it is matched on
+/// [MySqlException.errorCode] instead of on type.
+///
+/// This list is not, and cannot be, exhaustive: 1206 was found by testing
+/// for it, not by reasoning about which errnos behave this way, and
+/// nothing rules out another one this driver has not classified doing the
+/// same. Nothing here still depends on this list being complete, though
+/// -- see [MySqlTransactionEndedByDdl]'s own doc comment, which no longer
+/// claims a durability outcome on the path this function guards, for
+/// exactly that reason. What being on this list buys is precision, not
+/// correctness: an excluded error is rethrown as itself, so a caller
+/// catching [MySqlDeadlock] still catches a [MySqlDeadlock], which is more
+/// useful than the generic "the transaction ended, no further claim"
+/// every rollback this list misses is reported as instead.
 bool _alreadyExplainsTransactionEnding(Object error) =>
-    error is MySqlDeadlock || error is MySqlLockWaitTimeout;
+    error is MySqlDeadlock ||
+    error is MySqlLockWaitTimeout ||
+    (error is MySqlException && error.errorCode == 1206);
 
-/// Thrown from inside a [MySqlTransaction] body when a statement implicitly
-/// committed the transaction -- which is what MySQL does for DDL, such as
-/// `CREATE TABLE`, run inside one.
+/// Thrown from inside a [MySqlTransaction] body when a statement -- whether
+/// it succeeded or failed -- leaves the transaction no longer open.
 ///
-/// By the time this is thrown, [sql] has already run, and its effect --
-/// along with everything the transaction did before it -- is committed and
-/// permanent. The `ROLLBACK` that [MySqlDatabase.transaction] sends once
-/// this propagates out of the body has nothing left to undo.
+/// MySQL commits a transaction implicitly when it runs DDL, such as
+/// `CREATE TABLE`, and that commit happens *before* the statement itself
+/// completes, so it happens whether the statement then succeeds or fails.
 ///
-/// This fires whether [sql] itself succeeded or failed: MySQL's implicit
-/// commit on DDL happens before the statement completes, so a `CREATE
-/// TABLE` that goes on to fail -- the name already exists, say -- still
-/// commits everything before it. When that is why this was thrown, [cause]
-/// is the exception [sql] actually raised; `null` means [sql] succeeded
-/// and the transaction ended anyway.
+/// When [sql] *succeeded* ([cause] is `null`), that implicit commit is the
+/// only way the transaction could have ended, so it is known, not guessed:
+/// [sql]'s effect, and everything the transaction did before it, is
+/// committed and permanent.
+///
+/// When [sql] *failed* ([cause] is the exception it raised), less is known.
+/// All that is observable is that the transaction is gone -- an ERR packet
+/// carries no status flags, so whether that happened by the same implicit
+/// commit or by the server rolling the *whole* transaction back for some
+/// other reason (a deadlock, a lock wait timeout on a server configured to
+/// roll one back in full, or an errno this driver has not classified) is
+/// not something this type can tell. It is still raised, because the
+/// transaction genuinely is gone either way and the caller must not go on
+/// believing it can still be rolled back -- but on this path it does not
+/// claim a commit, because that claim would sometimes be false.
+///
+/// Either way, the `ROLLBACK` that [MySqlDatabase.transaction] sends once
+/// this propagates out of the body does nothing: there is no transaction
+/// left for it to act on.
 final class MySqlTransactionEndedByDdl implements Exception {
   MySqlTransactionEndedByDdl(this.sql, {this.cause});
 
@@ -399,15 +430,16 @@ final class MySqlTransactionEndedByDdl implements Exception {
   /// *failed* statement still ended the transaction. `null` when [sql]
   /// succeeded.
   ///
-  /// The two cases know different amounts. When [sql] succeeded, the
-  /// reason is read directly off its own reply: no ambiguity, so
-  /// [toString] states it as fact. When [sql] failed, all that is known is
-  /// that `SERVER_STATUS_IN_TRANS` came back clear on a follow-up
-  /// check -- see [MySqlTransaction._endedByFailure] -- which is also true
-  /// of a couple of other things this type is never raised for (see
-  /// [_alreadyExplainsTransactionEnding]), so [sql] being the cause is an
-  /// inference, not a reading, and [toString] says so rather than
-  /// asserting it as flatly as the success case.
+  /// The two cases know different amounts. When [sql] succeeded, its own
+  /// reply says the flag is gone, and an implicit commit is the only way
+  /// that happens -- known, not guessed, so [toString] states it as fact.
+  /// When [sql] failed, all that is known is that a follow-up check (see
+  /// [MySqlTransaction._endedByFailure]) found the flag gone too; an ERR
+  /// packet carries no cause. [_alreadyExplainsTransactionEnding] excludes
+  /// the errors already known to mean a rollback rather than a commit, but
+  /// that list cannot be exhaustive -- so on this path [toString] does not
+  /// say "committed": it says the transaction is gone and that which
+  /// outcome happened cannot be told from here.
   final Object? cause;
 
   @override
@@ -419,9 +451,9 @@ final class MySqlTransactionEndedByDdl implements Exception {
           'committed and cannot be rolled back.\nSQL: $sql';
     }
     return 'MySqlTransactionEndedByDdl: the transaction is no longer open. '
-        'This statement failed and is inferred -- not confirmed -- to be '
-        'why. Everything before it is already committed and cannot be '
-        'rolled back.\nSQL: $sql\nCaused by: $withCause';
+        'Whether the work before this statement was committed or rolled '
+        'back depends on why it ended, which this driver cannot tell from '
+        'the wire.\nSQL: $sql\nCaused by: $withCause';
   }
 }
 

@@ -168,13 +168,16 @@ void main() {
         }),
         throwsA(
           // Unlike a successful DDL, this path only knows the transaction
-          // is gone, not that this statement is why -- the message has to
-          // say that difference rather than assert it as flatly as the
-          // success case does.
+          // is gone -- not whether the work before it was committed or
+          // rolled back. Some errno that ends a transaction this way
+          // (ER_LOCK_TABLE_FULL, 1206) has no dedicated exception type, so
+          // a type-based exclusion can never cover every such case; the
+          // message must not claim "committed" the way the success-path
+          // message does.
           isA<MySqlTransactionEndedByDdl>().having(
             (e) => e.toString(),
             'toString',
-            contains('inferred'),
+            contains('cannot tell'),
           ),
         ),
       );
