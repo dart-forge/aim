@@ -143,19 +143,28 @@ class TableCollectorBuilder implements Builder {
     };
   }
 
-  Map<String, String>? _matchColumnType(String methodName) {
-    const columnTypes = {
-      'integer': {'type': 'integer', 'dartType': 'int'},
-      'varchar': {'type': 'varchar', 'dartType': 'String'},
-      'text': {'type': 'text', 'dartType': 'String'},
-      'timestamp': {'type': 'timestamp', 'dartType': 'DateTime'},
-      'serial': {'type': 'serial', 'dartType': 'int'},
-      'jsonb': {'type': 'jsonb', 'dartType': 'Map<String, dynamic>'},
-      'uuid': {'type': 'uuid', 'dartType': 'String'},
-    };
-    return columnTypes[methodName];
-  }
+  Map<String, String>? _matchColumnType(String methodName) =>
+      columnTypesByBuilder[methodName];
 }
+
+/// The column builders this generator understands, keyed by the name of the
+/// function that creates one.
+///
+/// `dartType` is the Dart type written into the generated code for such a
+/// column. What decides that type is the value type on the column classes
+/// in `aim_orm` and `aim_orm_postgres`, which can be changed without
+/// touching this table — a serial column was typed as text there while this
+/// said `int`, and both packages' tests passed. The test
+/// `test/column_type_mapping_test.dart` holds the two together.
+const columnTypesByBuilder = <String, Map<String, String>>{
+  'integer': {'type': 'integer', 'dartType': 'int'},
+  'varchar': {'type': 'varchar', 'dartType': 'String'},
+  'text': {'type': 'text', 'dartType': 'String'},
+  'timestamp': {'type': 'timestamp', 'dartType': 'DateTime'},
+  'serial': {'type': 'serial', 'dartType': 'int'},
+  'jsonb': {'type': 'jsonb', 'dartType': 'Map<String, dynamic>'},
+  'uuid': {'type': 'uuid', 'dartType': 'String'},
+};
 
 /// @PgTable アノテーション付きのテーブル定義を収集する Visitor
 class _PgTableVisitor extends RecursiveAstVisitor<void> {
