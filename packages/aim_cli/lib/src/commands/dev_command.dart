@@ -6,6 +6,7 @@ import 'package:aim_cli/src/edge/edge_dev_runner.dart';
 import 'package:aim_cli/src/functions/functions_dev_runner.dart';
 import 'package:aim_cli/src/hot_reload/hot_reloader.dart';
 import 'package:aim_cli/src/supabase/supabase_dev_runner.dart';
+import 'package:aim_cli/src/utils/process_tree.dart';
 
 class DevCommand extends Command {
   @override
@@ -89,12 +90,11 @@ class DevCommand extends Command {
         print('🔧 Environment variables: ${config.env.keys.join(', ')}');
       }
       print('');
-      ProcessSignal.sigint.watch().listen((_) async {
-        print('\n🛑 Stopping the emulator...');
-        await runner.stop();
-        print('✅ Stopped');
-        exit(0);
-      });
+      _exitWhenSignalled(
+        cleanup: runner.stop,
+        stopping: '🛑 Stopping the emulator...',
+        stopped: '✅ Stopped',
+      );
       try {
         await runner.start();
       } catch (e) {
@@ -151,12 +151,11 @@ class DevCommand extends Command {
       print('🚀 Starting wrangler dev (Cloudflare workerd)...');
       print('📁 Entry point: $entryPoint');
       print('');
-      ProcessSignal.sigint.watch().listen((_) async {
-        print('\n🛑 Stopping wrangler...');
-        await runner.stop();
-        print('✅ Stopped');
-        exit(0);
-      });
+      _exitWhenSignalled(
+        cleanup: runner.stop,
+        stopping: '🛑 Stopping wrangler...',
+        stopped: '✅ Stopped',
+      );
       try {
         await runner.start();
       } catch (e) {
@@ -211,12 +210,11 @@ class DevCommand extends Command {
       print('🚀 Starting `supabase functions serve`...');
       print('📁 Entry point: $entryPoint');
       print('');
-      ProcessSignal.sigint.watch().listen((_) async {
-        print('\n🛑 Stopping `supabase functions serve`...');
-        await runner.stop();
-        print('✅ Stopped');
-        exit(0);
-      });
+      _exitWhenSignalled(
+        cleanup: runner.stop,
+        stopping: '🛑 Stopping `supabase functions serve`...',
+        stopped: '✅ Stopped',
+      );
       try {
         await runner.start();
       } catch (e) {
@@ -270,17 +268,18 @@ class DevCommand extends Command {
       watchPaths: watchPaths,
     );
 
-    // Ctrl+C handler
-    ProcessSignal.sigint.watch().listen((signal) async {
-      print('\n🛑 Stopping server...');
-      await reloader.stop();
-      print('✅ Server stopped');
-      exit(0);
-    });
+    _exitWhenSignalled(
+      cleanup: reloader.stop,
+      stopping: '🛑 Stopping server...',
+      stopped: '✅ Server stopped',
+    );
 
     try {
       await reloader.start();
     } catch (e) {
+      // The server can be up even when the loop around it failed. Leaving it
+      // behind holds the port with nothing watching it.
+      await reloader.stop();
       print('❌ Error: $e');
       exit(1);
     }
@@ -307,8 +306,49 @@ class DevCommand extends Command {
       environment: environment,
     );
 
+    _exitWhenSignalled(
+      cleanup: () => killProcessTree(process.pid),
+      stopping: '🛑 Stopping server...',
+      stopped: '✅ Server stopped',
+    );
+
     // Wait for process to exit
     final exitCode = await process.exitCode;
     exit(exitCode);
+  }
+}
+
+/// Runs [cleanup] when the CLI is asked to quit, then exits.
+///
+/// Ctrl+C reaches the server too, because it shares the CLI's process group,
+/// but `kill <aim dev>` does not and neither does anything else that ends
+/// only this process. Without [cleanup] the server stays up holding its port
+/// with nothing left watching it, and the next `aim dev` cannot bind.
+///
+/// A second signal exits immediately, so a cleanup that hangs can still be
+/// escaped with Ctrl+C.
+void _exitWhenSignalled({
+  required Future<void> Function() cleanup,
+  required String stopping,
+  required String stopped,
+}) {
+  var quitting = false;
+
+  Future<void> quit(ProcessSignal signal) async {
+    if (quitting) {
+      exit(1);
+    }
+    quitting = true;
+    print('\n$stopping');
+    await cleanup();
+    print(stopped);
+    exit(0);
+  }
+
+  ProcessSignal.sigint.watch().listen(quit);
+  if (!Platform.isWindows) {
+    // Watching SIGTERM replaces the default kill, so `kill <aim dev>` also
+    // takes the server with it. Windows has no SIGTERM to watch.
+    ProcessSignal.sigterm.watch().listen(quit);
   }
 }
