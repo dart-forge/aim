@@ -9,7 +9,7 @@ import 'package:aim_mysql/src/exceptions.dart';
 import 'package:aim_mysql/src/protocol/handshake.dart';
 import 'package:aim_mysql/src/protocol/packet.dart';
 import 'package:aim_mysql/src/protocol/packets.dart';
-import 'package:aim_mysql/src/protocol/wire.dart';
+import 'package:aim_mysql/src/statement.dart';
 
 /// How this driver decides whether, and how strictly, to use TLS.
 ///
@@ -185,11 +185,25 @@ abstract interface class ResponseReader {
 /// never used again. Recovery is not attempted, because there is nothing
 /// short of a fresh connection to recover to.
 final class MySqlConnection {
-  MySqlConnection._(this._channel);
+  MySqlConnection._(this._channel) {
+    _statements = statementCacheFor(this);
+  }
 
   final _PacketChannel _channel;
   bool _isOpen = true;
   late String _sqlMode;
+  late final StatementCache _statements;
+
+  /// This connection's cache of prepared statements: created alongside the
+  /// connection itself, and emptied -- closing every statement it holds --
+  /// by [close].
+  ///
+  /// Per connection rather than shared across a pool, because the
+  /// statement ids inside it are: a cache shared across several
+  /// connections would hand one connection's id to another, which would
+  /// either execute a different statement than the one asked for or fail
+  /// outright.
+  StatementCache get statements => _statements;
 
   /// Chains every [exchange] and [close] so that at most one is ever
   /// touching the socket at a time. Held for as long as the caller's
@@ -411,12 +425,14 @@ final class MySqlConnection {
     }
   });
 
-  /// Sends `COM_QUIT` and closes the socket, without waiting for a reply:
-  /// the server does not send one, and waiting would add a timeout to
-  /// every close. Safe to call more than once; every call after the first
-  /// does nothing.
+  /// Empties [statements] -- closing every statement it holds on the
+  /// server -- then sends `COM_QUIT` and closes the socket, without
+  /// waiting for a reply to either: neither has one, and waiting would
+  /// add a timeout to every close. Safe to call more than once; every
+  /// call after the first does nothing.
   Future<void> close() async {
     if (!_isOpen) return;
+    await statements.clear();
     await _withLock(() async {
       if (!_isOpen) return;
       _isOpen = false;
@@ -495,9 +511,28 @@ final class MySqlConnection {
     return sqlMode;
   }
 
-  /// Runs [sql] as a `COM_QUERY` and returns one value out of its reply:
-  /// the last column of its one row, or `null` if [sql] produced no result
-  /// set at all (a plain `OK`, as `SET` statements do).
+  /// Runs [sql] as a `COM_QUERY`: the text protocol, for a statement that
+  /// cannot be prepared at all -- `CREATE PROCEDURE`, `START TRANSACTION`,
+  /// `SET SESSION`, and the like. A caller's own SQL never goes through
+  /// this: [statements] and `executeStatement` are how every ordinary
+  /// statement runs, always as a prepared one.
+  ///
+  /// Reads every result set the reply carries -- see [MySqlResultSets],
+  /// looping for as long as the status flags say another one follows --
+  /// decoding each row as [String] or `null`, never as a typed Dart value:
+  /// there is no per-column type to decode against for a statement this
+  /// driver never binds parameters to or reads application data from.
+  Future<MySqlResultSets> runTextQuery(String sql) {
+    return exchange<MySqlResultSets>(
+      _comQuery,
+      utf8.encode(sql),
+      readTextResultSets,
+    );
+  }
+
+  /// Runs [sql] through [runTextQuery] and returns one value out of its
+  /// reply: the last column of its one row, or `null` if [sql] produced no
+  /// result set at all (a plain `OK`, as `SET` statements do).
   ///
   /// The *last* column, not the only one: this is what lets the same
   /// method read both a single-column `SELECT` and a two-column
@@ -505,57 +540,19 @@ final class MySqlConnection {
   /// having to know which shape it is asking for -- the value the caller
   /// actually wants is always the rightmost one either way.
   ///
-  /// This is the same minimal text-protocol reader [_fetchSqlMode] already
-  /// needed: a column count, that many column definitions read and
-  /// discarded (their contents do not matter to a caller that only wants
-  /// one value), one row's worth of length-encoded values with only the
-  /// last one kept, and the `OK` that ends the result set. Named and made
-  /// public, rather than kept as a private helper, because a caller outside
-  /// this class -- this driver's own tests, most immediately -- has no
-  /// other way to read the server's own accounting of something (e.g.
-  /// `Ssl_cipher`) instead of trusting this driver's claim about itself.
-  ///
-  /// No EOF packet is read between the column definitions and the row.
-  /// `CLIENT_DEPRECATE_EOF` is always among this driver's negotiated
-  /// capabilities (see [negotiateCapabilities]), so the server never sends
-  /// one; reading for it anyway would consume the row packet instead and
-  /// leave the connection one packet short forever after.
-  Future<String?> fetchSingleValue(String sql) {
-    return exchange<String?>(_comQuery, utf8.encode(sql), (reader) async {
-      final first = parseCommandPacket(await reader.next());
-      switch (first) {
-        case ErrPacket err:
-          throw mysqlErrorFor(err);
-        case OkPacket():
-          // No result set at all -- e.g. a SET statement -- so there is no
-          // value to report.
-          return null;
-        case ResultSetHeader(columnCount: final columnCount):
-          for (var i = 0; i < columnCount; i++) {
-            await reader.next(); // Column definition; not needed here.
-          }
-          final row = ByteReader(await reader.next());
-          String? value;
-          for (var i = 0; i < columnCount; i++) {
-            value = row.readLengthEncodedString();
-          }
-          final terminator = parseCommandPacket(await reader.next());
-          if (terminator is! OkPacket) {
-            throw MySqlProtocolException(
-              'expected the result set to end with OK, got a '
-              '${terminator.runtimeType}',
-            );
-          }
-          return value;
-        case EofPacket():
-        case AuthSwitchRequest():
-        case AuthMoreData():
-          throw MySqlProtocolException(
-            'expected OK or a result set header in reply to fetchSingleValue, '
-            'got a ${first.runtimeType}',
-          );
-      }
-    });
+  /// Made public, rather than kept as a private helper, because a caller
+  /// outside this class -- this driver's own tests, most immediately --
+  /// has no other way to read the server's own accounting of something
+  /// (e.g. `Ssl_cipher`) instead of trusting this driver's claim about
+  /// itself.
+  Future<String?> fetchSingleValue(String sql) async {
+    final withRows = (await runTextQuery(sql)).withRows;
+    if (withRows == null) {
+      // No result set at all -- e.g. a SET statement -- so there is no
+      // value to report.
+      return null;
+    }
+    return withRows.rows.single.last as String?;
   }
 
   /// Marks the connection unusable and tears down the socket, without
