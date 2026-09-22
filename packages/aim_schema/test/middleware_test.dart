@@ -33,9 +33,13 @@ void main() {
           details.map((d) => d['path']),
           containsAll(<String>['name', 'age']),
         );
-        for (final detail in details) {
-          expect(detail['message'], isA<String>());
-        }
+        // Not just "is a String" — '' passes that too. Check the actual
+        // wording for each field.
+        final byPath = {
+          for (final detail in details) detail['path']: detail['message'],
+        };
+        expect(byPath['name'], 'is required');
+        expect(byPath['age'], 'must be at least 0');
       },
     );
 

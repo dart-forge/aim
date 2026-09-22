@@ -14,6 +14,26 @@ final person = Schema(
   ),
 );
 
+final withOptionalAddress = Schema(
+  (r) => (name: r.string('name'), address: r.objectOrNull('address', address)),
+);
+
+final withOptionalAddressAndTrailingField = Schema(
+  (r) => (address: r.objectOrNull('address', address), tag: r.string('tag')),
+);
+
+final withRequiredAddressAndTrailingField = Schema(
+  (r) => (address: r.object('address', address), tag: r.string('tag')),
+);
+
+final withJobsAndTrailingField = Schema(
+  (r) => (jobs: r.objectList('jobs', address), tag: r.string('tag')),
+);
+
+final withBoundedJobs = Schema(
+  (r) => (jobs: r.objectList('jobs', address, minItems: 1, maxItems: 2)),
+);
+
 void main() {
   test('nested records keep their types two levels down', () {
     final p = person.parse({
@@ -79,5 +99,94 @@ void main() {
         ),
       ),
     );
+  });
+
+  group('objectOrNull', () {
+    test('a missing field reads as null', () {
+      final result = withOptionalAddress.parse({'name': 'naoki'});
+      expect(result.address, isNull);
+    });
+
+    test('a populated field validates and returns it', () {
+      final result = withOptionalAddress.parse({
+        'name': 'naoki',
+        'address': {'city': 'tokyo', 'zip': '100'},
+      });
+      expect(result.address!.city, 'tokyo');
+    });
+
+    test('the wrong type is an error, and the field after it still runs', () {
+      expect(
+        () => withOptionalAddressAndTrailingField.parse({
+          'address': 'not an object',
+          'tag': 1,
+        }),
+        throwsA(
+          isA<ValidationException>().having(
+            (e) => e.errors.map((v) => v.path).toList(),
+            'paths',
+            ['address', 'tag'],
+          ),
+        ),
+      );
+    });
+  });
+
+  group('object with a non-Map value', () {
+    test('is an error, and the procedure keeps running rather than stopping '
+        'at the bad field', () {
+      expect(
+        () => withRequiredAddressAndTrailingField.parse({
+          'address': 'not an object',
+          'tag': 1,
+        }),
+        throwsA(
+          isA<ValidationException>().having(
+            (e) => e.errors.map((v) => v.path).toList(),
+            'paths',
+            ['address', 'tag'],
+          ),
+        ),
+      );
+    });
+  });
+
+  group('objectList with a non-Map element', () {
+    test('is an error for that element, and the procedure keeps running '
+        'rather than stopping at the bad element', () {
+      expect(
+        () => withJobsAndTrailingField.parse({
+          'jobs': ['not an object'],
+          'tag': 1,
+        }),
+        throwsA(
+          isA<ValidationException>().having(
+            (e) => e.errors.map((v) => v.path).toList(),
+            'paths',
+            ['jobs[0]', 'tag'],
+          ),
+        ),
+      );
+    });
+  });
+
+  group('objectList minItems/maxItems', () {
+    test('enforces both', () {
+      expect(
+        () => withBoundedJobs.parse({'jobs': <Object>[]}),
+        throwsA(isA<ValidationException>()),
+      );
+      final threeJobs = [
+        {'city': 'a', 'zip': '1'},
+        {'city': 'b', 'zip': '2'},
+        {'city': 'c', 'zip': '3'},
+      ];
+      expect(
+        () => withBoundedJobs.parse({'jobs': threeJobs}),
+        throwsA(isA<ValidationException>()),
+      );
+      final oneJob = [threeJobs.first];
+      expect(withBoundedJobs.parse({'jobs': oneJob}).jobs.length, 1);
+    });
   });
 }
