@@ -10,7 +10,7 @@ generation, no generated files.
 Aim already uses the word "schema" for something else: `aim_orm`'s schema is
 the shape of a database — the `aim.database.schema` setting and the tables
 under `lib/schema/`. `aim_schema` is unrelated to that. It describes the
-shape of a request or a response, not a table.
+shape of a request (and, later, a response), not a table.
 
 ## Overview
 
@@ -88,9 +88,12 @@ optional field's Dart type reflects that at compile time.
 
 By default, `parse` is strict: a JSON body's `34` reads as an `int`, and its
 `"34"` is a type error. Set `coerce: true` when the input is text throughout
-— a query string, form fields, headers — so `"34"` reads as `34`. `aim_core`'s
-`Context.parseQuery` (added by this package) always coerces, since a query
-string has no types of its own.
+— a query string, form fields, headers — so `"34"` reads as `34`. Coercion
+is one-directional: it never turns a JSON number or boolean into a string,
+so a JSON body's `{"name": 34}` is still a type error for a `string` field
+even with `coerce: true`. The `Context.parseQuery` this package adds to
+`aim_core`'s `Context` always coerces, since a query string has no types of
+its own.
 
 ## What is not here yet
 

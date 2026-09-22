@@ -13,11 +13,17 @@ head:
 without a cast, without a code generation step, and without a second,
 hand-written type to keep in sync with the validation rules.
 
+## Installation
+
+```bash
+dart pub add aim_schema
+```
+
 ::: tip Not the other schema
 `aim_orm` also uses the word "schema", for the shape of a database table
 (the `aim.database.schema` setting, `lib/schema/`). This page is about
-`aim_schema`, which describes the shape of a request or a response, not a
-table.
+`aim_schema`, which describes the shape of a request (and, later, a
+response), not a table.
 :::
 
 ## Why
@@ -85,6 +91,17 @@ final createUser = Schema((r) => (
 | `r.boolean(name)` | `bool` | — |
 | `r.dateTime(name)` | `DateTime` | parsed from an ISO 8601 string |
 
+An `integer` field also accepts a JSON number with nothing after the decimal
+point — `3.0`, not `3.7` — regardless of `coerce`. Some JSON encoders (a
+Python client, Dart's own `double` literals) write a whole number this way,
+and rejecting it would be a 400 the caller has no way to act on: the value
+really is the integer the schema asked for.
+
+Every scalar type here also has a list form (`stringList`, `integerList`,
+...) and a nullable form of each (`stringOrNull`, `stringListOrNull`, ...) —
+see [Nested and lists](#nested-and-lists) below and the `Reader` API
+reference for the complete set.
+
 ### Optional fields
 
 Every method above reads a *required* field: `parse` reports an error if
@@ -105,6 +122,17 @@ return type — Dart resolves `string`'s return type as `String` at compile
 time no matter what you pass it. Giving optional fields their own method is
 what lets `nickname` above come back as `String?` while `name` comes back as
 `String`, both inferred, both without a cast.
+
+An `OrNull` field cannot tell "the key was absent" apart from "the key was
+present with an explicit `null`" — both read as `null`. A required field
+reports a missing key as `"is required"`, not as a type error, so that case
+is distinguishable, but there's no way to ask `aim_schema` to require the
+*key* while still accepting `null` as its value. This matters for a PATCH
+endpoint, where the two are normally different instructions —
+`{"nickname": null}` means "clear it", an absent `nickname` means "leave it
+alone" — so a schema alone can't express that distinction; a PATCH handler
+needs to inspect the raw body for which keys were sent, separately from
+validating the values that were.
 
 ### Enums
 
@@ -205,15 +233,21 @@ final search = Schema((r) => (page: r.integer('page', min: 1)));
 search.parse({'page': '3'}, coerce: true).page; // 3, an int
 ```
 
-`coerce` only affects how a *scalar* is read — `'true'`/`'1'` for a
-`boolean`, a numeric string for `integer` or `number`. A value that isn't a
-valid representation of its type is still an error either way; `coerce`
-doesn't fall back to a default. A `DateTime` field parses the same string
-whether or not `coerce` is set, since a date is written as a string in JSON
-too.
+`coerce` is one-directional: it only lets a scalar's own text representation
+stand in for it — `'true'`/`'1'`/`'0'`/`'false'` for a `boolean`, a numeric
+string for `integer` or `number`. It never goes the other way. A JSON body's
+`{"name": 34}` is a type error for a `string` field whether or not `coerce`
+is set — a number is never turned into a string, so one schema can be
+shared between a JSON body and a coerced query string without a wrongly
+typed body silently becoming text. A value that isn't a valid representation
+of its type is still an error either way; `coerce` doesn't fall back to a
+default. A `DateTime` field parses the same string whether or not `coerce`
+is set, since a date is written as a string in JSON too.
 
-Inside `aim_server`, `Context.parseQuery` reads `c.query` through a schema
-with `coerce` already on, since a query string is text by nature:
+`Context.parseQuery` — added to `aim_core`'s `Context` by this package, so
+it works the same on every one of Aim's runtimes, not just `aim_server` —
+reads `c.query` through a schema with `coerce` already on, since a query
+string is text by nature:
 
 ```dart
 app.get('/items', (c) async {
@@ -302,7 +336,7 @@ just the symptom: a schema may only read fields and hand back the raw
 values; do `DateTime.parse`, substring work, arithmetic, and the like on the
 result of `parse`, in your own code, not inside the schema.
 
-## What is not here yet
+## Describing a schema
 
 `toJsonSchema()` returns a JSON Schema description of the request shape a
 `Schema` declares — the same information the validating reader checks
@@ -314,7 +348,10 @@ print(createUser.toJsonSchema());
 //  required: [name, age]}
 ```
 
-That's the material an OpenAPI document or a response schema would be built
-from. Neither exists yet: there is no response-schema counterpart to
-`Schema`, and nothing in this package turns a `toJsonSchema()` output (or a
-whole app's routes) into an OpenAPI document.
+This works today, for any schema — nested objects, lists, enums, and every
+constraint a `Reader` method accepts all come through, and it's covered by
+tests. It's the material an OpenAPI document or a response schema would be
+built from. Neither of those exists yet, though: there is no
+response-schema counterpart to `Schema`, and nothing in this package turns
+a `toJsonSchema()` output (or a whole app's routes) into an OpenAPI
+document.
