@@ -43,6 +43,7 @@ A lightweight, modular web framework for Dart with native PostgreSQL support and
 |---------|---------|-------------|
 | [aim_database](./packages/aim_database) | [![Pub Version](https://img.shields.io/pub/v/aim_database)](https://pub.dev/packages/aim_database) | Database abstraction layer |
 | [aim_postgres](./packages/aim_postgres) | [![Pub Version](https://img.shields.io/pub/v/aim_postgres)](https://pub.dev/packages/aim_postgres) | Native PostgreSQL driver |
+| [aim_mysql](./packages/aim_mysql) | [![Pub Version](https://img.shields.io/pub/v/aim_mysql)](https://pub.dev/packages/aim_mysql) | Native MySQL driver |
 | [aim_orm](./packages/aim_orm) | [![Pub Version](https://img.shields.io/pub/v/aim_orm)](https://pub.dev/packages/aim_orm) | ORM abstraction layer |
 | [aim_orm_postgres](./packages/aim_orm_postgres) | [![Pub Version](https://img.shields.io/pub/v/aim_orm_postgres)](https://pub.dev/packages/aim_orm_postgres) | PostgreSQL ORM implementation |
 | [aim_orm_codegen](./packages/aim_orm_codegen) | [![Pub Version](https://img.shields.io/pub/v/aim_orm_codegen)](https://pub.dev/packages/aim_orm_codegen) | ORM code generator |
