@@ -1,3 +1,13 @@
+## Unreleased
+
+- New: `scanSqlPlaceholders` finds the `:name` and `?` parameter
+  placeholders in a statement and skips the ones inside a string literal, a
+  quoted identifier or a comment. `SqlDialect` carries the three rules that
+  differ between PostgreSQL and MySQL — which character quotes an
+  identifier, whether a backslash escapes inside a literal, and whether `#`
+  starts a comment. A driver rewrites the placeholders into its own form;
+  finding them is shared.
+
 ## 0.3.0
 
 - Document the value contract on `Database` / `Transaction`: drivers return
