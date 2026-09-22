@@ -1,5 +1,6 @@
 import 'package:aim_database/aim_database.dart';
 import 'package:aim_postgres/src/pg_connection.dart';
+import 'package:aim_postgres/src/named_parameters.dart';
 import 'package:aim_postgres/src/pool/pool.dart';
 
 abstract interface class PostgresQueryable {
@@ -114,9 +115,7 @@ class PostgresDatabase extends Database implements PostgresQueryable {
   }
 
   @override
-  Future<T> transaction<T>(
-    Future<T> Function(PostgresTransaction tx) fn,
-  ) {
+  Future<T> transaction<T>(Future<T> Function(PostgresTransaction tx) fn) {
     return _withConnection((conn, discard) async {
       await conn.sendSimpleQuery('BEGIN');
       try {
@@ -172,8 +171,12 @@ class PostgresTransaction implements Transaction, PostgresQueryable {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   }) async {
-    final result =
-        await _runQuery(_connection, sql, params: params, args: args);
+    final result = await _runQuery(
+      _connection,
+      sql,
+      params: params,
+      args: args,
+    );
     return result.toMaps();
   }
 
@@ -183,8 +186,12 @@ class PostgresTransaction implements Transaction, PostgresQueryable {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   }) async {
-    final result =
-        await _runQuery(_connection, sql, params: params, args: args);
+    final result = await _runQuery(
+      _connection,
+      sql,
+      params: params,
+      args: args,
+    );
     return result.affectedRows;
   }
 }
@@ -208,7 +215,10 @@ Future<QueryResult> _runQuery(
   }
 
   if (hasParams) {
-    final (convertedSql, positionalParams) = _convertNamedParams(sql, params);
+    final (convertedSql, positionalParams) = convertNamedParameters(
+      sql,
+      params,
+    );
     return conn.sendExtendedQuery(convertedSql, positionalParams);
   }
 
@@ -217,29 +227,4 @@ Future<QueryResult> _runQuery(
   }
 
   return conn.sendSimpleQuery(sql);
-}
-
-/// Converts named parameters (:id) to positional parameters ($1).
-///
-/// Returns a tuple containing the converted SQL string and the list of
-/// positional parameter values.
-(String, List<dynamic>) _convertNamedParams(
-  String sql,
-  Map<String, dynamic> params,
-) {
-  var convertedSql = sql;
-  final positionalParams = <dynamic>[];
-  var paramIndex = 1;
-
-  // Convert parameters in order
-  for (final entry in params.entries) {
-    final placeholder = ':${entry.key}';
-    if (convertedSql.contains(placeholder)) {
-      convertedSql = convertedSql.replaceAll(placeholder, '\$$paramIndex');
-      positionalParams.add(entry.value);
-      paramIndex++;
-    }
-  }
-
-  return (convertedSql, positionalParams);
 }
