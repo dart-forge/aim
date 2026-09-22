@@ -35,8 +35,13 @@ void main() {
 
     test('strips the sign byte from a modulus with its high bit set', () {
       // DER INTEGERs are signed, so a real 2048-bit modulus always arrives
-      // with a leading zero. Keeping it would make the number 256 times too
-      // large and every ciphertext wrong.
+      // with a leading zero. Stripping it is the correct reading of the
+      // encoding, though it is numerically inert here: a leading zero
+      // contributes nothing to a shift-and-add accumulation, so the value
+      // is the same either way. What is NOT inert is the key's width —
+      // see the byteLength tests, which take it from bitLength rather than
+      // from the array, because the array is one byte longer than the
+      // number it encodes.
       final modulus = Uint8List.fromList([0x00, 0xff, 0xff]);
 
       final key = parsePublicKeyPem(
@@ -63,6 +68,24 @@ void main() {
       expect(key.modulus.bitLength, 2048);
       expect(key.exponent, BigInt.from(65537));
       expect(key.byteLength, 256, reason: 'k, the width of a ciphertext');
+    });
+
+    test('reads the one-byte long form too, not just the two-byte one', () {
+      // Between 128 and 255 content bytes DER uses 0x81 followed by a
+      // single length byte. Every other long-form case here goes through
+      // 0x82, so without this the 0x81 branch is never taken.
+      final modulus = Uint8List.fromList([
+        0x00,
+        0xc0,
+        ...List.filled(159, 0x5a),
+      ]);
+
+      final key = parsePublicKeyPem(
+        pemPublicKey(subjectPublicKeyInfo(modulus, [0x01, 0x00, 0x01])),
+      );
+
+      expect(key.modulus.bitLength, 1280);
+      expect(key.byteLength, 160);
     });
 
     test('byteLength rounds up for a modulus that is not a whole byte', () {
@@ -280,7 +303,13 @@ void main() {
   });
 
   group('encrypting end to end', () {
-    final key = parsePublicKeyPem(samplePublicKeyPem);
+    // Parsed inside a late final rather than eagerly in the group body.
+    // A parse that throws while the group is being DECLARED aborts loading
+    // the whole file, so one broken parser reports as "failed to load" with
+    // no individual results at all — every other test in the file loses its
+    // verdict. Deferring it means a parser failure fails these tests and
+    // only these.
+    late final key = parsePublicKeyPem(samplePublicKeyPem);
 
     test('produces a ciphertext of the key width', () {
       expect(
