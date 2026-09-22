@@ -6,6 +6,7 @@ import 'package:aim_mysql/src/auth/caching_sha2.dart';
 import 'package:aim_mysql/src/auth/native_password.dart';
 import 'package:aim_mysql/src/exceptions.dart';
 import 'package:aim_mysql/src/protocol/handshake.dart';
+import 'package:aim_mysql/src/protocol/wire.dart';
 import 'package:test/test.dart';
 
 import 'der_fixtures.dart';
@@ -61,6 +62,15 @@ Uint8List nulTerminated(String password) =>
     Uint8List.fromList([...utf8.encode(password), 0]);
 
 bool containsBytes(List<int> haystack, List<int> needle) {
+  // An empty needle is "contained" in everything, so a caller that passes
+  // one gets an assertion that cannot fail. That is not hypothetical: an
+  // earlier version of the no-password test below asked whether the sent
+  // packet contained the empty-password token, which IS empty — so the
+  // check passed no matter what the driver sent. Refuse it here rather
+  // than let the next caller find out the same way.
+  if (needle.isEmpty) {
+    throw ArgumentError.value(needle, 'needle', 'would match anything');
+  }
   for (var i = 0; i + needle.length <= haystack.length; i++) {
     var match = true;
     for (var j = 0; j < needle.length; j++) {
@@ -327,6 +337,29 @@ void main() {
       );
     });
 
+    test('a switch then full auth uses the post-switch scramble', () async {
+      // The switch-then-token and switch-then-fast-path cases are covered
+      // separately. This one pins that the public-key branch also reaches
+      // for the NEW scramble, since that is the branch where a stale one
+      // would be hardest to notice.
+      final transport = ScriptedTransport([
+        authSwitch('caching_sha2_password', otherScramble),
+        authMoreData([0x04]),
+        authMoreData(utf8.encode(samplePublicKeyPem)),
+        okPacket(),
+      ]);
+
+      await run(transport, plugin: 'mysql_native_password');
+
+      expect(transport.sent, hasLength(4));
+      expect(
+        transport.sent[1],
+        cachingSha2FastAuthToken(password: 'secret', scramble: otherScramble),
+      );
+      expect(transport.sent[2], [0x02]);
+      expect(transport.sent[3], hasLength(256));
+    });
+
     test('a plugin we do not support is named in the failure', () async {
       final transport = ScriptedTransport([
         authSwitch('sha256_password', otherScramble),
@@ -363,6 +396,42 @@ void main() {
   });
 
   group('failing', () {
+    test('gives up rather than looping on switch after switch', () async {
+      // A server that keeps asking for a different plugin must not spin
+      // this exchange forever. Ten rounds is the cap; the eleventh packet
+      // is deliberately absent, so if the cap were off by one the transport
+      // would run dry and report its own StateError instead.
+      final transport = ScriptedTransport([
+        for (var i = 0; i < 10; i++)
+          authSwitch('mysql_native_password', otherScramble),
+      ]);
+
+      await expectLater(run(transport), throwsA(isA<MySqlProtocolException>()));
+    });
+
+    test('an unexpected packet while waiting for the public key', () async {
+      // The reply to the 0x02 request has to be more data carrying the PEM.
+      // Anything else means the stream is out of step, and this is the one
+      // place in the exchange where being out of step could mean sending a
+      // password somewhere unintended.
+      final transport = ScriptedTransport([
+        authMoreData([0x04]),
+        okPacket(),
+      ]);
+
+      await expectLater(run(transport), throwsA(isA<MySqlProtocolException>()));
+    });
+
+    test('an ERR while waiting for the public key is still an ERR', () async {
+      // Errors keep their classification wherever they arrive.
+      final transport = ScriptedTransport([
+        authMoreData([0x04]),
+        errPacket(1045, 'Access denied'),
+      ]);
+
+      await expectLater(run(transport), throwsA(isA<MySqlAccessDenied>()));
+    });
+
     test('an ERR becomes a classified exception', () async {
       await expectLater(
         run(ScriptedTransport([errPacket(1045, 'Access denied')])),
@@ -402,18 +471,21 @@ void main() {
   });
 
   group('an account with no password', () {
-    test('sends an empty auth response and is let in', () async {
+    test('sends an auth response that is actually empty', () async {
+      // Read the field rather than searching for its contents. Asking
+      // whether the packet "contains" an empty token is a question with
+      // only one answer.
       final transport = ScriptedTransport([okPacket()]);
 
       await run(transport, password: '');
 
+      final reader = ByteReader(transport.sent.single);
+      reader.skip(32);
+      expect(reader.readNulTerminatedString(), 'test');
       expect(
-        containsBytes(
-          transport.sent.single,
-          cachingSha2FastAuthToken(password: '', scramble: scramble),
-        ),
-        isTrue,
-        reason: 'which is empty, so this only says nothing went wrong',
+        reader.readLengthEncodedString(),
+        isEmpty,
+        reason: 'the server reads a zero-length response as no password',
       );
       expect(transport.sent, hasLength(1));
     });
