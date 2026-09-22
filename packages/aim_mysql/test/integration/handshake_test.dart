@@ -22,13 +22,35 @@ void main() {
         expect(await connection.ping(), isTrue);
       });
 
-      test('connects over TLS', () async {
+      test('connects over TLS, and the server agrees that it is TLS', () async {
         // The image generates a self-signed certificate, so require has to
-        // not verify it. That it connects at all is the point.
+        // not verify it.
+        //
+        // Ssl_cipher is the SERVER's accounting of the session, not this
+        // driver's claim about it. Without reading it, "connects over TLS"
+        // is satisfied by a connection that quietly stayed in plaintext —
+        // these containers accept both, so success proves nothing about
+        // which one happened.
         final connection = await open('${lease.url}?sslmode=require');
         addTearDown(connection.close);
 
         expect(await connection.ping(), isTrue);
+        expect(
+          await connection.fetchSingleValue("SHOW STATUS LIKE 'Ssl_cipher'"),
+          isNotEmpty,
+        );
+      });
+
+      test('and a plaintext connection is not, by the same measure', () async {
+        // The other side of the same reading, so the assertion above is
+        // known to distinguish the two rather than always holding.
+        final connection = await open('${lease.url}?sslmode=disable');
+        addTearDown(connection.close);
+
+        expect(
+          await connection.fetchSingleValue("SHOW STATUS LIKE 'Ssl_cipher'"),
+          isEmpty,
+        );
       });
 
       test('verify-full refuses the self-signed certificate', () async {
@@ -45,11 +67,22 @@ void main() {
         );
       });
 
-      test('prefer reaches the server that offers TLS', () async {
+      test('prefer takes the TLS the server offers', () async {
+        // prefer is the DEFAULT, and it exists so that leaving sslmode out
+        // of the URL does not quietly produce a plaintext connection. So
+        // this is the one path where "it connected" is the least
+        // interesting thing that could be asserted: a prefer arm that
+        // ignored what the server offered and stayed plaintext would
+        // connect and ping just as happily.
         final connection = await open('${lease.url}?sslmode=prefer');
         addTearDown(connection.close);
 
         expect(await connection.ping(), isTrue);
+        expect(
+          await connection.fetchSingleValue("SHOW STATUS LIKE 'Ssl_cipher'"),
+          isNotEmpty,
+          reason: 'prefer must not silently settle for plaintext',
+        );
       });
 
       test('reads sql_mode off the session', () async {
@@ -64,13 +97,35 @@ void main() {
         );
       });
 
-      test('the dialect follows NO_BACKSLASH_ESCAPES', () async {
+      test('the dialect follows NO_BACKSLASH_ESCAPES, both ways', () async {
+        // Comparing the dialect against the session's own sql_mode reads
+        // like a real check and is not one: the default mode never contains
+        // NO_BACKSLASH_ESCAPES, so the comparison reduces to `true == !false`
+        // and holds even against a getter that ignores sql_mode entirely.
+        // The only way to test a branch is to reach it.
+        //
+        // Turning the mode on also exercises refreshSqlMode end to end,
+        // which nothing else here does.
         final connection = await open('${lease.url}?sslmode=disable');
         addTearDown(connection.close);
 
         expect(
+          connection.sqlMode,
+          isNot(contains('NO_BACKSLASH_ESCAPES')),
+          reason: 'the default mode, which is where we start',
+        );
+        expect(connection.dialect.backslashEscapes, isTrue);
+
+        await connection.fetchSingleValue(
+          "SET SESSION sql_mode = 'NO_BACKSLASH_ESCAPES'",
+        );
+        await connection.refreshSqlMode();
+
+        expect(connection.sqlMode, contains('NO_BACKSLASH_ESCAPES'));
+        expect(
           connection.dialect.backslashEscapes,
-          !connection.sqlMode.contains('NO_BACKSLASH_ESCAPES'),
+          isFalse,
+          reason: 'the other branch, reached rather than inferred',
         );
       });
 

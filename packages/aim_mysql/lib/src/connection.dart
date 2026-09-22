@@ -478,57 +478,84 @@ final class MySqlConnection {
     _sqlMode = await _fetchSqlMode();
   }
 
-  /// Runs `SELECT @@session.sql_mode` and reads back its one row, one
-  /// column, with the minimal text-protocol reader that needs: a column
-  /// count, that many column definitions read and discarded (their
-  /// contents do not matter here), one row holding a single length-encoded
-  /// string, and the OK that ends the result set.
+  /// Runs `SELECT @@session.sql_mode` and reads back its value through
+  /// [fetchSingleValue], failing loudly if the server ever answers with SQL
+  /// NULL -- which it never does for a real session, but `fetchSingleValue`
+  /// itself has to allow for a null result (e.g. a bare `SET`), so this is
+  /// the one place that turns "no value" into a protocol error rather than
+  /// a shrug.
+  Future<String> _fetchSqlMode() async {
+    final sqlMode = await fetchSingleValue('SELECT @@session.sql_mode');
+    if (sqlMode == null) {
+      throw MySqlProtocolException(
+        '@@session.sql_mode came back as SQL NULL, which a real server '
+        'never sends',
+      );
+    }
+    return sqlMode;
+  }
+
+  /// Runs [sql] as a `COM_QUERY` and returns one value out of its reply:
+  /// the last column of its one row, or `null` if [sql] produced no result
+  /// set at all (a plain `OK`, as `SET` statements do).
+  ///
+  /// The *last* column, not the only one: this is what lets the same
+  /// method read both a single-column `SELECT` and a two-column
+  /// `SHOW STATUS LIKE '...'` (`Variable_name`, `Value`) without the caller
+  /// having to know which shape it is asking for -- the value the caller
+  /// actually wants is always the rightmost one either way.
+  ///
+  /// This is the same minimal text-protocol reader [_fetchSqlMode] already
+  /// needed: a column count, that many column definitions read and
+  /// discarded (their contents do not matter to a caller that only wants
+  /// one value), one row's worth of length-encoded values with only the
+  /// last one kept, and the `OK` that ends the result set. Named and made
+  /// public, rather than kept as a private helper, because a caller outside
+  /// this class -- this driver's own tests, most immediately -- has no
+  /// other way to read the server's own accounting of something (e.g.
+  /// `Ssl_cipher`) instead of trusting this driver's claim about itself.
   ///
   /// No EOF packet is read between the column definitions and the row.
   /// `CLIENT_DEPRECATE_EOF` is always among this driver's negotiated
   /// capabilities (see [negotiateCapabilities]), so the server never sends
   /// one; reading for it anyway would consume the row packet instead and
   /// leave the connection one packet short forever after.
-  Future<String> _fetchSqlMode() {
-    return exchange<String>(
-      _comQuery,
-      utf8.encode('SELECT @@session.sql_mode'),
-      (reader) async {
-        final first = parseCommandPacket(await reader.next());
-        switch (first) {
-          case ErrPacket err:
-            throw mysqlErrorFor(err);
-          case ResultSetHeader(columnCount: final columnCount):
-            for (var i = 0; i < columnCount; i++) {
-              await reader.next(); // Column definition; not needed here.
-            }
-            final row = ByteReader(await reader.next());
-            final sqlMode = row.readLengthEncodedString();
-            if (sqlMode == null) {
-              throw MySqlProtocolException(
-                '@@session.sql_mode came back as SQL NULL, which a real '
-                'server never sends',
-              );
-            }
-            final terminator = parseCommandPacket(await reader.next());
-            if (terminator is! OkPacket) {
-              throw MySqlProtocolException(
-                'expected the sql_mode result set to end with OK, got a '
-                '${terminator.runtimeType}',
-              );
-            }
-            return sqlMode;
-          case OkPacket():
-          case EofPacket():
-          case AuthSwitchRequest():
-          case AuthMoreData():
+  Future<String?> fetchSingleValue(String sql) {
+    return exchange<String?>(_comQuery, utf8.encode(sql), (reader) async {
+      final first = parseCommandPacket(await reader.next());
+      switch (first) {
+        case ErrPacket err:
+          throw mysqlErrorFor(err);
+        case OkPacket():
+          // No result set at all -- e.g. a SET statement -- so there is no
+          // value to report.
+          return null;
+        case ResultSetHeader(columnCount: final columnCount):
+          for (var i = 0; i < columnCount; i++) {
+            await reader.next(); // Column definition; not needed here.
+          }
+          final row = ByteReader(await reader.next());
+          String? value;
+          for (var i = 0; i < columnCount; i++) {
+            value = row.readLengthEncodedString();
+          }
+          final terminator = parseCommandPacket(await reader.next());
+          if (terminator is! OkPacket) {
             throw MySqlProtocolException(
-              'expected a result set header while reading sql_mode, got a '
-              '${first.runtimeType}',
+              'expected the result set to end with OK, got a '
+              '${terminator.runtimeType}',
             );
-        }
-      },
-    );
+          }
+          return value;
+        case EofPacket():
+        case AuthSwitchRequest():
+        case AuthMoreData():
+          throw MySqlProtocolException(
+            'expected OK or a result set header in reply to fetchSingleValue, '
+            'got a ${first.runtimeType}',
+          );
+      }
+    });
   }
 
   /// Marks the connection unusable and tears down the socket, without
