@@ -69,6 +69,9 @@ void main(List<String> args) {
   // Update aim_* pins embedded in the aim_cli scaffold templates
   _updateCliTemplates(newVersion);
 
+  // Update the aim_cli --version constant
+  _updateCliVersionConstant(newVersion);
+
   // Update docs version
   _updateDocsVersion(newVersion);
 
@@ -278,6 +281,28 @@ void _updateCliTemplates(String newVersion) {
   final updated = bumpTemplatePins(content, newVersion);
   if (updated != content) {
     templatesFile.writeAsStringSync(updated);
+  }
+}
+
+/// Rewrites the `aimCliVersion` constant that `aim --version` prints.
+///
+/// It has to be a source constant rather than something read from
+/// pubspec.yaml at runtime, since aim_cli ships as a compiled executable.
+void _updateCliVersionConstant(String newVersion) {
+  final versionFile = File('packages/aim_cli/lib/src/version.dart');
+  if (!versionFile.existsSync()) {
+    stdout.writeln(
+      'Warning: aim_cli version.dart not found, skipping --version constant update.',
+    );
+    return;
+  }
+
+  final content = versionFile.readAsStringSync();
+  final updated = bumpConstVersion(content, 'aimCliVersion', newVersion);
+
+  if (updated != content) {
+    versionFile.writeAsStringSync(updated);
+    stdout.writeln('aim_cli: version.dart → $newVersion');
   }
 }
 
