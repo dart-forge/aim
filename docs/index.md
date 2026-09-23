@@ -1,13 +1,13 @@
 ---
 layout: home
 title: Aim - Modular Dart Ecosystem
-titleTemplate: Server, Database, ORM - on the Dart VM, Cloudflare Workers, and Cloud Functions
-description: A modular ecosystem for Dart. Web server, database, ORM, and CLI tools as independent packages. Runs on the Dart VM, on Cloudflare Workers via WebAssembly, and on Cloud Functions for Firebase.
+titleTemplate: Server, Database, ORM - on the Dart VM, Cloudflare Workers, Deno, and Cloud Functions
+description: A modular ecosystem for Dart. Web server, database, ORM, and CLI tools as independent packages. Runs on the Dart VM, on Cloudflare Workers and Deno-based runtimes via WebAssembly, and on Cloud Functions for Firebase.
 
 hero:
   name: "Aim"
   text: "Modular ecosystem for Dart"
-  tagline: Web server, database, ORM - on the Dart VM, Cloudflare Workers, and Cloud Functions
+  tagline: Web server, database, ORM - on the Dart VM, Cloudflare Workers, Deno, and Cloud Functions
   actions:
     - theme: brand
       text: Server
@@ -54,3 +54,68 @@ features:
     title: Modular
     details: Use what you need. Each package works independently - add only what your project requires.
 ---
+
+## Architecture
+
+Aim separates reusable web primitives from runtime adapters. `aim_core`
+holds routing, middleware, and the `Context` API; it has no dependency on
+`dart:io`, WebAssembly, or any specific host. Each runtime is a thin
+adapter on top of it, and `aim_workers` (Cloudflare workerd) and
+`aim_deno` (Deno-based runtimes, including Supabase Edge Functions) share
+a common edge layer, `aim_edge`, that application code never depends on
+directly.
+
+```text
+                          Aim application
+                                |
+                             aim_core
+                  (routing, middleware, Context)
+        +-----------+-----------------+-----------------+
+        |           |                 |
+     dart:io    Cloud Functions      aim_edge
+   aim_server    aim_functions   (shared edge plumbing)
+                                  +--------+--------+
+                                  |                 |
+                               workerd            Deno
+                             aim_workers        aim_deno
+```
+
+The practical effect: the same handlers and the same middleware packages
+(`aim_server_cors`, `aim_server_jwt`, and so on) run unchanged on every
+target except `aim_server_static` and file-saving in
+`aim_server_multipart`, which need a filesystem and are VM-only. See
+[Cloudflare Workers](/server/workers), [Supabase Edge Functions](/server/supabase),
+and [Cloud Functions for Firebase](/server/functions) for what differs on
+each runtime.
+
+## Why Aim?
+
+- **A small, familiar HTTP API** — `Context`-based, inspired by
+  [Hono](https://hono.dev/), not a large surface to learn before writing a
+  route.
+- **Modular by default** — middleware, the PostgreSQL driver, and the ORM
+  are separate packages; `aim_postgres`/`aim_orm` work without `aim_server`
+  at all, for CLI tools, batch jobs, or migration scripts.
+- **One core, several runtimes** — the same application code targets the
+  Dart VM, Cloudflare Workers, Deno-based runtimes, and (experimentally)
+  Cloud Functions for Firebase, with the differences documented rather
+  than hidden.
+- **A first-party CLI** — `aim_cli` scaffolds a project, runs a hot-reload
+  dev server, builds for each target, and drives schema-diff database
+  migrations.
+- **Testing without a socket** — `aim_server_testing`'s `TestClient` runs
+  the full request pipeline in-process.
+
+This list is intentionally free of performance claims: there is no
+benchmark suite in the repository yet.
+
+## How mature is each piece?
+
+Every package is pre-1.0 (`0.4.0`), and not every part of Aim has the same
+level of testing. `aim_core` and `aim_server` are unit-tested in CI on
+every push, and `aim_postgres` is integration-tested there against a real
+PostgreSQL server; the ORM, the CLI's database commands, and the edge/Deno
+adapters have real but narrower test coverage; Cloud Functions for Firebase
+is explicitly experimental. See
+[Component Status](/status) for the full breakdown before deciding what to
+put in front of production traffic.

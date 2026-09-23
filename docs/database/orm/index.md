@@ -20,10 +20,12 @@ Type-safe ORM for Dart using code generation.
 
 ## Not Yet Supported
 
-The following features are planned but not yet implemented:
+The following are planned but not yet implemented:
 
 - **Relations** - 1:1, 1:N, N:N relations and eager loading
-- **SQLite** - Flutter support with SQLite driver
+- **SQLite** - `aim_orm` targets PostgreSQL only today; there is no ORM
+  implementation for [`aim_sqlite`](/database/drivers/sqlite), which supports
+  raw SQL only
 
 ## Packages
 
@@ -40,13 +42,13 @@ The following features are planned but not yet implemented:
 ```yaml
 # pubspec.yaml
 dependencies:
-  aim_orm: ^0.0.1
-  aim_orm_postgres: ^0.0.1
-  aim_postgres: ^0.0.1
+  aim_orm: ^0.4.0
+  aim_orm_postgres: ^0.4.0
+  aim_postgres: ^0.4.0
 
 dev_dependencies:
   build_runner: ^2.4.0
-  aim_orm_codegen: ^0.0.1
+  aim_orm_codegen: ^0.4.0
 ```
 
 ### 2. Define Schema

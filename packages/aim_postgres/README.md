@@ -12,7 +12,7 @@ A native PostgreSQL driver for Dart.
 
 ```yaml
 dependencies:
-  aim_postgres: ^0.0.1
+  aim_postgres: ^0.4.0
 ```
 
 ## Documentation

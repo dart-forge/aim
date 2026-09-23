@@ -12,7 +12,7 @@ Code generation for aim_orm using build_runner.
 
 ```yaml
 dev_dependencies:
-  aim_orm_codegen: ^0.0.1
+  aim_orm_codegen: ^0.4.0
   build_runner: ^2.4.0
 ```
 

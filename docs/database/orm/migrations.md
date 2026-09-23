@@ -30,10 +30,10 @@ Add database configuration to your `pubspec.yaml`:
 name: my_app
 
 dependencies:
-  aim_server: ^0.1.0
-  aim_orm: ^0.1.0
-  aim_orm_postgres: ^0.1.0
-  aim_postgres: ^0.1.0
+  aim_server: ^0.4.0
+  aim_orm: ^0.4.0
+  aim_orm_postgres: ^0.4.0
+  aim_postgres: ^0.4.0
 
 aim:
   database:

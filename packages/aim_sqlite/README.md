@@ -4,6 +4,10 @@ A native SQLite driver for Dart. Talks to libsqlite3 over `dart:ffi` from worker
 
 [Documentation](https://aim-dart.dev/database/drivers/sqlite) | [pub.dev](https://pub.dev/packages/aim_sqlite)
 
+**Not yet published to pub.dev.** This package has `publish_to: none` and
+lives only in the [`dart-forge/aim`](https://github.com/dart-forge/aim)
+repository for now.
+
 ## Overview
 
 `aim_sqlite` implements `aim_database`'s `Database` / `Transaction` contract for SQLite. Every statement runs on a worker isolate rather than the caller's, because SQLite's C API blocks the thread it is called on. One isolate holds the only connection that may write; by default, four more each hold a read-only connection, and the database runs in WAL mode so reads and the writer never block each other.
@@ -12,12 +16,9 @@ This README and the [docs site page](https://aim-dart.dev/database/drivers/sqlit
 
 ## Installation
 
-```yaml
-dependencies:
-  aim_sqlite: ^0.1.0
-```
-
-`aim_sqlite` does not bundle libsqlite3; see [libsqlite3](#libsqlite3) below for where it looks for it.
+Not published to pub.dev yet, so there is no `dart pub add aim_sqlite` or
+version constraint to add today. `aim_sqlite` does not bundle libsqlite3;
+see [libsqlite3](#libsqlite3) below for where it looks for it.
 
 ## Opening a database
 

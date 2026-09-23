@@ -420,5 +420,5 @@ void main() async {
 
 ## Next Steps
 
-- [ORM](/database/orm/) - Type-safe ORM (Coming Soon)
+- [ORM](/database/orm/) - Type-safe ORM built on this driver
 - [Database Overview](/database/) - All database packages

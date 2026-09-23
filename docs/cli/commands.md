@@ -242,7 +242,7 @@ name: my_app
 description: My Aim application
 
 dependencies:
-  aim_server: ^0.1.1
+  aim_server: ^0.4.0
 
 # Aim CLI configuration
 aim:
@@ -586,6 +586,34 @@ aim db:rollback --step 3
 # Rollback to specific migration
 aim db:rollback --target 20250121_100000_initial
 ```
+
+### `aim db:reset`
+
+Drop the database, recreate it, and apply every migration from scratch.
+Connects to the admin `postgres` database to drop/create the target database
+named in `aim.database.url`, then replays all migration files.
+
+**Usage:**
+```bash
+aim db:reset [options]
+```
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--force`, `-f` | Skip the confirmation prompt | prompts |
+
+**Example:**
+```bash
+aim db:reset            # asks "Are you sure? [y/N]" first
+aim db:reset --force    # for CI or scripts
+```
+
+::: warning Destructive
+This drops the database named in `aim.database.url` and everything in it,
+then recreates it and reapplies every migration. There is no undo.
+:::
 
 ### `aim db:status`
 

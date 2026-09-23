@@ -71,6 +71,14 @@ Output:
 | `aim create <name>` | Create a new project |
 | `aim dev` | Start dev server with hot reload |
 | `aim build` | Compile for production |
+| `aim db:generate` | Generate a migration from schema changes |
+| `aim db:migrate` | Apply pending migrations |
+| `aim db:rollback` | Roll back applied migrations |
+| `aim db:status` | Show migration status |
+| `aim db:reset` | Drop, recreate, and replay all migrations |
+
+See [Commands](/cli/commands) for options and examples, and
+[Migrations](/database/orm/migrations) for the `db:*` workflow.
 
 ## Configuration
 
@@ -80,7 +88,7 @@ Configure via `pubspec.yaml`:
 name: my_app
 
 dependencies:
-  aim_server: ^0.1.1
+  aim_server: ^0.4.0
 
 aim:
   entry: bin/server.dart

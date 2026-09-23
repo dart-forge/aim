@@ -14,7 +14,7 @@ For database functionality, use a concrete driver package like [aim_postgres](ht
 
 ```yaml
 dependencies:
-  aim_database: ^0.0.1
+  aim_database: ^0.4.0
 ```
 
 ## Documentation
