@@ -81,10 +81,10 @@ run those locally — see the commands in each package's `test/README.md` or
 ## Security reporting
 
 There is no `SECURITY.md` yet, so there is no dedicated private reporting
-channel. Until one exists, report a suspected vulnerability the same way as
-any other bug: [open a GitHub issue](https://github.com/dart-forge/aim/issues).
-For something you would rather not post publicly, say so in the issue and
-ask a maintainer to follow up privately.
+channel. Until one exists, the only place to report a suspected
+vulnerability is the public
+[GitHub issue tracker](https://github.com/dart-forge/aim/issues). Defining a
+private channel is an open item for the project.
 
 ## Contributing
 

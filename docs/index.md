@@ -112,9 +112,10 @@ benchmark suite in the repository yet.
 ## How mature is each piece?
 
 Every package is pre-1.0 (`0.4.0`), and not every part of Aim has the same
-level of testing. `aim_core`, `aim_server`, and `aim_postgres` are
-integration-tested in CI on every push; the ORM, the CLI's database
-commands, and the edge/Deno adapters have real but narrower test
-coverage; Cloud Functions for Firebase is explicitly experimental. See
+level of testing. `aim_core` and `aim_server` are unit-tested in CI on
+every push, and `aim_postgres` is integration-tested there against a real
+PostgreSQL server; the ORM, the CLI's database commands, and the edge/Deno
+adapters have real but narrower test coverage; Cloud Functions for Firebase
+is explicitly experimental. See
 [Component Status](/status) for the full breakdown before deciding what to
 put in front of production traffic.
