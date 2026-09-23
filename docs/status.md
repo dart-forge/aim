@@ -92,6 +92,12 @@ There is no `CONTRIBUTING.md` yet either. Open an issue or a pull request
 on [GitHub](https://github.com/dart-forge/aim) to start a conversation
 before sending a large change.
 
+## Growing a project
+
+See [Best Practices](/server/guides/best-practices#project-structure) for
+the recommended layout (routes, middleware, models, services) as an
+application grows past a single file.
+
 ## Benchmarks
 
 There is no benchmark suite in the repository. Statements about Aim's

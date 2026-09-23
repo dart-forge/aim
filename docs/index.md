@@ -1,13 +1,13 @@
 ---
 layout: home
 title: Aim - Modular Dart Ecosystem
-titleTemplate: Server, Database, ORM - on the Dart VM, Cloudflare Workers, and Cloud Functions
-description: A modular ecosystem for Dart. Web server, database, ORM, and CLI tools as independent packages. Runs on the Dart VM, on Cloudflare Workers via WebAssembly, and on Cloud Functions for Firebase.
+titleTemplate: Server, Database, ORM - on the Dart VM, Cloudflare Workers, Deno, and Cloud Functions
+description: A modular ecosystem for Dart. Web server, database, ORM, and CLI tools as independent packages. Runs on the Dart VM, on Cloudflare Workers and Deno-based runtimes via WebAssembly, and on Cloud Functions for Firebase.
 
 hero:
   name: "Aim"
   text: "Modular ecosystem for Dart"
-  tagline: Web server, database, ORM - on the Dart VM, Cloudflare Workers, and Cloud Functions
+  tagline: Web server, database, ORM - on the Dart VM, Cloudflare Workers, Deno, and Cloud Functions
   actions:
     - theme: brand
       text: Server
