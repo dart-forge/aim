@@ -1,10 +1,10 @@
 ---
 title: Database Installation - Aim
-description: Install Aim database packages. PostgreSQL and SQLite drivers, database abstraction layer, and ORM setup guide.
+description: Install Aim database packages. PostgreSQL, SQLite, and MySQL drivers, database abstraction layer, and ORM setup guide.
 head:
   - - meta
     - name: keywords
-      content: Dart database install, aim_postgres setup, aim_sqlite setup, PostgreSQL Dart, SQLite Dart
+      content: Dart database install, aim_postgres setup, aim_sqlite setup, aim_mysql setup, PostgreSQL Dart, SQLite Dart, MySQL Dart
 ---
 
 # Installation
@@ -18,6 +18,7 @@ Aim's database packages can be used independently:
 | `aim_database` | Abstraction layer only (for custom driver implementations) |
 | `aim_postgres` | PostgreSQL connection (includes `aim_database`) |
 | `aim_sqlite` | SQLite connection (includes `aim_database`) |
+| `aim_mysql` | MySQL connection (includes `aim_database`) |
 | `aim_orm` | ORM abstraction layer (Coming Soon) |
 | `aim_orm_postgres` | PostgreSQL ORM (includes `aim_orm` + `aim_postgres`) |
 
@@ -121,8 +122,45 @@ void main() async {
 }
 ```
 
+## MySQL
+
+Add the MySQL driver directly:
+
+```bash
+dart pub add aim_mysql
+```
+
+This also adds `aim_database` as a dependency.
+
+### pubspec.yaml
+
+```yaml
+dependencies:
+  aim_mysql: ^0.4.0
+```
+
+### Verify Installation
+
+```dart
+import 'package:aim_mysql/aim_mysql.dart';
+
+void main() async {
+  final db = await MySqlDatabase.connect(
+    'mysql://user:password@localhost:3306/mydb',
+  );
+
+  print('Connected to MySQL');
+
+  final result = await db.query('SELECT VERSION() AS v');
+  print('Version: ${result.first['v']}');
+
+  await db.close();
+}
+```
+
 ## Next Steps
 
 - [PostgreSQL Driver](/database/drivers/postgres) - Detailed usage guide
 - [SQLite Driver](/database/drivers/sqlite) - Detailed usage guide
+- [MySQL Driver](/database/drivers/mysql) - Detailed usage guide
 - [ORM](/database/orm/) - Coming Soon
