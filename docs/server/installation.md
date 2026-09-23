@@ -9,7 +9,7 @@ Get Aim installed and set up your development environment.
 
 ## Prerequisites
 
-- [Dart SDK](https://dart.dev/get-dart) 3.10.0 or higher
+- [Dart SDK](https://dart.dev/get-dart) 3.13.0 or higher
 - A code editor (VS Code, IntelliJ IDEA, etc.)
 
 ## Using Aim CLI (Recommended)
@@ -93,7 +93,7 @@ cd my_app
 
 ```yaml
 dependencies:
-  aim_server: ^0.1.1
+  aim_server: ^0.4.0
 
 dev_dependencies:
   lints: ^5.0.0

@@ -40,13 +40,13 @@ The following features are planned but not yet implemented:
 ```yaml
 # pubspec.yaml
 dependencies:
-  aim_orm: ^0.0.1
-  aim_orm_postgres: ^0.0.1
-  aim_postgres: ^0.0.1
+  aim_orm: ^0.4.0
+  aim_orm_postgres: ^0.4.0
+  aim_postgres: ^0.4.0
 
 dev_dependencies:
   build_runner: ^2.4.0
-  aim_orm_codegen: ^0.0.1
+  aim_orm_codegen: ^0.4.0
 ```
 
 ### 2. Define Schema

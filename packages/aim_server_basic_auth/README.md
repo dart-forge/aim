@@ -12,8 +12,8 @@ HTTP Basic Authentication middleware for the Aim framework.
 
 ```yaml
 dependencies:
-  aim_server: ^0.0.6
-  aim_server_basic_auth: ^0.0.1
+  aim_server: ^0.4.0
+  aim_server_basic_auth: ^0.4.0
 ```
 
 ## Documentation

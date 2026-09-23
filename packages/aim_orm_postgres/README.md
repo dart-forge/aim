@@ -12,11 +12,11 @@ PostgreSQL ORM implementation for Dart.
 
 ```yaml
 dependencies:
-  aim_orm_postgres: ^0.0.1
-  aim_postgres: ^0.0.1
+  aim_orm_postgres: ^0.4.0
+  aim_postgres: ^0.4.0
 
 dev_dependencies:
-  aim_orm_codegen: ^0.0.1
+  aim_orm_codegen: ^0.4.0
   build_runner: ^2.4.0
 ```
 

@@ -12,7 +12,7 @@ A type-safe ORM abstraction layer for Dart.
 
 ```yaml
 dependencies:
-  aim_orm: ^0.0.1
+  aim_orm: ^0.4.0
 ```
 
 ## Documentation

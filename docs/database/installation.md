@@ -35,7 +35,7 @@ This also adds `aim_database` as a dependency.
 
 ```yaml
 dependencies:
-  aim_postgres: ^0.0.1
+  aim_postgres: ^0.4.0
 ```
 
 ## Verify Installation

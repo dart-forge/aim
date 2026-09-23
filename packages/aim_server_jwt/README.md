@@ -12,8 +12,8 @@ JWT authentication middleware for the Aim framework.
 
 ```yaml
 dependencies:
-  aim_server: ^0.0.6
-  aim_server_jwt: ^0.0.1
+  aim_server: ^0.4.0
+  aim_server_jwt: ^0.4.0
 ```
 
 ## Documentation

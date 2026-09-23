@@ -17,34 +17,40 @@ The `aim_server_*` middleware packages (cors, cookie, form, logger, sse, jwt, ba
 
 ## Available Middleware
 
+Every `aim_server_*` package below is versioned and released together with the
+rest of the `aim_*` packages (see the [Migration Guide](/server/guides/migration)),
+so no per-package version is listed here — check the [pub.dev
+listing](https://pub.dev/packages?q=publisher%3Adart-forge.dev) or the
+package's own page for the current version.
+
 ### Core Features
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [CORS](/server/middleware/cors) | Cross-Origin Resource Sharing support | 0.0.1 |
-| [Logger](/server/middleware/logger) | HTTP request/response logging | 0.0.1 |
-| [Static Files](/server/middleware/static) | Serve static files securely | 0.0.1 |
+| Package | Description |
+|---------|-------------|
+| [CORS](/server/middleware/cors) | Cross-Origin Resource Sharing support |
+| [Logger](/server/middleware/logger) | HTTP request/response logging |
+| [Static Files](/server/middleware/static) | Serve static files securely |
 
 ### Data Handling
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [Cookie](/server/middleware/cookie) | Secure cookie management | 0.0.1 |
-| [Form](/server/middleware/form) | Parse form data (application/x-www-form-urlencoded) | 0.0.1 |
-| [Multipart](/server/middleware/multipart) | Handle file uploads (multipart/form-data) | 0.0.1 |
+| Package | Description |
+|---------|-------------|
+| [Cookie](/server/middleware/cookie) | Secure cookie management |
+| [Form](/server/middleware/form) | Parse form data (application/x-www-form-urlencoded) |
+| [Multipart](/server/middleware/multipart) | Handle file uploads (multipart/form-data) |
 
 ### Real-time
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [SSE](/server/middleware/sse) | Server-Sent Events support | 0.0.1 |
+| Package | Description |
+|---------|-------------|
+| [SSE](/server/middleware/sse) | Server-Sent Events support |
 
 ### Authentication
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [JWT Auth](/server/auth/jwt) | JSON Web Token authentication | 0.0.1 |
-| [Basic Auth](/server/auth/basic-auth) | HTTP Basic Authentication (RFC 7617) | 0.0.1 |
+| Package | Description |
+|---------|-------------|
+| [JWT Auth](/server/auth/jwt) | JSON Web Token authentication |
+| [Basic Auth](/server/auth/basic-auth) | HTTP Basic Authentication (RFC 7617) |
 
 ## Installation
 
@@ -52,10 +58,10 @@ Add middleware packages to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  aim_server: ^0.1.1
-  aim_server_cors: ^0.0.1
-  aim_server_logger: ^0.0.1
-  aim_server_jwt: ^0.0.1
+  aim_server: ^0.4.0
+  aim_server_cors: ^0.4.0
+  aim_server_logger: ^0.4.0
+  aim_server_jwt: ^0.4.0
 ```
 
 Then run:

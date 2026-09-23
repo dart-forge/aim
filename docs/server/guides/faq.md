@@ -37,7 +37,7 @@ Aim's API is inspired by [Hono](https://hono.dev/), a popular JavaScript framewo
 
 ### What Dart version do I need?
 
-Aim requires Dart SDK 3.10.0 or higher.
+Aim requires Dart SDK 3.13.0 or higher (every package's `pubspec.yaml` pins `sdk: ^3.13.0`).
 
 ### How do I install Aim?
 

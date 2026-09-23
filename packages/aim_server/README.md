@@ -12,7 +12,7 @@ A lightweight and fast web server framework for Dart.
 
 ```yaml
 dependencies:
-  aim_server: ^0.0.6
+  aim_server: ^0.4.0
 ```
 
 ## Documentation

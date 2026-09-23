@@ -12,7 +12,7 @@ Testing utilities for the Aim framework.
 
 ```yaml
 dev_dependencies:
-  aim_server_testing: ^0.1.0
+  aim_server_testing: ^0.4.0
   test: ^1.25.6
 ```
 
