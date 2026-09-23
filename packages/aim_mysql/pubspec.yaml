@@ -2,6 +2,7 @@ name: aim_mysql
 description: A native MySQL driver for Dart. Speaks the wire protocol directly, with the authentication plugin the server asks for.
 version: 0.4.0
 repository: https://github.com/dart-forge/aim
+publish_to: none
 resolution: workspace
 
 environment:
