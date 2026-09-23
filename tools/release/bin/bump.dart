@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:release/changelog.dart';
+import 'package:release/const_version.dart';
 import 'package:release/pubspec_bump.dart';
 import 'package:release/release_targets.dart';
 import 'package:release/template_pins.dart';
@@ -286,28 +287,11 @@ void _updateDocsVersion(String newVersion) {
     return;
   }
 
-  var content = configFile.readAsStringSync();
-  var updated = false;
+  final content = configFile.readAsStringSync();
+  final updated = bumpConstVersion(content, 'AIM_VERSION', newVersion);
 
-  // Update softwareVersion in JSON-LD
-  final softwareVersionRegex = RegExp(r'"softwareVersion":\s*"[^"]*"');
-  if (softwareVersionRegex.hasMatch(content)) {
-    content = content.replaceFirst(
-      softwareVersionRegex,
-      '"softwareVersion": "$newVersion"',
-    );
-    updated = true;
-  }
-
-  // Update nav version (e.g., text: 'v0.0.6')
-  final navVersionRegex = RegExp(r"text:\s*'v[\d.]+'");
-  if (navVersionRegex.hasMatch(content)) {
-    content = content.replaceFirst(navVersionRegex, "text: 'v$newVersion'");
-    updated = true;
-  }
-
-  if (updated) {
-    configFile.writeAsStringSync(content);
+  if (updated != content) {
+    configFile.writeAsStringSync(updated);
     stdout.writeln('docs: config.mts → v$newVersion');
   }
 }
