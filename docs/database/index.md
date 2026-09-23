@@ -13,13 +13,14 @@ Database packages for Dart. **Works independently of aim_server.**
 
 ## Packages
 
-| Package | Description | Version |
+| Package | Description | pub.dev |
 |---------|-------------|---------|
-| aim_database | Database abstraction layer | 0.2.0 |
-| aim_postgres | PostgreSQL native driver | 0.2.0 |
-| aim_sqlite | SQLite native driver | 0.1.0 |
-| aim_orm | ORM abstraction layer | Coming Soon |
-| aim_orm_postgres | PostgreSQL ORM implementation | Coming Soon |
+| aim_database | Database abstraction layer | Published |
+| aim_postgres | PostgreSQL native driver | Published |
+| aim_sqlite | SQLite native driver | Not yet published — see [SQLite](/database/drivers/sqlite) |
+| aim_orm | ORM abstraction layer | Published |
+| aim_orm_postgres | PostgreSQL ORM implementation | Published |
+| aim_orm_codegen | ORM code generator (build_runner) | Published |
 
 ## Philosophy
 
@@ -152,18 +153,24 @@ void main() async {
 - Transaction support
 - Raw SQL only for now -- the ORM and `aim db:*` migrations are PostgreSQL-only
 
-### aim_orm + aim_orm_postgres (Coming Soon)
+### aim_orm + aim_orm_postgres
 
-- `aim_orm`: ORM abstraction layer
-- `aim_orm_postgres`: PostgreSQL ORM implementation
-- Type-safe model definitions
-- Query builder
-- Relations (1:1, 1:N, N:N)
-- Migrations
+`aim_orm` and `aim_orm_postgres` are implemented and published on pub.dev.
+The ORM targets **PostgreSQL only** today — there is no SQLite or MySQL ORM
+implementation yet (`aim_sqlite` supports raw SQL only, see above).
+
+- Tables defined as Dart 3 Record literals with the `@PgTable` annotation
+- Type-safe, generated query builders (SELECT, INSERT, UPDATE, DELETE) via
+  `aim_orm_codegen` and `build_runner`
+- Filtering, pagination, and transactions
+- Schema-diff migrations through `aim db:generate` / `db:migrate`
+
+Relations (1:1, 1:N, N:N) and eager loading are not implemented yet — see
+[ORM Overview](/database/orm/) for the current scope.
 
 ## Next Steps
 
 - [Installation](/database/installation) - Setup guide
 - [PostgreSQL](/database/drivers/postgres) - PostgreSQL driver details
-- [SQLite](/database/drivers/sqlite) - SQLite driver details
-- [ORM](/database/orm/) - ORM documentation (Coming Soon)
+- [SQLite](/database/drivers/sqlite) - SQLite driver details (not yet published to pub.dev)
+- [ORM](/database/orm/) - ORM documentation
