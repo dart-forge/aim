@@ -695,6 +695,92 @@ final child = (
   });
 
   group('db:generate - nothing the schema declares is dropped in silence', () {
+    test('an annotation on a class stops the command', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+class UsersTable {
+  Column<int, IntegerColumn> get id => integer('id').primaryKey();
+}
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('a class'))
+              .having((e) => e.message, 'message', contains('schema.dart'))
+              .having(
+                (e) => e.message,
+                'message',
+                contains('top-level variable holding a record'),
+              ),
+        ),
+      );
+    });
+
+    test('an annotation on a value that is not a record stops the command',
+        () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = 1;
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('"users"'))
+              .having((e) => e.message, 'message', contains('not a record')),
+        ),
+      );
+    });
+
+    test('a table name that is not a string literal stops the command',
+        () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart';
+
+const usersTable = 'users';
+
+@PgTable(usersTable)
+final users = (
+  id: integer('id').primaryKey(),
+);
+''');
+
+      await expectLater(
+        generate('first'),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('string literal'))
+              .having((e) => e.message, 'message', contains('schema.dart')),
+        ),
+      );
+    });
+
+    test('a schema file with no annotation at all is left alone', () async {
+      // Only a @PgTable this reader cannot use is refused. A helper file
+      // beside the schema is not a table and must not stop the command.
+      writeSchemaFile('helpers.dart', '''
+String tableComment() => 'not a table';
+''');
+      writeSchemaFile('schema.dart', '''
+import 'package:aim_orm/aim_orm.dart';
+
+@PgTable('users')
+final users = (
+  id: integer('id').primaryKey(),
+);
+''');
+      await generate('first');
+
+      expect(upOf('first'), contains('CREATE TABLE users ('));
+    });
+
     test('a serial column asking for a default stops the command', () async {
       writeSchema('''
 import 'package:aim_orm/aim_orm.dart';
