@@ -19,15 +19,27 @@ Aim is a lightweight, fast web framework for Dart. It's designed to be simple, t
 
 ### Why Aim over other Dart frameworks?
 
-- **Simple API**: Context-based API that's easy to learn
+- **Simple API**: Context-based API that's easy to learn, inspired by Hono
 - **Type-Safe**: Leverages Dart's type system with custom `Variables` classes for context variables
-- **Modular**: Rich ecosystem of optional middleware packages
-- **Performance**: Minimal overhead with optimized routing
-- **Great DX**: Built-in hot reload and comprehensive testing utilities
+- **Modular**: Independently versioned middleware packages, and a database stack (`aim_postgres`, `aim_orm`) that works without `aim_server`
+- **Runtime-independent core**: routing, middleware, and `Context` live in `aim_core`; the same application code runs on the Dart VM, Cloudflare Workers, Deno-based runtimes, and Cloud Functions for Firebase (with per-runtime caveats — see [Component Status](/status))
+- **Great DX**: Built-in hot reload (`aim dev`) and a dedicated testing package (`aim_server_testing`)
+
+No benchmark suite exists yet, so this list intentionally leaves out
+performance claims. See [Component Status](/status) for what has and hasn't
+been measured.
 
 ### Is Aim production-ready?
 
-Yes! Aim is stable and suitable for production use. The framework follows semantic versioning and has comprehensive test coverage.
+It depends on which package. Aim is pre-1.0 (every package is at `0.4.0`),
+and the project's own changelog calls 0.4.0 a "beta". Some packages —
+`aim_core`, `aim_server`, `aim_postgres` — are exercised by integration
+tests that run in CI on every push and have no known blocking issues.
+Others — the ORM, the CLI's database commands, the Cloudflare Workers and
+Deno adapters, and especially Cloud Functions for Firebase — have smaller
+test surfaces or explicit caveats. See [Component Status](/status) for a
+per-package breakdown before deciding what to put in front of production
+traffic.
 
 ### What's the relationship with Hono?
 
@@ -347,7 +359,10 @@ See [CORS guide](/server/middleware/cors) for details.
 
 ### How fast is Aim?
 
-Aim is designed for performance with minimal overhead. Benchmarks show comparable or better performance than other Dart frameworks.
+There is no published benchmark suite yet, so this FAQ makes no speed claim
+relative to other Dart frameworks. Routing is a linear scan of registered
+routes with the first match winning; for applications with a very large
+number of routes, that is worth keeping in mind.
 
 ### How do I optimize performance?
 
@@ -430,7 +445,9 @@ await app.serve(host: InternetAddress.anyIPv4, port: 3000);
 
 ### How do I contribute?
 
-See the [Contributing Guide](https://github.com/dart-forge/aim/blob/main/CONTRIBUTING.md).
+There is no `CONTRIBUTING.md` yet. Open an issue or a pull request on
+[GitHub](https://github.com/dart-forge/aim) to start a conversation before
+sending a large change.
 
 ### Where can I report bugs?
 

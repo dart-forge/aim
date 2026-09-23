@@ -4,6 +4,14 @@ const SITE_URL = 'https://aim-dart.dev'
 const SITE_NAME = 'Aim Framework'
 const SITE_DESCRIPTION_EN = 'A lightweight, fast web framework for Dart. Build modern server-side applications with simple API, type safety, and modular design.'
 
+// Every aim_* package in the workspace is released together at this
+// version (see the root CHANGELOG.md and the Migration Guide). Only the
+// two spots below in this file read from it; the many version strings
+// inside Markdown code samples are still literal text and must be
+// updated by hand at release time -- grep the docs/ tree for the old
+// version after bumping this constant.
+const AIM_VERSION = '0.4.0'
+
 // JSON-LD 構造化データ
 const jsonLdSoftware = {
   "@context": "https://schema.org",
@@ -21,10 +29,10 @@ const jsonLdSoftware = {
   "author": {
     "@type": "Organization",
     "name": "Aim Contributors",
-    "url": "https://github.com/aim-dart"
+    "url": "https://github.com/dart-forge"
   },
   "programmingLanguage": "Dart",
-  "softwareVersion": "0.4.0",
+  "softwareVersion": AIM_VERSION,
   "license": "https://opensource.org/licenses/MIT"
 }
 
@@ -111,11 +119,12 @@ export default defineConfig({
       { text: 'Server', link: '/server/', activeMatch: '/server/' },
       { text: 'Database', link: '/database/', activeMatch: '/database/' },
       { text: 'CLI', link: '/cli/', activeMatch: '/cli/' },
+      { text: 'Status', link: '/status', activeMatch: '/status' },
       {
-        text: 'v0.4.0',
+        text: `v${AIM_VERSION}`,
         items: [
           { text: 'Changelog', link: 'https://github.com/dart-forge/aim/releases' },
-          { text: 'Contributing', link: 'https://github.com/dart-forge/aim/blob/main/CONTRIBUTING.md' }
+          { text: 'Repository', link: 'https://github.com/dart-forge/aim' }
         ]
       }
     ],
