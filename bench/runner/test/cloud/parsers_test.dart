@@ -19,6 +19,18 @@ void main() {
     expect(parseFirebaseFunctionUrl(firebase, 'benchAim').toString(), 'https://benchaim-abc123xyz-uc.a.run.app');
     expect(parseFirebaseFunctionUrl(firebase, 'other'), isNull);
   });
+  test('firebase function url with a codebase:name prefix, lowercased', () {
+    const line = 'Function URL (aim:benchaim(us-central1)): https://benchaim-abc123xyz-uc.a.run.app';
+    expect(parseFirebaseFunctionUrl(line, 'benchAim').toString(), 'https://benchaim-abc123xyz-uc.a.run.app');
+  });
+  test('firebase function url still resolves without a codebase prefix', () {
+    const line = 'Function URL (benchAim(us-central1)): https://benchaim-abc123xyz-uc.a.run.app';
+    expect(parseFirebaseFunctionUrl(line, 'benchAim').toString(), 'https://benchaim-abc123xyz-uc.a.run.app');
+  });
+  test('a codebase-prefixed benchaim line does not match benchNative', () {
+    const line = 'Function URL (aim:benchaim(us-central1)): https://benchaim-abc123xyz-uc.a.run.app';
+    expect(parseFirebaseFunctionUrl(line, 'benchNative'), isNull);
+  });
   test('sizeOfFiles sums bytes and gzips', () async {
     final dir = await Directory.systemTemp.createTemp('bench-size');
     addTearDown(() => dir.delete(recursive: true));

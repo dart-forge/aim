@@ -23,9 +23,15 @@ Uri? parseWranglerUrl(String output) {
   return m == null ? null : Uri.parse(m.group(0)!);
 }
 
-/// `Function URL (benchAim(us-central1)): https://...run.app`
+/// `Function URL (benchAim(us-central1)): https://...run.app`, or, as
+/// firebase now prints it when deploying a whole codebase, `Function URL
+/// (aim:benchaim(us-central1)): https://...run.app` — an optional
+/// `<codebase>:` prefix and the function name lowercased.
 Uri? parseFirebaseFunctionUrl(String output, String functionName) {
-  final m = RegExp('Function URL \\(${RegExp.escape(functionName)}\\([^)]*\\)\\):\\s*(https://\\S+)').firstMatch(output);
+  final m = RegExp(
+    'Function URL \\((?:[\\w-]+:)?${RegExp.escape(functionName)}\\([^)]*\\)\\):\\s*(https://\\S+)',
+    caseSensitive: false,
+  ).firstMatch(output);
   return m == null ? null : Uri.parse(m.group(1)!);
 }
 
