@@ -19,4 +19,12 @@ void main() {
   test('median of an empty list throws', () {
     expect(() => median([]), throwsArgumentError);
   });
+
+  test('percentile 50 of 1..100 is 50 and 99 is 99', () {
+    final v = [for (var i = 1; i <= 100; i++) i.toDouble()];
+    expect(percentile(v, 50), 50);
+    expect(percentile(v, 99), 99);
+    expect(percentile(v, 100), 100);
+    expect(percentile(v, 0), 1);
+  });
 }

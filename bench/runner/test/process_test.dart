@@ -88,4 +88,14 @@ void main() {
     discardOutput(process);
     expect(await process.exitCode.timeout(const Duration(seconds: 5)), 0);
   });
+
+  test('runCapturing returns stdout and stderr, and names the exit code on failure', () async {
+    final out = await runCapturing(['sh', '-c', 'echo out; echo err 1>&2'], workingDirectory: Directory.current);
+    expect(out, contains('out'));
+    expect(out, contains('err'));
+    await expectLater(
+      runCapturing(['sh', '-c', 'echo boom 1>&2; exit 3'], workingDirectory: Directory.current),
+      throwsA(isA<ProcessException>().having((e) => e.message, 'message', contains('boom'))),
+    );
+  });
 }

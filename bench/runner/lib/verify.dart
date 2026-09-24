@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bench_runner/cloud/urls.dart';
 import 'package:bench_runner/scenarios.dart';
 import 'package:collection/collection.dart';
 
@@ -28,7 +29,7 @@ Future<List<Mismatch>> verifyApp(Uri base, {HttpClient? client}) async {
     for (final scenario in scenarios) {
       final request = await http.openUrl(
         scenario.method,
-        base.resolve(scenario.path),
+        joinPath(base, scenario.path),
       );
       if (scenario.requestBody != null) {
         request.headers.contentType = ContentType.json;

@@ -5,11 +5,19 @@ import 'package:bench_runner/verify.dart';
 import 'package:test/test.dart';
 
 /// Serves the four scenarios correctly, except where [broken] overrides.
-Future<HttpServer> serveFake({Map<String, String> broken = const {}}) async {
+/// When [prefix] is set, it is stripped from the incoming path before
+/// routing, mimicking a Supabase function served under a base path.
+Future<HttpServer> serveFake({
+  Map<String, String> broken = const {},
+  String prefix = '',
+}) async {
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   server.listen((req) async {
     final res = req.response;
-    final path = req.uri.path;
+    var path = req.uri.path;
+    if (path.startsWith(prefix)) {
+      path = path.substring(prefix.length);
+    }
     String body;
     if (req.method == 'GET' && path == '/') {
       body = broken['/'] ?? 'Hello, World!';
@@ -64,6 +72,13 @@ void main() {
     final base = Uri.parse('http://127.0.0.1:${server.port}');
     final mismatches = await verifyApp(base);
     expect(mismatches.map((m) => m.scenarioId), ['post_json']);
+  });
+
+  test('a base path is kept for every scenario', () async {
+    final server = await serveFake(prefix: '/functions/v1/f');
+    addTearDown(server.close);
+    final base = Uri.parse('http://127.0.0.1:${server.port}/functions/v1/f');
+    expect(await verifyApp(base), isEmpty);
   });
 
   test('a non-200 status is reported', () async {

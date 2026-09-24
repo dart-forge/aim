@@ -170,6 +170,27 @@ int? parseFootprintKb(String footprintOutput) {
   return kb?.round();
 }
 
+/// Runs [command] and returns its combined stdout+stderr; throws with that
+/// output on a non-zero exit. For CLIs whose output we must parse (wrangler,
+/// firebase), unlike [runStep] which streams to the console.
+Future<String> runCapturing(
+  List<String> command, {
+  required Directory workingDirectory,
+  Map<String, String>? environment,
+}) async {
+  final result = await Process.run(
+    command.first,
+    command.skip(1).toList(),
+    workingDirectory: workingDirectory.path,
+    environment: environment,
+  );
+  final output = '${result.stdout}${result.stderr}';
+  if (result.exitCode != 0) {
+    throw ProcessException(command.first, command.skip(1).toList(), output, result.exitCode);
+  }
+  return output;
+}
+
 /// SIGTERM, then SIGKILL if the process is still alive after two seconds.
 Future<void> stopServer(Process process) async {
   process.kill(ProcessSignal.sigterm);
