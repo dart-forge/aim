@@ -37,6 +37,12 @@ class AppSpec {
 
 const List<AppSpec> apps = [
   AppSpec(name: 'dart_io', directory: 'dart_io', entry: 'bin/server.dart'),
+  AppSpec(
+    name: 'aim',
+    directory: 'aim',
+    entry: 'bin/server.dart',
+    lockPackages: ['aim_server', 'aim_core'],
+  ),
 ];
 
 /// `bench/`, resolved from this package's location (`bench/runner`).

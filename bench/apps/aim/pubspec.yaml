@@ -1,0 +1,10 @@
+name: bench_aim
+description: Benchmark app on aim_server, taken from this repository by path.
+publish_to: none
+environment:
+  sdk: ^3.13.0
+dependencies:
+  aim_server:
+    path: ../../../packages/aim_server
+dev_dependencies:
+  lints: ^6.0.0
