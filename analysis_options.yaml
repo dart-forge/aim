@@ -1,5 +1,12 @@
 include: package:lints/recommended.yaml
 
+analyzer:
+  exclude:
+    # bench/ is outside the pub workspace and resolves its own dependencies;
+    # without a `dart pub get` there, analyzing it from the root only reports
+    # unresolved imports.
+    - bench/**
+
 linter:
   rules:
     always_use_package_imports: true

@@ -58,3 +58,7 @@ specs/
 
 # local dependency overrides (e.g. a sibling checkout of a dependency)
 pubspec_overrides.yaml
+
+# The benchmark apps pin the versions they were measured against.
+!/bench/apps/*/pubspec.lock
+!/bench/runner/pubspec.lock
