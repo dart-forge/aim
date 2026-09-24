@@ -189,3 +189,175 @@ committed run, every app/scenario stayed within 10% of its median except
    the existing ones are; it still has to be `git add`ed explicitly.
 4. Run `dart run bin/bench.dart verify --only <name>` from `bench/runner`
    until it reports `ok`.
+
+## Edge and serverless runtimes
+
+A second benchmark, under `bench/cloud`, deploys the same four scenarios
+to six targets on three managed runtimes and reads their cold start, warm
+latency and upload size — instead of running anything in-process on one
+machine, like the suite above does.
+
+### What it measures
+
+Two variants — an Aim app and a native baseline written directly against
+the platform's own API — on each of three runtimes:
+
+| Runtime | Aim variant | Native baseline | Region |
+|---|---|---|---|
+| Cloudflare Workers | `workers/aim`: `package:aim_workers` compiled with `dart compile wasm` | `workers/native`: a `fetch` handler, routes kept in a `Map` | nearest Cloudflare colo |
+| Supabase Edge Functions | `supabase/aim`: `package:aim` compiled with `dart compile wasm`, run under Deno | `supabase/native`: a `Deno.serve` handler, routes kept in a `Map` | Southeast Asia (Singapore) |
+| Firebase Cloud Functions | `functions/aim`: `package:aim_functions`, Dart AOT via the `dart3` runtime (a Cloud Run service under the hood) | `functions/native`: `firebase-functions` v2 `onRequest`, Node 22, routes kept in a `Map` | us-central1 |
+
+All six answer the same four scenarios as the suite above (`plaintext`,
+`params_json`, `post_json`, `routes_100`), defined once in
+`bench/runner/lib/scenarios.dart` and reused unchanged.
+
+Three metrics are recorded per target:
+
+- **Cold start.** The time to first byte of the first request sent right
+  after a fresh deployment, over a new TCP + TLS connection. Measured
+  once per deploy cycle (`--cycles`, default 5), so a target's cold start
+  is a handful of independent cold samples, not one. What counts as
+  "cold" differs by platform: on Cloud Run (the two `functions/*`
+  targets) it's the platform scaling a new revision up from zero
+  instances; on Workers it's a new version's isolate starting in
+  whichever colo answers the request; on Supabase it's a new version's
+  boot. Each cold sample is followed, on the same connection now kept
+  alive, by warm samples, so a cycle's cold and warm-right-after numbers
+  can be read side by side.
+- **Warm latency.** Sequential requests — concurrency 1, one at a time —
+  on a single kept-alive connection, `--requests` (default 100) per
+  scenario, reported as p50, p99 and min. With no concurrent load, this
+  number is dominated by round-trip time from wherever `cloud run` was
+  invoked to the target's region, not by the target's own processing
+  time.
+- **Upload size.** What the deploy step actually sends, read differently
+  per runtime: for Workers, wrangler's own reported upload and gzip size
+  (falling back to summing the built files if wrangler's output can't be
+  parsed); for Supabase, `main.wasm` + `main.mjs` + `index.ts` for the Aim
+  variant, `index.ts` alone for the native baseline (it has no wasm to
+  ship); for Cloud Functions, the Dart AOT bundle directory for
+  `functions/aim` against `index.js` + `package.json` for
+  `functions/native`. Those last two are not the same kind of artifact —
+  a compiled bundle versus source that Cloud Functions builds itself —
+  and the results say so rather than treat them as comparable.
+
+### What it does not measure
+
+- **Throughput.** No load is put on any of these targets; they are cloud
+  platforms other people may also be using, not a machine this suite
+  owns.
+- **Cross-runtime comparisons.** The three runtimes deploy to different
+  regions (see the table above), so a latency difference between, say,
+  Workers and Cloud Functions may be network distance rather than the
+  runtime. These results compare Aim against a native baseline within
+  the same runtime and region; the runtimes are not ranked against each
+  other.
+- Database or other I/O-bound work — none of the six targets touch one.
+- Multiple measurement origins — every run is measured from wherever
+  `cloud run` happens to be invoked.
+- Cold starts from idle eviction. Every cold sample here follows a fresh
+  deployment; a platform evicting an idle instance and cold-starting it
+  again later is a different event and isn't measured.
+
+### Prerequisites
+
+- [`wrangler`](https://developers.cloudflare.com/workers/wrangler/),
+  logged in (`npx wrangler@4 whoami`).
+- The [Supabase CLI](https://supabase.com/docs/guides/cli), logged in,
+  and Docker running — `supabase functions deploy` needs Docker to build
+  the function that ships `main.wasm` as a static file.
+- [`firebase-tools`](https://firebase.google.com/docs/cli), logged in, on
+  a Blaze-plan project with the Cloud Run Admin API enabled (Cloud
+  Functions for Dart deploys as a Cloud Run service), and with
+  `firebase experiments:enable dartfunctions` run once on that machine.
+- Node 22.
+- Dart 3.13 or newer.
+- `bench/cloud/config.yaml`, copied from `bench/cloud/config.example.yaml`
+  and filled in with real values: `label`, `firebase_project`,
+  `supabase_project_ref`, `workers_name_prefix`.
+
+### Run
+
+```bash
+cd bench/runner
+dart pub get
+dart run bin/bench.dart cloud verify                        # every target must answer identically
+dart run bin/bench.dart cloud run --label <short-description>
+dart run bin/bench.dart cloud render ../results/cloud-<date>-<label>.json
+```
+
+`cloud verify` and `cloud run` both accept `--only <target>` to restrict
+to one target (`workers/aim`, `workers/native`, `supabase/aim`,
+`supabase/native`, `functions/aim`, or `functions/native`). `cloud run`
+also accepts `--cycles` (default 5) and `--requests` (default 100).
+
+`cloud verify` builds and deploys each target once and checks it answers
+all four scenarios; it does not measure anything.
+
+`cloud run` builds each target once, then deploys it `--cycles` times.
+Each deploy is a fresh deployment: cycle 1 goes cold → verify → warm;
+later cycles go cold → warm, since verify already passed in cycle 1. After
+the last cycle it measures `--requests` sequential requests per scenario
+against that last deployment, then reads the upload size, then moves on
+to the next target. A target that fails to deploy, fails verify, or
+answers incorrectly once measurement starts is recorded under `skipped`
+instead of stopping the whole run.
+
+Deploying a target is not instant: Cloud Run deploys in particular take
+minutes, not seconds, and this happens once per cycle for every target,
+so a full `cloud run` invocation takes a while to finish.
+
+Results are written to `bench/results/cloud-<date>-<label>.json`
+(`<label>` defaults to `config.yaml`'s `label`), in the same shape
+`cloud render` reads back.
+
+If `bench/cloud/config.yaml` doesn't exist yet, `cloud verify` and
+`cloud run` print a message pointing at `config.example.yaml`, set a
+non-zero exit code, and stop there instead of proceeding without it.
+
+### Fairness rules
+
+- All six targets are measured against the same four scenarios, from the
+  same measurement origin, in the same `cloud run` invocation, with the
+  same `--cycles` and `--requests`.
+- A target that doesn't answer a scenario exactly as `scenarios.dart`
+  defines it — at verify time, or once measurement starts — is not
+  measured with fabricated numbers; it's recorded under `skipped` (name
+  and reason) and listed under "Not measured" wherever the results are
+  rendered.
+- Both Supabase functions (`aim_bench_aim` and `aim_bench_native`) are
+  deployed with `--no-verify-jwt`: JWT verification is off for both, so
+  neither variant is measured with it and the other without.
+- Every other setting — compatibility date, memory, region, Node
+  version — is left at each platform's default, the same for the Aim
+  variant and the native baseline. Nothing is tuned to make the two more
+  comparable.
+- The three runtimes are not ranked against each other (see "What it does
+  not measure" above).
+- All three native baselines route their 100 static routes through a
+  `Map`, so `routes_100` against a native baseline measures a hash
+  lookup, not a router; only the Aim variants' `routes_100` numbers say
+  anything about routing cost.
+
+### What is never recorded
+
+Project ids, refs, worker names and deployed URLs never reach a results
+file: before `cloud run` writes one, it checks the JSON it's about to
+write for the Workers/Cloud Run/Supabase domains and for the account
+identifiers in `config.yaml`, and refuses to write the file — reporting
+only which categories were found, never the values themselves — if any
+of them are present. `bench/cloud/config.yaml` itself is git-ignored, so
+those identifiers never reach the repository either.
+
+### Cleaning up
+
+The six deployed functions/workers can be left in place — the next
+`cloud run` or `cloud verify` redeploys over them. To remove them
+instead:
+
+```bash
+npx wrangler@4 delete --name <name>
+supabase functions delete <name> --project-ref <ref>
+firebase functions:delete <name> --project <id>
+```
