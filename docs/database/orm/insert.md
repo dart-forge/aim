@@ -95,6 +95,8 @@ Future<void> createPost({
 }
 ```
 
+### Serial Columns
+
 ::: warning
 A `serial()` column is not left out of the statement the builder writes: the
 generated `values()` takes it like any other column and the `INSERT` names
@@ -113,6 +115,26 @@ await db.execute(
     'createdAt': DateTime.now(),
   },
 );
+```
+
+`.values()` also returns `Future<int>` (the affected row count), never the
+generated id — there is no builder method that reads it back. If you need
+the id, use `db.query()` (not `db.execute()`) with `RETURNING` instead, since
+`query()` is the method that returns rows:
+
+```dart
+final rows = await db.query(
+  'INSERT INTO posts (user_id, title, content, created_at) '
+  'VALUES (:userId, :title, :content, :createdAt) '
+  'RETURNING id',
+  params: {
+    'userId': userId,
+    'title': title,
+    'content': content,
+    'createdAt': DateTime.now(),
+  },
+);
+final insertedId = rows.first['id'];
 ```
 :::
 

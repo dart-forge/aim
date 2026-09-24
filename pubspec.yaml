@@ -10,6 +10,7 @@ workspace:
   - packages/aim_deno
   - packages/aim_functions
   - packages/aim_cli
+  - packages/aim_schema
   - packages/aim_server_cors
   - packages/aim_server_cookie
   - packages/aim_server_testing

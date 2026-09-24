@@ -222,7 +222,7 @@ Currently supported:
 ```dart
 // HMAC SHA-256
 final algorithm = HS256(
-  secretKey: SecretKey(secret: 'your-secret-key'),
+  secretKey: SecretKey(secret: 'your-secret-key-at-least-32-chars'),
 );
 ```
 

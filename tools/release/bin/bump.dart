@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:release/changelog.dart';
+import 'package:release/const_version.dart';
 import 'package:release/pubspec_bump.dart';
 import 'package:release/release_targets.dart';
 import 'package:release/template_pins.dart';
@@ -67,6 +68,9 @@ void main(List<String> args) {
 
   // Update aim_* pins embedded in the aim_cli scaffold templates
   _updateCliTemplates(newVersion);
+
+  // Update the aim_cli --version constant
+  _updateCliVersionConstant(newVersion);
 
   // Update docs version
   _updateDocsVersion(newVersion);
@@ -280,34 +284,39 @@ void _updateCliTemplates(String newVersion) {
   }
 }
 
+/// Rewrites the `aimCliVersion` constant that `aim --version` prints.
+///
+/// It has to be a source constant rather than something read from
+/// pubspec.yaml at runtime, since aim_cli ships as a compiled executable.
+void _updateCliVersionConstant(String newVersion) {
+  final versionFile = File('packages/aim_cli/lib/src/version.dart');
+  if (!versionFile.existsSync()) {
+    stdout.writeln(
+      'Warning: aim_cli version.dart not found, skipping --version constant update.',
+    );
+    return;
+  }
+
+  final content = versionFile.readAsStringSync();
+  final updated = bumpConstVersion(content, 'aimCliVersion', newVersion);
+
+  if (updated != content) {
+    versionFile.writeAsStringSync(updated);
+    stdout.writeln('aim_cli: version.dart → $newVersion');
+  }
+}
+
 void _updateDocsVersion(String newVersion) {
   final configFile = File('docs/.vitepress/config.mts');
   if (!configFile.existsSync()) {
     return;
   }
 
-  var content = configFile.readAsStringSync();
-  var updated = false;
+  final content = configFile.readAsStringSync();
+  final updated = bumpConstVersion(content, 'AIM_VERSION', newVersion);
 
-  // Update softwareVersion in JSON-LD
-  final softwareVersionRegex = RegExp(r'"softwareVersion":\s*"[^"]*"');
-  if (softwareVersionRegex.hasMatch(content)) {
-    content = content.replaceFirst(
-      softwareVersionRegex,
-      '"softwareVersion": "$newVersion"',
-    );
-    updated = true;
-  }
-
-  // Update nav version (e.g., text: 'v0.0.6')
-  final navVersionRegex = RegExp(r"text:\s*'v[\d.]+'");
-  if (navVersionRegex.hasMatch(content)) {
-    content = content.replaceFirst(navVersionRegex, "text: 'v$newVersion'");
-    updated = true;
-  }
-
-  if (updated) {
-    configFile.writeAsStringSync(content);
+  if (updated != content) {
+    configFile.writeAsStringSync(updated);
     stdout.writeln('docs: config.mts → v$newVersion');
   }
 }

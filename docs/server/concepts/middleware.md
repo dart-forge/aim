@@ -25,6 +25,18 @@ typedef Middleware<E extends Variables> = Future<void> Function(
 - **Context (`c`)**: Provides access to the request and response
 - **Next (`next`)**: Calls the next middleware or route handler in the chain
 
+::: warning A middleware cannot return a response
+The return type is `Future<void>`, so `return c.json(...)` does not compile: `c.json()`
+evaluates to a `Response`. The response helpers (`c.json()`, `c.text()`, ...) finalize the
+response on the context, so calling one and returning without calling `next()` is enough
+to stop the chain and send it:
+
+```dart
+c.json({'error': 'Unauthorized'}, statusCode: 401);
+return; // next() is not called - the finalized response is sent
+```
+:::
+
 ## Basic Middleware
 
 Here's a simple logging middleware:
@@ -113,8 +125,8 @@ app.use((c, next) async {
 // ✅ Return early without calling next() to stop the chain
 app.use((c, next) async {
   if (!isAuthorized(c)) {
-    return c.json({'error': 'Unauthorized'}, statusCode: 401);
-    // next() is NOT called - chain stops here
+    c.json({'error': 'Unauthorized'}, statusCode: 401);
+    return; // next() is NOT called - chain stops here
   }
   return next();
 });
@@ -183,7 +195,7 @@ Future<void> errorHandler(Context c, Next next) async {
     print('Error: $error');
     print('Stack: $stackTrace');
 
-    return c.json({
+    c.json({
       'error': 'Internal Server Error',
       'message': error.toString(),
     }, statusCode: 500);
@@ -204,9 +216,47 @@ void main() async {
 }
 ```
 
+### `app.onError`
+
+A try/catch middleware only catches errors thrown while `next()` runs — it
+still has to be registered before every route that can throw. `Aim` also
+has a single, centralized hook:
+
+```dart
+typedef ErrorHandler<E extends Variables> = Future<Response> Function(
+  Object error,
+  Context<E> c,
+);
+
+Aim<E> onError(ErrorHandler<E> handler);
+```
+
+```dart
+final app = Aim();
+
+app.onError((error, c) async {
+  return c.json({'error': error.toString()}, statusCode: 500);
+});
+
+app.get('/error', (c) async {
+  throw Exception('Something went wrong!');
+});
+```
+
+If no `onError` handler is registered, the behavior is adapter-specific:
+`aim_server` (the `dart:io` adapter) logs the error with its stack trace
+and responds with a plain 500. Whether the Workers, Deno, and Cloud
+Functions adapters do the same has not been separately verified here —
+check each runtime page if that matters for your deployment.
+
 ## Authentication Middleware
 
-Protect routes with authentication:
+`app.use()` appends to one middleware list that runs, in registration
+order, for **every** request that reaches routing — regardless of whether
+the middleware was registered before or after a given route. There is no
+way to make a middleware apply "only to routes registered after it".
+Registering `requireAuth` after `/login` does **not** exempt `/login`; the
+middleware itself must decide which requests to skip:
 
 ```dart
 class AuthVariables extends Variables {
@@ -214,17 +264,24 @@ class AuthVariables extends Variables {
 }
 
 Future<void> requireAuth(Context<AuthVariables> c, Next next) async {
+  const publicPaths = {'/login', '/register'};
+  if (publicPaths.contains(c.req.path)) {
+    return next();
+  }
+
   final token = c.req.headers['authorization'];
 
   if (token == null) {
-    return c.json({'error': 'Missing token'}, statusCode: 401);
+    c.json({'error': 'Missing token'}, statusCode: 401);
+    return;
   }
 
   // Verify token and extract user ID
   final userId = await verifyToken(token);
 
   if (userId == null) {
-    return c.json({'error': 'Invalid token'}, statusCode: 401);
+    c.json({'error': 'Invalid token'}, statusCode: 401);
+    return;
   }
 
   c.variables.userId = userId;
@@ -236,12 +293,10 @@ void main() async {
     variablesFactory: () => AuthVariables(),
   );
 
-  // Public routes
-  app.post('/login', loginHandler);
-  app.post('/register', registerHandler);
-
-  // Protected routes
   app.use(requireAuth);
+
+  app.post('/login', loginHandler);       // skipped by requireAuth's own check
+  app.post('/register', registerHandler); // skipped by requireAuth's own check
   app.get('/profile', profileHandler);
   app.get('/dashboard', dashboardHandler);
 
@@ -249,9 +304,15 @@ void main() async {
 }
 ```
 
+`aim_server_jwt`'s built-in middleware has the same constraint and solves
+it with `JwtOptions.excludedPaths` instead of an inline path check — see
+[JWT Authentication](/server/auth/jwt).
+
 ## Conditional Middleware
 
-Apply middleware only to specific routes:
+The same principle applies to any middleware that should only act on part
+of the route tree: check the path inside the middleware itself, since
+`use()` cannot scope by registration position.
 
 ```dart
 void main() async {
@@ -316,10 +377,11 @@ Middleware<E> ratelimit<E extends Variables>({
     requests[ip]!.removeWhere((t) => now.difference(t) > window);
 
     if (requests[ip]!.length >= maxRequests) {
-      return c.json(
+      c.json(
         {'error': 'Rate limit exceeded'},
         statusCode: 429,
       );
+      return;
     }
 
     requests[ip]!.add(now);
@@ -342,8 +404,12 @@ import 'package:aim_server_cors/aim_server_cors.dart';
 import 'package:aim_server_jwt/aim_server_jwt.dart';
 
 final app = Aim<JwtVariables>(
-  variablesFactory: () => JwtVariables(
-    secret: 'your-secret-key',
+  variablesFactory: () => JwtVariables.create(
+    JwtOptions(
+      algorithm: HS256(
+        secretKey: SecretKey(secret: 'your-secret-key-at-least-32-characters'),
+      ),
+    ),
   ),
 );
 

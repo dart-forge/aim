@@ -15,19 +15,31 @@ Frequently asked questions about Aim.
 
 ### What is Aim?
 
-Aim is a lightweight, fast web framework for Dart. It's designed to be simple, type-safe, and performance-focused, with an API inspired by modern frameworks like Hono.
+Aim is a lightweight, modular web framework for Dart. It's designed to be simple and type-safe, with a small API surface inspired by modern frameworks like Hono.
 
 ### Why Aim over other Dart frameworks?
 
-- **Simple API**: Context-based API that's easy to learn
+- **Simple API**: Context-based API that's easy to learn, inspired by Hono
 - **Type-Safe**: Leverages Dart's type system with custom `Variables` classes for context variables
-- **Modular**: Rich ecosystem of optional middleware packages
-- **Performance**: Minimal overhead with optimized routing
-- **Great DX**: Built-in hot reload and comprehensive testing utilities
+- **Modular**: Independently installable middleware packages (separate packages, released together at the same version), and a database stack (`aim_postgres`, `aim_orm`) that works without `aim_server`
+- **Runtime-independent core**: routing, middleware, and `Context` live in `aim_core`; the same application code runs on the Dart VM, Cloudflare Workers, Deno-based runtimes, and Cloud Functions for Firebase (with per-runtime caveats — see [Component Status](/status))
+- **Great DX**: Built-in hot reload (`aim dev`) and a dedicated testing package (`aim_server_testing`)
+
+No benchmark suite exists yet, so this list intentionally leaves out
+performance claims. See [Component Status](/status) for what has and hasn't
+been measured.
 
 ### Is Aim production-ready?
 
-Yes! Aim is stable and suitable for production use. The framework follows semantic versioning and has comprehensive test coverage.
+It depends on which package. Aim is pre-1.0 (every package is at `0.4.0`),
+and the project's own changelog calls 0.4.0 a "beta". Some packages —
+`aim_core`, `aim_server`, `aim_postgres` — are exercised by integration
+tests that run in CI on every push and have no known blocking issues.
+Others — the ORM, the CLI's database commands, the Cloudflare Workers and
+Deno adapters, and especially Cloud Functions for Firebase — have smaller
+test surfaces or explicit caveats. See [Component Status](/status) for a
+per-package breakdown before deciding what to put in front of production
+traffic.
 
 ### What's the relationship with Hono?
 
@@ -37,7 +49,7 @@ Aim's API is inspired by [Hono](https://hono.dev/), a popular JavaScript framewo
 
 ### What Dart version do I need?
 
-Aim requires Dart SDK 3.10.0 or higher.
+Aim requires Dart SDK 3.13.0 or higher (every package's `pubspec.yaml` pins `sdk: ^3.13.0`).
 
 ### How do I install Aim?
 
@@ -86,7 +98,7 @@ app.get('/users/:id', (c) async {
 
 ```dart
 app.get('/search', (c) async {
-  final query = c.req.queries['q']?.first;
+  final query = c.req.queryParameters['q'];
   return c.json({'query': query});
 });
 ```
@@ -219,7 +231,7 @@ final app = Aim<JwtVariables>(
   variablesFactory: () => JwtVariables.create(
     JwtOptions(
       algorithm: HS256(
-        secretKey: SecretKey(secret: 'your-secret-key'),
+        secretKey: SecretKey(secret: 'at-least-32-characters-long-secret-key'),
       ),
       excludedPaths: ['/login'],
     ),
@@ -231,15 +243,26 @@ app.use(jwt());
 
 ### How do I protect specific routes?
 
-Apply middleware before the routes you want to protect:
+`app.use()` registers middleware that runs for **every** request,
+regardless of where the call appears relative to the routes it sits next
+to — there is no Express-style "only affects routes registered after this
+point". Use `JwtOptions.excludedPaths` (or the equivalent option on other
+auth middleware) to name the routes that should skip authentication:
 
 ```dart
-// Public routes
-app.post('/login', loginHandler);
+final app = Aim<JwtVariables>(
+  variablesFactory: () => JwtVariables.create(
+    JwtOptions(
+      algorithm: HS256(secretKey: SecretKey(secret: '...')),
+      excludedPaths: ['/login'],
+    ),
+  ),
+);
 
-// Protected routes (apply auth middleware)
 app.use(jwt());
-app.get('/dashboard', dashboardHandler);
+
+app.post('/login', loginHandler);       // excluded, runs without a token
+app.get('/dashboard', dashboardHandler); // requires a valid token
 ```
 
 ### Can I use session-based auth?
@@ -313,7 +336,17 @@ See the [Testing guide](/server/guides/testing) for details.
 
 ### Does Aim support serverless?
 
-Aim is designed for traditional server deployments. For serverless, consider using `shelf` with Dart's Cloud Functions.
+Yes, for three targets, at different maturity levels (see [Component
+Status](/status) for what's verified in CI):
+
+- [Cloudflare Workers](/server/workers) (`aim_workers`) — Beta, integration-tested against a real `wrangler dev`.
+- [Supabase Edge Functions](/server/supabase) and other Deno runtimes (`aim_deno`) — Beta, verified against a local Supabase stack and, for HTTP routing only, a real deployed Supabase function.
+- [Cloud Functions for Firebase](/server/functions) (`aim_functions`) — Experimental, inheriting `firebase_functions`'s own experimental Dart support.
+
+The same application code runs across these and the Dart VM through
+`aim_core`'s runtime-independent design; each runtime page above covers its
+specific setup and limitations (for example, `aim_postgres` and the ORM
+need `dart:io` and cannot run in a Worker or Deno wasm build).
 
 ### How do I enable HTTPS?
 
@@ -347,7 +380,10 @@ See [CORS guide](/server/middleware/cors) for details.
 
 ### How fast is Aim?
 
-Aim is designed for performance with minimal overhead. Benchmarks show comparable or better performance than other Dart frameworks.
+There is no published benchmark suite yet, so this FAQ makes no speed claim
+relative to other Dart frameworks. Routing is a linear scan of registered
+routes with the first match winning; for applications with a very large
+number of routes, that is worth keeping in mind.
 
 ### How do I optimize performance?
 
@@ -430,7 +466,9 @@ await app.serve(host: InternetAddress.anyIPv4, port: 3000);
 
 ### How do I contribute?
 
-See the [Contributing Guide](https://github.com/dart-forge/aim/blob/main/CONTRIBUTING.md).
+There is no `CONTRIBUTING.md` yet. Open an issue or a pull request on
+[GitHub](https://github.com/dart-forge/aim) to start a conversation before
+sending a large change.
 
 ### Where can I report bugs?
 

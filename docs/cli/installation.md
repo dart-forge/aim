@@ -19,13 +19,44 @@ dart install aim_cli
 
 ## Verify Installation
 
+Confirm the install with `--version`:
+
 ```bash
 aim --version
 ```
 
 Output:
 ```
-aim_cli 0.0.2
+aim_cli 0.4.0
+```
+
+To list every command, use `--help`:
+
+```bash
+aim --help
+```
+
+Output:
+```
+Command-line tool for Aim framework
+
+Usage: aim <command> [arguments]
+
+Global options:
+-h, --help       Print this usage information.
+    --version    Print the aim_cli version.
+
+Available commands:
+  build         Compile the server for production deployment
+  create        Create a new Aim framework project
+  db:generate   Generate migration from table definitions
+  db:migrate    Apply pending migrations to the database
+  db:reset      Drop database, recreate it, and apply all migrations
+  db:rollback   Rollback the last applied migration(s)
+  db:status     Show migration status
+  dev           Start development server (with hot reload support)
+
+Run "aim help <command>" for more information about a command.
 ```
 
 ## PATH Configuration

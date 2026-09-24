@@ -12,39 +12,45 @@ head:
 Aim provides a rich ecosystem of official middleware packages for common web application needs. Each package is published separately, allowing you to include only what you need.
 
 ::: tip Runs on edge runtimes too
-The `aim_server_*` middleware packages (cors, cookie, form, logger, sse, jwt, basic_auth) depend on `aim_core` and work unchanged on Cloudflare workerd (via `aim_workers`) and on Deno-based runtimes (via `aim_deno`). `aim_server_static` and `aim_server_multipart`'s `saveTo()` need the file system and are VM-only.
+The `aim_server_*` middleware packages (cors, cookie, form, logger, sse, jwt, basic_auth) and `aim_server_multipart`'s parsing depend only on `aim_core` and work unchanged on Cloudflare workerd (via `aim_workers`) and on Deno-based runtimes (via `aim_deno`). `aim_server_static` and `aim_server_multipart`'s `UploadedFile.saveTo()` need the file system and are VM-only.
 :::
 
 ## Available Middleware
 
+Every `aim_server_*` package below is versioned and released together with the
+rest of the `aim_*` packages (see the [Migration Guide](/server/guides/migration)),
+so no per-package version is listed here — check the [pub.dev
+listing](https://pub.dev/packages?q=publisher%3Adart-forge.dev) or the
+package's own page for the current version.
+
 ### Core Features
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [CORS](/server/middleware/cors) | Cross-Origin Resource Sharing support | 0.0.1 |
-| [Logger](/server/middleware/logger) | HTTP request/response logging | 0.0.1 |
-| [Static Files](/server/middleware/static) | Serve static files securely | 0.0.1 |
+| Package | Description |
+|---------|-------------|
+| [CORS](/server/middleware/cors) | Cross-Origin Resource Sharing support |
+| [Logger](/server/middleware/logger) | HTTP request/response logging |
+| [Static Files](/server/middleware/static) | Serve static files securely |
 
 ### Data Handling
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [Cookie](/server/middleware/cookie) | Secure cookie management | 0.0.1 |
-| [Form](/server/middleware/form) | Parse form data (application/x-www-form-urlencoded) | 0.0.1 |
-| [Multipart](/server/middleware/multipart) | Handle file uploads (multipart/form-data) | 0.0.1 |
+| Package | Description |
+|---------|-------------|
+| [Cookie](/server/middleware/cookie) | Secure cookie management |
+| [Form](/server/middleware/form) | Parse form data (application/x-www-form-urlencoded) |
+| [Multipart](/server/middleware/multipart) | Handle file uploads (multipart/form-data) |
 
 ### Real-time
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [SSE](/server/middleware/sse) | Server-Sent Events support | 0.0.1 |
+| Package | Description |
+|---------|-------------|
+| [SSE](/server/middleware/sse) | Server-Sent Events support |
 
 ### Authentication
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [JWT Auth](/server/auth/jwt) | JSON Web Token authentication | 0.0.1 |
-| [Basic Auth](/server/auth/basic-auth) | HTTP Basic Authentication (RFC 7617) | 0.0.1 |
+| Package | Description |
+|---------|-------------|
+| [JWT Auth](/server/auth/jwt) | JSON Web Token authentication |
+| [Basic Auth](/server/auth/basic-auth) | HTTP Basic Authentication (RFC 7617) |
 
 ## Installation
 
@@ -52,10 +58,10 @@ Add middleware packages to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  aim_server: ^0.1.1
-  aim_server_cors: ^0.0.1
-  aim_server_logger: ^0.0.1
-  aim_server_jwt: ^0.0.1
+  aim_server: ^0.4.0
+  aim_server_cors: ^0.4.0
+  aim_server_logger: ^0.4.0
+  aim_server_jwt: ^0.4.0
 ```
 
 Then run:
@@ -90,7 +96,11 @@ void main() async {
 
 ## Middleware Order
 
-The order in which you add middleware matters:
+`app.use()` appends to one list that runs, in registration order, for
+**every** request — the order controls what happens *before* the others
+in the chain, not *which routes* a middleware applies to. `app.use(jwt())`
+below does not exempt routes added earlier or later; `jwt` itself has to
+be told which paths to skip (see [Public + Protected Routes](#public-protected-routes)):
 
 ```dart
 final app = Aim();
@@ -98,10 +108,10 @@ final app = Aim();
 // 1. Logger (first to capture everything)
 app.use(logger());
 
-// 2. CORS (before authentication)
+// 2. CORS (before authentication, so preflight requests are handled)
 app.use(cors());
 
-// 3. Authentication (protect routes below)
+// 3. Authentication (runs for every route, including ones registered above)
 app.use(jwt());
 
 // 4. Your routes
@@ -111,7 +121,7 @@ app.get('/protected', handler);
 **Best practices:**
 - Logger should be first to capture all requests
 - CORS should be early to handle preflight requests
-- Authentication should come before protected routes
+- Use each middleware's own exclusion option (such as `JwtOptions.excludedPaths`) to leave specific routes unauthenticated — registration order does not scope middleware to a subset of routes
 - Error handlers should wrap other middleware
 
 ## Middleware That Requires Variables
@@ -144,6 +154,10 @@ app.get('/protected', (c) async {
 
 ### Public + Protected Routes
 
+`jwt()` runs for every request once registered, no matter where the route
+is declared, so leaving routes public means listing them in
+`JwtOptions.excludedPaths` rather than registering them before `app.use(jwt())`:
+
 ```dart
 import 'package:aim_server_jwt/aim_server_jwt.dart';
 
@@ -153,6 +167,7 @@ final app = Aim<JwtVariables>(
       algorithm: HS256(
         secretKey: SecretKey(secret: 'your-secret-key-at-least-32-chars'),
       ),
+      excludedPaths: ['/login', '/public'],
     ),
   ),
 );
@@ -160,13 +175,13 @@ final app = Aim<JwtVariables>(
 // Global middleware
 app.use(logger());
 app.use(cors());
+app.use(jwt());
 
-// Public routes
+// Public routes (excluded above, so no token required)
 app.post('/login', loginHandler);
 app.get('/public', publicHandler);
 
 // Protected routes
-app.use(jwt());
 app.get('/dashboard', dashboardHandler);
 app.get('/profile', profileHandler);
 ```

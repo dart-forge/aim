@@ -83,6 +83,15 @@ Deploy with the CLI, not `--use-api`: `--use-api` skips the bundling step that p
 
 A deployed function answers from the Dart application, so `static_files` does carry `main.wasm` through a real deploy — the function could not have started otherwise. Function names may contain underscores: a project named `hello_supabase` deployed and served under that slug.
 
+## Database access
+
+A Supabase project has a real PostgreSQL database behind it, but
+`aim_postgres` and the ORM depend on `dart:io` and cannot run inside the
+Edge Function's WebAssembly runtime — the same restriction described on
+[Cloudflare Workers](/server/workers#limitations). Reaching the project's
+Postgres instance from inside an Edge Function has not been verified and
+there is no example of it in this repository.
+
 ## Environment variables
 
 `c.env` returns a typed `EdgeEnv?` (a `DenoEnv` on this runtime): `c.env?.string('NAME')` reads a Deno environment variable, and `c.env?.has('NAME')` checks presence. Supabase has no resource bindings, so `c.env?.get(name)` is always `null`.

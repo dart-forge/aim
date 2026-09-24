@@ -146,7 +146,16 @@ final form = await c.req.multipart(
 ```
 
 Wildcards like `image/*` match any subtype. Exceeding a limit or sending a
-disallowed type throws an `Exception`.
+disallowed type throws Dart's generic `Exception` type (not a dedicated
+`MultipartException` or similar) with a descriptive message:
+
+```dart
+try {
+  final form = await c.req.multipart(maxFileSize: 5 * 1024 * 1024);
+} on Exception catch (e) {
+  return c.json({'error': e.toString()}, statusCode: 413);
+}
+```
 
 ## Complete Example
 

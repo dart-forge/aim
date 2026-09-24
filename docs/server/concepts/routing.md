@@ -104,6 +104,7 @@ Aim createPostRoutes() {
 
 // bin/server.dart
 import 'dart:io';
+import 'package:aim_server/aim_server.dart';
 import 'package:my_app/routes/users.dart';
 import 'package:my_app/routes/posts.dart';
 
@@ -242,9 +243,9 @@ Access query parameters through the request object:
 
 ```dart
 app.get('/search', (c) async {
-  final query = c.req.queries; // Map<String, List<String>>
-  final q = query['q']?.first;
-  final page = query['page']?.first ?? '1';
+  final query = c.req.queryParameters; // Map<String, String>
+  final q = query['q'];
+  final page = query['page'] ?? '1';
 
   return c.json({
     'query': q,
@@ -375,7 +376,7 @@ void main() async {
   // Delete user
   app.delete('/users/:id', (c) async {
     final id = c.param('id');
-    return c.json({'deleted': id}, statusCode: 204);
+    return c.json({'deleted': id}, statusCode: 200);
   });
 
   // Nested resources

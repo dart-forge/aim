@@ -30,15 +30,15 @@ Add database configuration to your `pubspec.yaml`:
 name: my_app
 
 dependencies:
-  aim_server: ^0.1.0
-  aim_orm: ^0.1.0
-  aim_orm_postgres: ^0.1.0
-  aim_postgres: ^0.1.0
+  aim_server: ^0.4.0
+  aim_orm: ^0.4.0
+  aim_orm_postgres: ^0.4.0
+  aim_postgres: ^0.4.0
 
 aim:
   database:
     url: ${DATABASE_URL:postgresql://localhost:5432/mydb}
-    schema: lib/schema.dart  # Path to your schema file
+    schema: lib/schema  # Path to your schema definitions (file or directory)
 ```
 
 | Option | Description | Default |
@@ -54,7 +54,7 @@ export DATABASE_URL="postgresql://user:pass@localhost:5432/mydb"
 
 ### 2. Create Schema File
 
-Create `lib/schema.dart`:
+Create `lib/schema/schema.dart` (the default `schema` path, `lib/schema`, is scanned for `.dart` files):
 
 ```dart
 import 'package:aim_orm/aim_orm.dart';
@@ -99,10 +99,10 @@ aim db:generate --name add_posts_table
 
 ### Output
 
-Migrations are created in the `migrations/` directory:
+Migrations are created in the `db/migrations/` directory:
 
 ```
-migrations/
+db/migrations/
 ├── 20250121_100000_initial.sql
 ├── 20250121_110000_add_posts_table.sql
 └── 20250121_120000_add_indexes.sql
@@ -436,7 +436,7 @@ gives this up for the statements that need it.
 
 ```bash
 # Create schema
-vim lib/schema.dart
+vim lib/schema/schema.dart
 
 # Generate initial migration
 aim db:generate --name initial
@@ -452,7 +452,7 @@ aim db:migrate
 
 ```bash
 # Update schema
-vim lib/schema.dart
+vim lib/schema/schema.dart
 
 # Regenerate code
 dart run build_runner build
@@ -471,7 +471,7 @@ aim db:migrate
 aim db:rollback
 
 # Fix schema
-vim lib/schema.dart
+vim lib/schema/schema.dart
 
 # Regenerate
 dart run build_runner build
@@ -487,7 +487,6 @@ The following features are not yet supported:
 
 | Feature | Status |
 |---------|--------|
-| `db:reset` | Planned |
 | RENAME TABLE | Not supported |
 | Composite indexes | Not supported |
 | Composite unique constraints | Not supported |

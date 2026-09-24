@@ -17,9 +17,9 @@ Aim's database packages can be used independently:
 |---------|----------|
 | `aim_database` | Abstraction layer only (for custom driver implementations) |
 | `aim_postgres` | PostgreSQL connection (includes `aim_database`) |
-| `aim_sqlite` | SQLite connection (includes `aim_database`) |
-| `aim_mysql` | MySQL connection (includes `aim_database`) |
-| `aim_orm` | ORM abstraction layer (Coming Soon) |
+| `aim_sqlite` | SQLite connection (includes `aim_database`) — **not yet published to pub.dev**, see [SQLite](#sqlite) below |
+| `aim_mysql` | MySQL connection (includes `aim_database`) — **not yet published to pub.dev**, see [MySQL](/database/drivers/mysql) |
+| `aim_orm` | ORM abstraction layer |
 | `aim_orm_postgres` | PostgreSQL ORM (includes `aim_orm` + `aim_postgres`) |
 
 ## PostgreSQL
@@ -36,7 +36,7 @@ This also adds `aim_database` as a dependency.
 
 ```yaml
 dependencies:
-  aim_postgres: ^0.0.1
+  aim_postgres: ^0.4.0
 ```
 
 ## Verify Installation
@@ -86,26 +86,19 @@ postgresql://user:password@host:port/database?sslmode=require
 
 ## SQLite
 
-Add the SQLite driver directly:
-
-```bash
-dart pub add aim_sqlite
-```
-
-This also adds `aim_database` as a dependency.
-
-### pubspec.yaml
-
-```yaml
-dependencies:
-  aim_sqlite: ^0.1.0
-```
+::: warning Not yet published to pub.dev
+`aim_sqlite` is in the [`dart-forge/aim`](https://github.com/dart-forge/aim)
+repository (`packages/aim_sqlite`) but is not published to pub.dev yet, so
+there is no `dart pub add aim_sqlite` command or version constraint to add
+to `pubspec.yaml` today. The driver itself and the rest of this page
+describe what it does once it is published.
+:::
 
 ### libsqlite3
 
 Unlike `aim_postgres`, `aim_sqlite` does not talk to a server -- it loads `libsqlite3` from the machine it runs on, so that library must already be installed (it ships with macOS and most Linux distributions; on Windows, place `sqlite3.dll` next to your executable, or point the `AIM_SQLITE_LIBRARY` environment variable at it). Version `3.8.7` or newer is required. See the [SQLite driver](/database/drivers/sqlite#libsqlite3) page for the exact search order.
 
-### Verify Installation
+### Example Usage
 
 ```dart
 import 'package:aim_sqlite/aim_sqlite.dart';
@@ -161,6 +154,6 @@ void main() async {
 ## Next Steps
 
 - [PostgreSQL Driver](/database/drivers/postgres) - Detailed usage guide
-- [SQLite Driver](/database/drivers/sqlite) - Detailed usage guide
-- [MySQL Driver](/database/drivers/mysql) - Detailed usage guide
-- [ORM](/database/orm/) - Coming Soon
+- [SQLite Driver](/database/drivers/sqlite) - Detailed usage guide (not yet published to pub.dev)
+- [MySQL Driver](/database/drivers/mysql) - Detailed usage guide (not yet published to pub.dev)
+- [ORM](/database/orm/) - Type-safe query builder for PostgreSQL

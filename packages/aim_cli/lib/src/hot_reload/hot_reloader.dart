@@ -7,10 +7,19 @@ class HotReloader {
   final Map<String, String> _environment;
   final List<String> _watchPaths;
 
-  late final ProcessManager _processManager;
-  late final FileWatcher _fileWatcher;
+  // Created on first use rather than in `start()`, so that `stop()` is safe
+  // to call whether or not the loop got as far as starting.
+  late final ProcessManager _processManager = ProcessManager(
+    entryPoint: _entryPoint,
+    environment: _environment,
+  );
+  late final FileWatcher _fileWatcher = FileWatcher(
+    watchPaths: _watchPaths,
+    onChanged: _onFileChanged,
+  );
 
   bool _isReloading = false;
+  bool _stopped = false;
 
   HotReloader({
     required String entryPoint,
@@ -22,16 +31,6 @@ class HotReloader {
 
   /// Start hot reload
   Future<void> start() async {
-    _processManager = ProcessManager(
-      entryPoint: _entryPoint,
-      environment: _environment,
-    );
-
-    _fileWatcher = FileWatcher(
-      watchPaths: _watchPaths,
-      onChanged: _onFileChanged,
-    );
-
     // Start process
     await _processManager.start();
 
@@ -45,14 +44,15 @@ class HotReloader {
 
   /// Stop hot reload
   Future<void> stop() async {
+    _stopped = true;
     await _fileWatcher.stop();
     await _processManager.stop();
   }
 
   /// Handle file changes
   Future<void> _onFileChanged() async {
-    if (_isReloading) {
-      return; // Already reloading
+    if (_isReloading || _stopped) {
+      return; // Already reloading, or the CLI is on its way out
     }
 
     _isReloading = true;
