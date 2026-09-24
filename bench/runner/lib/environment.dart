@@ -32,7 +32,6 @@ Future<Map<String, Object?>> captureEnvironment() async {
     'cores': int.tryParse(await _run('sysctl', ['-n', 'hw.ncpu'])),
     'memoryBytes': int.tryParse(await _run('sysctl', ['-n', 'hw.memsize'])),
     'dart': await _run('dart', ['--version']),
-    'hostname': await _run('hostname', ['-s']),
   };
 }
 

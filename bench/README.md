@@ -73,7 +73,7 @@ always connects to `127.0.0.1`.
 cd bench/runner
 dart pub get
 dart run bin/bench.dart verify        # every app must answer identically
-dart run bin/bench.dart run --label <machine-name>
+dart run bin/bench.dart run --label <short-description>  # e.g. m5-pro, not the hostname
 dart run bin/bench.dart render ../results/<date>-<label>.json
 ```
 
@@ -92,7 +92,7 @@ Options, with their defaults:
 | Command | Option | Default | Meaning |
 |---|---|---|---|
 | `verify`, `run` | `--only <name>` | all apps | Restrict to one app (`dart_io`, `aim`, `shelf_router`, `relic`, or `dart_frog`). |
-| `run` | `--label <name>` | `local` | Suffix of the results file name. |
+| `run` | `--label <name>` | `local` | Suffix of the results file name; a short, non-identifying description of the machine (e.g. `m5-pro`), not its hostname. |
 | `run` | `--duration <seconds>` | `10` | Seconds `oha` runs per measured run. |
 | `run` | `--connections <n>` | `64` | Concurrent connections `oha` opens. |
 | `run` | `--runs <n>` | `5` | Measured runs per scenario; the median is kept. |
