@@ -36,6 +36,7 @@ final class SqlDialect {
     required this.identifierQuote,
     required this.backslashEscapes,
     required this.hashLineComment,
+    this.doubleDashCommentNeedsBoundary = false,
   });
 
   /// A quoting character beyond `'` and `"`, or null when the dialect has
@@ -43,10 +44,26 @@ final class SqlDialect {
   final String? identifierQuote;
 
   /// Whether a backslash inside a quoted run escapes the next character.
+  ///
+  /// Only ever applies inside a `'` or `"` string literal, never inside a
+  /// run opened by [identifierQuote]: MySQL's own rule is that a backslash
+  /// has no special meaning in a quoted identifier, escaping or otherwise,
+  /// so `` `a\` `` is the two-character identifier `a\`, not an escaped
+  /// backtick that swallows whatever follows.
   final bool backslashEscapes;
 
   /// Whether `#` starts a comment that runs to the end of the line.
   final bool hashLineComment;
+
+  /// Whether `--` only starts a comment when followed by whitespace, a
+  /// control character or the end of the string -- MySQL's actual rule,
+  /// unlike Postgres, where `--` is always a comment regardless of what
+  /// comes after it.
+  ///
+  /// This matters for a placeholder right after it: MySQL reads
+  /// `SELECT 1--:x` as the expression `1 - -:x`, with `:x` a placeholder --
+  /// not as `1` followed by a comment that swallows `:x`.
+  final bool doubleDashCommentNeedsBoundary;
 
   /// PostgreSQL.
   ///
@@ -70,6 +87,7 @@ final class SqlDialect {
     identifierQuote: '`',
     backslashEscapes: true,
     hashLineComment: true,
+    doubleDashCommentNeedsBoundary: true,
   );
 
   /// MySQL with `NO_BACKSLASH_ESCAPES` in its `sql_mode`, where a backslash
@@ -83,6 +101,7 @@ final class SqlDialect {
     identifierQuote: '`',
     backslashEscapes: false,
     hashLineComment: true,
+    doubleDashCommentNeedsBoundary: true,
   );
 }
 
@@ -113,10 +132,15 @@ List<SqlPlaceholder> scanSqlPlaceholders(
     final char = sql[i];
 
     if (char == '-' && sql.startsWith('--', i)) {
-      final end = sql.indexOf('\n', i);
-      if (end == -1) break;
-      i = end + 1;
-      continue;
+      final boundaryOk = !dialect.doubleDashCommentNeedsBoundary ||
+          i + 2 >= sql.length ||
+          _isCommentBoundary(sql[i + 2]);
+      if (boundaryOk) {
+        final end = sql.indexOf('\n', i);
+        if (end == -1) break;
+        i = end + 1;
+        continue;
+      }
     }
 
     if (dialect.hashLineComment && char == '#') {
@@ -134,7 +158,13 @@ List<SqlPlaceholder> scanSqlPlaceholders(
     }
 
     if (char == "'" || char == '"' || char == dialect.identifierQuote) {
-      i = _skipQuoted(sql, i, char, dialect.backslashEscapes);
+      final isIdentifierQuote = char == dialect.identifierQuote;
+      i = _skipQuoted(
+        sql,
+        i,
+        char,
+        !isIdentifierQuote && dialect.backslashEscapes,
+      );
       continue;
     }
 
@@ -205,6 +235,14 @@ int _skipQuoted(
     i++;
   }
   return sql.length;
+}
+
+/// Whether [char] is whitespace or a control character -- what MySQL
+/// requires right after `--` for it to start a comment, rather than be read
+/// as two unary minuses.
+bool _isCommentBoundary(String char) {
+  final code = char.codeUnitAt(0);
+  return code <= 0x20;
 }
 
 bool _isNameChar(String char) {
