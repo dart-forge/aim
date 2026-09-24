@@ -720,28 +720,31 @@ class UsersTable {
       );
     });
 
-    test('an annotation on a value that is not a record stops the command',
-        () async {
-      writeSchema('''
+    test(
+      'an annotation on a value that is not a record stops the command',
+      () async {
+        writeSchema('''
 import 'package:aim_orm/aim_orm.dart';
 
 @PgTable('users')
 final users = 1;
 ''');
 
-      await expectLater(
-        generate('first'),
-        throwsA(
-          isA<FormatException>()
-              .having((e) => e.message, 'message', contains('"users"'))
-              .having((e) => e.message, 'message', contains('not a record')),
-        ),
-      );
-    });
+        await expectLater(
+          generate('first'),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('"users"'))
+                .having((e) => e.message, 'message', contains('not a record')),
+          ),
+        );
+      },
+    );
 
-    test('a table name that is not a string literal stops the command',
-        () async {
-      writeSchema('''
+    test(
+      'a table name that is not a string literal stops the command',
+      () async {
+        writeSchema('''
 import 'package:aim_orm/aim_orm.dart';
 
 const usersTable = 'users';
@@ -752,12 +755,50 @@ final users = (
 );
 ''');
 
+        await expectLater(
+          generate('first'),
+          throwsA(
+            isA<FormatException>()
+                .having((e) => e.message, 'message', contains('string literal'))
+                .having((e) => e.message, 'message', contains('schema.dart')),
+          ),
+        );
+      },
+    );
+
+    test('an annotation written through an import prefix is read', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart' as orm;
+
+@orm.PgTable('users')
+final users = (
+  id: orm.integer('id').primaryKey(),
+  name: orm.varchar('name', length: 20),
+);
+''');
+      await generate('first');
+
+      final up = upOf('first');
+      expect(up, contains('CREATE TABLE users ('));
+      expect(up, contains('name VARCHAR(20) NOT NULL'));
+    });
+
+    test('the refusal sees through an import prefix as well', () async {
+      writeSchema('''
+import 'package:aim_orm/aim_orm.dart' as orm;
+
+@orm.PgTable('users')
+class UsersTable {}
+''');
+
       await expectLater(
         generate('first'),
         throwsA(
-          isA<FormatException>()
-              .having((e) => e.message, 'message', contains('string literal'))
-              .having((e) => e.message, 'message', contains('schema.dart')),
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('a class'),
+          ),
         ),
       );
     });

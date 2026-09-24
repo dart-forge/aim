@@ -179,6 +179,20 @@ class DbGenerateCommand extends Command<void> {
     print('✅ Done!');
   }
 
+  /// Whether [annotation] is `@PgTable`, however the import was spelled.
+  ///
+  /// `@orm.PgTable('users')` has a prefixed name, and comparing the whole
+  /// of it to `PgTable` misses it. Both this reader's refusal and its scan
+  /// go through here, so they cannot disagree about which annotations
+  /// count.
+  bool _isPgTable(Annotation annotation) {
+    final name = annotation.name;
+    final simple = name is PrefixedIdentifier
+        ? name.identifier.name
+        : name.name;
+    return simple == 'PgTable';
+  }
+
   /// Stops when [unit] carries a `@PgTable` annotation this reader cannot
   /// take a table from.
   ///
@@ -195,7 +209,7 @@ class DbGenerateCommand extends Command<void> {
     for (final declaration in unit.declarations) {
       Annotation? pgTable;
       for (final annotation in declaration.metadata) {
-        if (annotation.name.name == 'PgTable') {
+        if (_isPgTable(annotation)) {
           pgTable = annotation;
           break;
         }
@@ -270,7 +284,7 @@ class DbGenerateCommand extends Command<void> {
 
           // @PgTable アノテーションを探す
           for (final annotation in decl.metadata) {
-            if (annotation.name.name != 'PgTable') continue;
+            if (!_isPgTable(annotation)) continue;
 
             // テーブル名を取得
             final args = annotation.arguments?.arguments;
