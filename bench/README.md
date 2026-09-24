@@ -63,7 +63,7 @@ and that generated server binds `InternetAddress.anyIPv6` — all interfaces,
 dual-stack — instead of loopback only. The other four apps bind
 `127.0.0.1` directly in their own `bin/server.dart`. This suite keeps each
 framework's own default rather than patching it, so that difference is
-left as is; it has no effect on the results because the load generator
+left as is; it is not expected to affect the results; the load generator
 always connects to `127.0.0.1`.
 
 ## Prerequisites
@@ -71,7 +71,8 @@ always connects to `127.0.0.1`.
 - Dart 3.13 or newer.
 - [`oha`](https://github.com/hatoo/oha) 1.16 or newer: `brew install oha`.
 - macOS. The runner reads machine info with `sysctl` and `sw_vers`, and
-  reads a running app's memory with `ps` (see "Reading the numbers").
+  reads a running app's memory with `ps`, or with `footprint` where `ps`
+  refuses the rss column (see "Reading the numbers").
 
 ## Run
 
@@ -115,6 +116,10 @@ Every app is started on port `18080`.
 - Apps are measured one at a time, never concurrently, with a pause
   between apps and between runs so one app's leftover load cannot bleed
   into the next measurement.
+- Apps run in a fixed order (dart_io, aim, shelf_router, relic,
+  dart_frog), so any thermal drift over the run's ~25 minutes affects
+  later apps more; the five runs per scenario are kept so a reader can
+  see it.
 - Every scenario uses the same warmup duration and the same number of
   measured runs for every app.
 - `verify` checks every app against every scenario and prints each

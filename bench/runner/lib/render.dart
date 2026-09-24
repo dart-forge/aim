@@ -25,8 +25,11 @@ String renderMarkdown(BenchResults r) {
   b.writeln(
     '- Load generator: ${r.settings['oha']}, ${r.settings['connections']} connections, ${r.settings['durationSeconds']} s per run, median of ${r.settings['runs']} runs',
   );
+  final hasDartFrog = r.apps.any((a) => a.name == 'dart_frog');
   b.writeln(
-    "- Every app is a `dart compile exe` binary, one isolate, no middleware; the load generator connects to 127.0.0.1 (dart_frog's generated server listens on all interfaces, the others on loopback only).",
+    "- Every app is a `dart compile exe` binary, one isolate, no middleware; "
+    'the load generator connects to 127.0.0.1'
+    "${hasDartFrog ? " (dart_frog's generated server listens on all interfaces, the others on loopback only)" : ''}.",
   );
   b.writeln(
     '- Startup is the median of three launches after one discarded launch; '
@@ -73,7 +76,7 @@ String renderMarkdown(BenchResults r) {
   for (final app in r.apps) {
     final memory = app.memoryKb == null
         ? '?'
-        : (app.memoryKb! / 1024).toStringAsFixed(1);
+        : (app.memoryKb! / 1024).round().toString();
     final bin = (app.binaryBytes / (1024 * 1024)).toStringAsFixed(1);
     b.writeln('| ${app.name} | ${app.startupMs} | $memory | $bin |');
   }

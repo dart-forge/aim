@@ -58,7 +58,36 @@ void main() {
 
   test('renders startup, memory and binary size', () {
     final md = renderMarkdown(results);
-    expect(md, contains('| dart_io | 11 | 30.0 | 5.0 |'));
+    expect(md, contains('| dart_io | 11 | 30 | 5.0 |'));
+  });
+
+  test('omits the dart_frog bind-address remark when dart_frog is not '
+      'among the results', () {
+    final md = renderMarkdown(results);
+    expect(md, isNot(contains('dart_frog')));
+  });
+
+  test('mentions the dart_frog bind-address remark when dart_frog is '
+      'among the results', () {
+    final withDartFrog = BenchResults(
+      label: results.label,
+      timestamp: results.timestamp,
+      environment: results.environment,
+      settings: results.settings,
+      apps: [
+        ...results.apps,
+        AppResult(
+          name: 'dart_frog',
+          versions: const {},
+          binaryBytes: 5 * 1024 * 1024,
+          startupMs: 11,
+          memoryKb: 30 * 1024,
+          scenarios: const [],
+        ),
+      ],
+    );
+    final md = renderMarkdown(withDartFrog);
+    expect(md, contains("dart_frog's generated server listens on all interfaces"));
   });
 
   test('uses no comparative adjectives', () {

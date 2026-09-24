@@ -18,6 +18,7 @@ class BenchSettings {
     this.runs = 5,
     this.warmup = const Duration(seconds: 3),
     this.pause = const Duration(seconds: 2),
+    this.arguments = const [],
   });
 
   final Duration duration;
@@ -26,6 +27,11 @@ class BenchSettings {
   final Duration warmup;
   final Duration pause;
 
+  /// The command line this run was invoked with, recorded so a results
+  /// file's settings are never read without knowing exactly how it was
+  /// produced.
+  final List<String> arguments;
+
   Map<String, Object?> toJson(String oha) => {
         'durationSeconds': duration.inSeconds,
         'connections': connections,
@@ -33,6 +39,7 @@ class BenchSettings {
         'warmupSeconds': warmup.inSeconds,
         'pauseSeconds': pause.inSeconds,
         'oha': oha,
+        'arguments': arguments,
       };
 }
 
@@ -78,9 +85,12 @@ Future<Duration> _waitOrExit(Process process, File binary, Uri url) {
   );
   process.exitCode.then((code) {
     if (!completer.isCompleted) {
+      final stderrTail = lastStderr(process).trim();
       completer.completeError(
         StateError(
-          '${p.basename(binary.path)} exited with code $code before answering',
+          '${p.basename(binary.path)} exited with code $code before '
+          'answering'
+          '${stderrTail.isEmpty ? '' : ':\n$stderrTail'}',
         ),
       );
     }
@@ -178,8 +188,10 @@ Future<AppResult> measureApp(
   }
 }
 
-/// `bench/results/<date>-<label>.json`
+/// `bench/results/<date>-<label>.json`, with [label] sanitized so it is
+/// always a safe file name component.
 File resultsFile(String label, DateTime now) {
   final date = now.toUtc().toIso8601String().substring(0, 10);
-  return File(p.join(benchRoot().path, 'results', '$date-$label.json'));
+  final safeLabel = label.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '-');
+  return File(p.join(benchRoot().path, 'results', '$date-$safeLabel.json'));
 }

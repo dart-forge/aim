@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 /// Runs [command] to completion, streaming its output; throws on failure.
@@ -54,7 +55,14 @@ Future<Process> startServer(
   return process;
 }
 
-/// Subscribes to [process]'s stdout and stderr and discards everything.
+const _stderrTailBytes = 4096;
+
+final _stderrTails = Expando<StringBuffer>();
+
+/// Subscribes to [process]'s stdout and stderr. stdout is discarded
+/// entirely; stderr is discarded too, except that its last
+/// [_stderrTailBytes] bytes are kept and can be read back with
+/// [lastStderr] — useful for explaining why a launch failed.
 ///
 /// A child's stdout/stderr pipe is only read once something subscribes to
 /// it; left unsubscribed, a child that writes enough to fill the OS pipe
@@ -63,8 +71,26 @@ Future<Process> startServer(
 /// console (unlike `ProcessStartMode.inheritStdio`).
 void discardOutput(Process process) {
   unawaited(process.stdout.drain<void>());
-  unawaited(process.stderr.drain<void>());
+  final tail = StringBuffer();
+  _stderrTails[process] = tail;
+  unawaited(
+    process.stderr.transform(utf8.decoder).forEach((chunk) {
+      tail.write(chunk);
+      if (tail.length > _stderrTailBytes) {
+        final kept = tail.toString().substring(tail.length - _stderrTailBytes);
+        tail
+          ..clear()
+          ..write(kept);
+      }
+    }),
+  );
 }
+
+/// The last [_stderrTailBytes] bytes of [process]'s stderr, as captured by
+/// [discardOutput]; the empty string if [discardOutput] was never called
+/// for it or it has written nothing to stderr yet.
+String lastStderr(Process process) =>
+    (_stderrTails[process] ?? StringBuffer()).toString();
 
 /// Throws [StateError] if [port] is already bound on the loopback
 /// interface, so a leftover process from a previous run is never mistaken

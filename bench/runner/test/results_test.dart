@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:bench_runner/oha.dart';
 import 'package:bench_runner/results.dart';
+import 'package:bench_runner/runner.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 OhaResult run(double rps, double p50, double p99) => OhaResult(
@@ -74,6 +76,11 @@ void main() {
       decoded.skipped.single.reason,
       'success rate 0.9 ({"200": 900, "500": 100})',
     );
+  });
+
+  test('resultsFile sanitizes characters outside [A-Za-z0-9._-]', () {
+    final file = resultsFile('a/b c', DateTime.utc(2026, 9, 24));
+    expect(p.basename(file.path), '2026-09-24-a-b-c.json');
   });
 
   test('BenchResults.fromJson defaults skipped to empty when absent', () {

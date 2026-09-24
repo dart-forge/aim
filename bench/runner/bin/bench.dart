@@ -138,6 +138,7 @@ class RunCommand extends Command<void> {
       connections: int.parse(args['connections'] as String),
       runs: int.parse(args['runs'] as String),
       warmup: Duration(seconds: int.parse(args['warmup'] as String)),
+      arguments: args.arguments,
     );
     final oha = await ohaVersion();
     final now = DateTime.now().toUtc();
