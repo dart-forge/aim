@@ -127,6 +127,16 @@ Future<OhaResult> runOha(
   return parseOha(result.stdout as String);
 }
 
+/// True iff every request in [result] both transported successfully and got
+/// a `200` back: `successRate == 1` and the only key in `statusCodes` is
+/// `'200'`. oha's own `success_rate` only tracks transport success, so a
+/// server that answers every request with a `404` still reports
+/// `success_rate 1.0`; this also checks the status code distribution.
+bool allOk(OhaResult result) =>
+    result.successRate == 1 &&
+    result.statusCodes.length == 1 &&
+    result.statusCodes.containsKey('200');
+
 Future<String> ohaVersion() async {
   final result = await Process.run('oha', ['--version']);
   return (result.stdout as String).trim();

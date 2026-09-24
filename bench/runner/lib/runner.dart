@@ -54,8 +54,9 @@ Future<(Duration, Process)> _launchAndTime(
 }
 
 /// Builds, verifies and measures one app. Throws [StateError] if the app
-/// does not answer the scenarios identically — a non-comparable app is
-/// never measured.
+/// does not answer the scenarios identically, or if a measured run's
+/// status codes are not all `200` (a mismatch or a success rate below
+/// 100%) — a non-comparable app is never measured.
 ///
 /// Startup is the median of three launches, each measured after one
 /// discarded warm-up launch. The first launch of a freshly compiled binary
@@ -115,8 +116,8 @@ Future<AppResult> measureApp(
       for (var i = 1; i <= settings.runs; i++) {
         await Future<void>.delayed(settings.pause);
         final run = await runOha(scenario, base, duration: settings.duration, connections: settings.connections);
-        if (run.successRate < 1) {
-          throw StateError('${app.name} / ${scenario.id}: success rate ${run.successRate} (${run.statusCodes})');
+        if (!allOk(run)) {
+          throw StateError('${app.name} / ${scenario.id}: success rate ${run.successRate}, status codes ${run.statusCodes}');
         }
         stdout.writeln('   ${app.name} / ${scenario.id}: run $i  ${run.requestsPerSec.round()} req/s  p50 ${run.p50Ms.toStringAsFixed(2)} ms  p99 ${run.p99Ms.toStringAsFixed(2)} ms');
         runs.add(run);

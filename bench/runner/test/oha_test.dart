@@ -4,6 +4,17 @@ import 'package:bench_runner/oha.dart';
 import 'package:bench_runner/scenarios.dart';
 import 'package:test/test.dart';
 
+OhaResult _resultWith({
+  required double successRate,
+  required Map<String, int> statusCodes,
+}) => OhaResult(
+  requestsPerSec: 1,
+  p50Ms: 1,
+  p99Ms: 1,
+  successRate: successRate,
+  statusCodes: statusCodes,
+);
+
 void main() {
   test('parseOha reads rps, latency percentiles and status codes', () {
     final json = File('test/fixtures/oha.json').readAsStringSync();
@@ -52,6 +63,40 @@ void main() {
       '-z', '10s', '-c', '64', '--no-tui', '--output-format', 'json',
       'http://127.0.0.1:18080/',
     ]);
+  });
+
+  test('allOk is true when every status code is 200', () {
+    expect(
+      allOk(_resultWith(successRate: 1, statusCodes: const {'200': 10})),
+      isTrue,
+    );
+  });
+
+  test('allOk is false when some requests got a non-200', () {
+    expect(
+      allOk(
+        _resultWith(
+          successRate: 1,
+          statusCodes: const {'200': 9, '500': 1},
+        ),
+      ),
+      isFalse,
+    );
+  });
+
+  test('allOk is false when every request got the same non-200 code', () {
+    expect(
+      allOk(_resultWith(successRate: 1, statusCodes: const {'404': 10})),
+      isFalse,
+    );
+  });
+
+  test('allOk is false when the success rate is below 1 even if the only '
+      'status code seen is 200', () {
+    expect(
+      allOk(_resultWith(successRate: 0.9, statusCodes: const {'200': 9})),
+      isFalse,
+    );
   });
 
   test('ohaArguments for the POST scenario sends the json body', () {
