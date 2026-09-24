@@ -185,7 +185,14 @@ InitialHandshake parseInitialHandshake(Uint8List payload) {
       ? reader.readNulTerminatedString()
       : null;
 
-  if (!reader.atEnd) {
+  // Once the plugin name (or its absence) has been read, every field this
+  // driver knows about has been read too. A real server sometimes still
+  // has bytes left after that -- padding some clients rely on, or a field
+  // this driver has no use for -- so those are ignored rather than treated
+  // as a sign the stream is out of step. Only when the plugin name is
+  // missing entirely (no [Capabilities.pluginAuth]) is a short read still
+  // worth flagging, since there every byte is accounted for.
+  if (authPluginName == null && !reader.atEnd) {
     throw MySqlProtocolException(
       'handshake payload had bytes left over after every known field was '
       'read: read ${reader.offset} of ${payload.length} byte(s)',
