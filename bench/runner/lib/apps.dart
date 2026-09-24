@@ -55,6 +55,17 @@ const List<AppSpec> apps = [
     entry: 'bin/server.dart',
     lockPackages: ['relic', 'relic_core', 'relic_io'],
   ),
+  AppSpec(
+    name: 'dart_frog',
+    directory: 'dart_frog',
+    prebuild: [
+      ['dart', 'run', 'dart_frog_cli:dart_frog', 'build'],
+      ['dart', 'pub', 'get', '--directory', 'build'],
+    ],
+    buildDirectory: 'build',
+    entry: 'bin/server.dart',
+    lockPackages: ['dart_frog', 'shelf'],
+  ),
 ];
 
 /// `bench/`, resolved from this package's location (`bench/runner`).

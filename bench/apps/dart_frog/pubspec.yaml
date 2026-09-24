@@ -1,0 +1,10 @@
+name: bench_dart_frog
+description: Benchmark app on dart_frog, built with dart_frog_cli's production build.
+publish_to: none
+environment:
+  sdk: ^3.13.0
+dependencies:
+  dart_frog: ^1.2.6
+dev_dependencies:
+  dart_frog_cli: ^1.2.14
+  lints: ^6.0.0
