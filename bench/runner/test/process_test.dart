@@ -62,4 +62,18 @@ void main() {
       throwsA(isA<ProcessException>()),
     );
   });
+
+  test('discardOutput drains stdout so a big write never blocks', () async {
+    // 300 KB is larger than a typical 64 KB pipe buffer; without draining,
+    // the child's write() would block once the buffer fills and this
+    // process.exitCode would never complete, tripping the timeout below.
+    // (The negative control — asserting that it *does* hang without
+    // discardOutput — is intentionally not a test: a hung test hangs CI.)
+    final process = await Process.start(
+      'sh',
+      ['-c', 'head -c 300000 /dev/zero'],
+    );
+    discardOutput(process);
+    expect(await process.exitCode.timeout(const Duration(seconds: 5)), 0);
+  });
 }

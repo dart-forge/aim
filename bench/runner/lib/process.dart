@@ -37,19 +37,33 @@ Future<File> compileExe({
   return output;
 }
 
-/// Starts [binary] with `PORT` set; stdout/stderr are discarded so logging
-/// (which no app should do) cannot skew the measurement.
+/// Starts [binary] with `PORT` set; stdout/stderr are drained and discarded
+/// so logging (which no app should do) cannot skew the measurement.
 Future<Process> startServer(
   File binary, {
   required int port,
   required Directory workingDirectory,
-}) {
-  return Process.start(
+}) async {
+  final process = await Process.start(
     binary.absolute.path,
     const [],
     workingDirectory: workingDirectory.path,
     environment: {'PORT': '$port'},
   );
+  discardOutput(process);
+  return process;
+}
+
+/// Subscribes to [process]'s stdout and stderr and discards everything.
+///
+/// A child's stdout/stderr pipe is only read once something subscribes to
+/// it; left unsubscribed, a child that writes enough to fill the OS pipe
+/// buffer blocks on write() and the whole run hangs. This keeps that from
+/// ever happening without echoing the app's output into the runner's own
+/// console (unlike `ProcessStartMode.inheritStdio`).
+void discardOutput(Process process) {
+  unawaited(process.stdout.drain<void>());
+  unawaited(process.stderr.drain<void>());
 }
 
 /// Polls [url] until it answers 200; returns the time that took.
