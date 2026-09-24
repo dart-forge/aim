@@ -26,6 +26,9 @@ aim create my_app
 # Navigate to the project
 cd my_app
 
+# Install dependencies
+dart pub get
+
 # Start the development server
 aim dev
 ```

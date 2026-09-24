@@ -50,14 +50,16 @@ void registerUserRoutes(Aim app) {
   app.delete('/users/:id', deleteUser);
 }
 
-Future<void> getAllUsers(Context c) async {
+Future<Response> getAllUsers(Context c) async {
   // Implementation
+  return c.json({'users': []});
 }
 ```
 
 ```dart
 // bin/server.dart
 import 'dart:io';
+import 'package:aim_server/aim_server.dart';
 import 'package:my_app/routes/users.dart';
 
 void main() async {
@@ -173,17 +175,46 @@ app.post('/comments', (c) async {
   final body = await c.req.json();
   final comment = body['comment'];
 
-  // Sanitize user input
-  final sanitized = HtmlEscape().convert(comment);
+  // Validate/reject unexpected input before it reaches storage or another
+  // system, rather than trying to "clean" it in place.
+  if (comment is! String || comment.isEmpty) {
+    return c.json({'error': 'comment is required'}, statusCode: 400);
+  }
 
-  // Store sanitized content
-  await db.insert('comments', {'content': sanitized});
+  // Store the raw, validated value — use parameterized queries (as
+  // `aim_postgres` and the ORM already do) so it can never be interpreted
+  // as SQL.
+  await db.execute(
+    'INSERT INTO comments (content) VALUES (:content)',
+    params: {'content': comment},
+  );
 
   return c.json({'created': true}, statusCode: 201);
 });
 ```
 
+Sanitization is not one step. Keep the three concerns separate:
+- **Input validation** — reject or normalize input that doesn't match what
+  you expect (shown above).
+- **Parameterized queries** — never build SQL by concatenating user input;
+  pass values as parameters, as above.
+- **Contextual output encoding** — escape for the context the value is
+  rendered into (`HtmlEscape().convert(...)` for HTML *output*, a different
+  encoder for a URL or a JSON string embedded in `<script>`). Escaping once
+  at write time and storing the escaped string bakes in a decision that may
+  be wrong for a different consumer (an API client, a different template)
+  later; encode at render time for the context you're rendering into.
+
 ### Rate Limiting
+
+This is a local sketch, not a production rate limiter: `x-forwarded-for`
+is client-supplied and easy to spoof unless your proxy overwrites it and
+strips any value it received from the client first, the in-process `Map`
+does not share state across multiple server instances, it resets on every
+restart, and nothing bounds its size (a limiter serving many distinct IPs
+without cleanup grows unbounded). A real deployment behind a proxy needs
+the proxy's trusted client-IP header and out-of-process storage (such as
+Redis) shared across instances.
 
 ```dart
 final requests = <String, List<DateTime>>{};
@@ -220,23 +251,32 @@ app.use(ratelimit(maxRequests: 100, window: Duration(minutes: 1)));
 
 ### Connection Pooling
 
+`PostgresDatabase` (`aim_postgres`) already *is* a connection pool — there
+is no separate pool class to reach for:
+
 ```dart
-// ❌ Bad - New connection per request
+// ❌ Bad - A new pool (and new connections) per request
 app.get('/users', (c) async {
-  final db = await Database.connect(dbUrl);
+  final db = await PostgresDatabase.connect(dbUrl);
   final users = await db.query('SELECT * FROM users');
   await db.close();
-  return c.json(users);
+  return c.json({'users': users});
 });
 
-// ✅ Good - Reuse connection pool
-final dbPool = DatabasePool(dbUrl, poolSize: 10);
+// ✅ Good - Create the pool once, at startup, and reuse it
+final db = await PostgresDatabase.connect(dbUrl, maxConnections: 10);
 
 app.get('/users', (c) async {
-  final users = await dbPool.query('SELECT * FROM users');
-  return c.json(users);
+  final users = await db.query('SELECT * FROM users');
+  return c.json({'users': users});
 });
 ```
+
+`connect()` also takes `acquireTimeout`, `idleTimeout`, `maxLifetime`, and
+`validationInterval` `Duration`s to tune pool behavior; see the
+[PostgreSQL driver page](/database/drivers/postgres) for what each one
+does. Call `db.close()` once, during shutdown (see
+[Graceful Shutdown](#graceful-shutdown) below) — not per request.
 
 ### Caching
 
@@ -420,11 +460,17 @@ void main() async {
   final app = Aim();
 
   if (Config.isProduction) {
-    // Production settings
-    app.use(secureHeaders());
+    // Production settings — `secureHeaders()` isn't a real middleware;
+    // set security headers yourself, e.g. with a small custom middleware
+    // or `aim_server_cors`'s options where they overlap.
+    app.use((c, next) async {
+      c.header('X-Content-Type-Options', 'nosniff');
+      c.header('X-Frame-Options', 'DENY');
+      return next();
+    });
   } else {
-    // Development settings
-    app.use(verboseLogging());
+    // Development settings — use the real logger middleware
+    app.use(logger());
   }
 
   await app.serve(host: InternetAddress.anyIPv4, port: Config.port);
@@ -441,9 +487,10 @@ app.get('/health', (c) async {
     'uptime': DateTime.now().difference(startTime).inSeconds,
   };
 
-  // Check database
+  // Check database — there is no `ping()` on `PostgresDatabase`; a plain
+  // query is the health-check idiom.
   try {
-    await db.ping();
+    await db.query('SELECT 1');
     health['database'] = 'ok';
   } catch (e) {
     health['database'] = 'error';

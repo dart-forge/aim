@@ -98,7 +98,7 @@ expect(body['message'], equals('Success'));
 ### Text Body
 
 ```dart
-final text = await response.bodyAsText();
+final text = await response.bodyAsString();
 expect(text, contains('Hello'));
 ```
 
