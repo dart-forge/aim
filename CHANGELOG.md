@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changes
+
+- `aim_orm_codegen`: the generated insert builder no longer requires a `serial()` column or a `NOT NULL` column with a default. Left out of `values()`, such a column is written as `DEFAULT` and the database fills it — a serial primary key takes the next value of its sequence, which until now could not be reached through the builder at all. Existing calls that pass every column are unchanged.
+
 ## 0.4.0
 
 Fourth beta. The edge adapter is split by runtime, and Supabase Edge Functions joins the Dart VM, Cloudflare workerd and Cloud Functions for Firebase as a place an Aim application runs. **Breaking for `aim_edge`**: it is now the shared edge package, and the Cloudflare adapter moved to `aim_workers`. See the [Migration Guide](https://aim-dart.dev/server/guides/migration) for the five edits an existing Workers project needs.
