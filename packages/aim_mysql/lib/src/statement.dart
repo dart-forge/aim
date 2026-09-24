@@ -73,6 +73,7 @@ final class MySqlResult {
     required this.lastInsertId,
     required this.moreResults,
     this.inTransaction = false,
+    this.autocommitEnabled = true,
   });
 
   /// Empty for a result set with no rows: an OK reply carries no column
@@ -109,6 +110,20 @@ final class MySqlResult {
   /// is open, so a statement whose own reply no longer has it set is the
   /// statement that just ended one.
   final bool inTransaction;
+
+  /// Whether `SERVER_STATUS_AUTOCOMMIT` was set on the packet that ended
+  /// this result set. Defaults to `true` for the same reason
+  /// [inTransaction] defaults to `false` -- most of this file's own tests
+  /// have no stake in it.
+  ///
+  /// This is how [MySqlDatabase] (`mysql_database.dart`) notices a
+  /// caller's own `SET autocommit = 0` (or any statement that otherwise
+  /// leaves autocommit off): unlike an explicit transaction, MySQL never
+  /// rejects returning a connection like that to a pool on its own, so
+  /// this driver has to notice and discard it itself, before the next,
+  /// unrelated borrower's statements start opening implicit transactions
+  /// they never asked for.
+  final bool autocommitEnabled;
 }
 
 /// Every result set one `COM_STMT_EXECUTE` or `COM_QUERY` reply carried.
@@ -189,6 +204,10 @@ final class MySqlResultSets {
   /// runs are never a `CALL` -- but reading the last keeps this right even
   /// if that ever changes.
   bool get inTransaction => sets.last.inTransaction;
+
+  /// The last set's [MySqlResult.autocommitEnabled]. See [inTransaction]
+  /// for why the last one, not all or any, is read.
+  bool get autocommitEnabled => sets.last.autocommitEnabled;
 }
 
 /// A per-connection cache of prepared statements, keyed by SQL text.
@@ -221,7 +240,54 @@ final class StatementCache {
   /// in-flight prepare instead of each starting their own.
   final Map<String, Future<PreparedStatement>> _entries = {};
 
+  /// How many callers currently have a statement id checked out through
+  /// [markInUse], keyed by [PreparedStatement.id].
+  ///
+  /// This is separate from [_entries] because an id can still be in use
+  /// after it stops being the cache's current entry for its SQL text: a
+  /// concurrent [get] for the same text that raced past eviction, or a
+  /// caller mid-[executeStatement] when a later `get` for a *different*
+  /// statement evicts this one, still holds the id and is about to send
+  /// `COM_STMT_EXECUTE` for it. Closing the id out from under either would
+  /// have the server refuse (or silently misinterpret) an execute already
+  /// in flight.
+  final Map<int, int> _inUse = {};
+
+  /// Statement ids [_evictIfNeeded] wanted to close while [_inUse] said
+  /// they were still checked out. [markDone] finishes the close once the
+  /// last checkout for the id ends.
+  final Set<int> _pendingClose = {};
+
   int get size => _entries.length;
+
+  /// Marks [statement] as checked out: about to be, or currently being,
+  /// executed. Pairs with [markDone], which must be called exactly once
+  /// per [markInUse] -- typically in a `finally` around the execute.
+  ///
+  /// Reference-counted rather than a single flag, since two callers can
+  /// legitimately hold the same cached statement at once (see [get]'s own
+  /// concurrency note) and each has to release its own checkout without
+  /// ending the other's.
+  void markInUse(PreparedStatement statement) {
+    final id = statement.id;
+    _inUse[id] = (_inUse[id] ?? 0) + 1;
+  }
+
+  /// Releases one checkout [markInUse] made for [statement]. Once nothing
+  /// still holds it, closes it on the server if eviction asked to while it
+  /// was in use.
+  void markDone(PreparedStatement statement) {
+    final id = statement.id;
+    final remaining = (_inUse[id] ?? 1) - 1;
+    if (remaining > 0) {
+      _inUse[id] = remaining;
+      return;
+    }
+    _inUse.remove(id);
+    if (_pendingClose.remove(id)) {
+      unawaited(_closeQuietlyById(id));
+    }
+  }
 
   /// The prepared statement for [sql]: the cached one, if [sql] was asked
   /// for before and has not been [invalidate]d or evicted since, otherwise
@@ -315,8 +381,25 @@ final class StatementCache {
     } catch (_) {
       return; // Its own prepare failed; there is nothing to close.
     }
+    final id = statement.id;
+    if ((_inUse[id] ?? 0) > 0) {
+      // A caller already has this id checked out -- most concretely,
+      // mid-executeStatement between resolving it from the cache and
+      // actually sending COM_STMT_EXECUTE. Closing it now would race that
+      // send. markDone finishes this close once every checkout ends.
+      _pendingClose.add(id);
+      return;
+    }
     try {
-      await close(statement.id);
+      await close(id);
+    } catch (_) {
+      // Best-effort -- see clear()'s doc comment.
+    }
+  }
+
+  Future<void> _closeQuietlyById(int id) async {
+    try {
+      await close(id);
     } catch (_) {
       // Best-effort -- see clear()'s doc comment.
     }
@@ -497,10 +580,46 @@ Future<MySqlResultSets> executeStatement(
     return _executeOnce(connection, statement, values);
   }
 
-  return withReprepareRetry(() async {
-    final current = await connection.statements.get(sql);
-    return _executeOnce(connection, current, values);
-  }, () => connection.statements.invalidate(sql));
+  // The statement actually attempted, tracked here rather than only inside
+  // the retry closure, so the `invalidate` callback below -- which runs
+  // after `attempt` has already thrown -- knows which server-side id just
+  // failed and needs COM_STMT_CLOSE. Without sending that, error 1615
+  // leaves the old id allocated on the server forever: nothing else ever
+  // closes an id the cache is about to forget.
+  PreparedStatement? attempted;
+  return withReprepareRetry(
+    () async {
+      final current = await connection.statements.get(sql);
+      attempted = current;
+      connection.statements.markInUse(current);
+      try {
+        return await _executeOnce(connection, current, values);
+      } finally {
+        connection.statements.markDone(current);
+      }
+    },
+    () {
+      connection.statements.invalidate(sql);
+      final staleId = attempted?.id;
+      if (staleId != null) {
+        // Fire-and-forget, like statement-cache eviction: this is a side
+        // effect of the retry, not something the caller waiting on the
+        // re-prepared statement should be held up by. exchange's own lock
+        // still serializes it against the retry's COM_STMT_PREPARE and
+        // COM_STMT_EXECUTE on this connection.
+        unawaited(_closeStatementQuietly(connection, staleId));
+      }
+    },
+  );
+}
+
+Future<void> _closeStatementQuietly(MySqlConnection connection, int id) async {
+  try {
+    await _closeStatement(connection, id);
+  } catch (_) {
+    // Best-effort: the connection may already be unusable, in which case
+    // there is nothing left to close anyway.
+  }
 }
 
 Future<MySqlResultSets> _executeOnce(
@@ -641,6 +760,7 @@ Future<MySqlResultSets> _readResultSets(
             lastInsertId: ok.lastInsertId,
             moreResults: ok.statusFlags & _serverMoreResultsExists != 0,
             inTransaction: ok.inTransaction,
+            autocommitEnabled: ok.autocommitEnabled,
           ),
         );
 
@@ -659,6 +779,7 @@ Future<MySqlResultSets> _readResultSets(
             moreResults:
                 read.terminator.statusFlags & _serverMoreResultsExists != 0,
             inTransaction: read.terminator.inTransaction,
+            autocommitEnabled: read.terminator.autocommitEnabled,
           ),
         );
 

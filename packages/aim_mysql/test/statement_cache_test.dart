@@ -77,6 +77,51 @@ void main() {
     expect(prepared, ['A', 'B', 'C', 'B'], reason: 'B had to be redone');
   });
 
+  test(
+    'eviction defers closing a statement a caller has marked in use',
+    () async {
+      // Without this, a concurrent caller that already resolved the
+      // statement from the cache -- and is about to send
+      // COM_STMT_EXECUTE for it -- can have eviction close the very id
+      // it is about to execute, out from under it.
+      final cache = cacheOf(capacity: 2);
+
+      final b = await cache.get('B');
+      cache.markInUse(b);
+
+      await cache.get('A');
+      await cache.get('C'); // would evict B, but B is checked out
+
+      expect(
+        closed,
+        isEmpty,
+        reason: 'B is still in use; closing it now would race the execute',
+      );
+
+      cache.markDone(b);
+
+      expect(closed, [b.id], reason: 'released, so the deferred close runs');
+    },
+  );
+
+  test('markInUse/markDone are reference-counted across two concurrent '
+      'checkouts of the same statement', () async {
+    final cache = cacheOf(capacity: 2);
+
+    final b = await cache.get('B');
+    cache.markInUse(b);
+    cache.markInUse(b); // a second caller holding the same statement
+
+    await cache.get('A');
+    await cache.get('C'); // would evict B
+
+    cache.markDone(b); // first caller finishes; second still holds it
+    expect(closed, isEmpty, reason: 'the second checkout still holds it');
+
+    cache.markDone(b); // second caller finishes
+    expect(closed, [b.id]);
+  });
+
   test('invalidate drops one entry so the next get re-prepares', () async {
     // Which is what happens after the server says the statement needs
     // re-preparing.

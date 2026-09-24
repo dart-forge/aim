@@ -58,6 +58,15 @@ final class OkPacket extends ServerPacket {
   /// this is how the driver notices MySQL having committed one implicitly,
   /// which DDL statements do.
   bool get inTransaction => statusFlags & 0x0001 != 0;
+
+  /// Whether `SERVER_STATUS_AUTOCOMMIT` (`0x0002`) is set: the connection
+  /// that sent this packet has autocommit on. A caller's own
+  /// `SET autocommit = 0` replies OK with this bit already cleared --
+  /// there is no separate warning that autocommit just went off -- which is
+  /// how the driver notices a connection about to be handed back to a pool
+  /// with every later, unrelated caller's statement now opening an implicit
+  /// transaction it never asked for.
+  bool get autocommitEnabled => statusFlags & 0x0002 != 0;
 }
 
 /// The server refused the request.
