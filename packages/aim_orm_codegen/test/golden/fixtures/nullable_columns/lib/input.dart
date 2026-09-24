@@ -10,4 +10,5 @@ final products = (
   name: varchar('name', length: 255),
   description: text('description').nullable(),
   price: integer('price').nullable(),
+  status: varchar('status', length: 20).withDefault('draft'),
 );

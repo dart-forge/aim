@@ -40,7 +40,13 @@ class ProductsQueryBuilder {
   }
 }
 
-typedef ProductsRow = ({int id, String name, String? description, int? price});
+typedef ProductsRow = ({
+  int id,
+  String name,
+  String? description,
+  int? price,
+  String status,
+});
 
 class ProductsSelectBuilder extends QueryFuture<List<ProductsRow>>
     with FutureMixin<List<ProductsRow>> {
@@ -83,6 +89,7 @@ class ProductsSelectBuilder extends QueryFuture<List<ProductsRow>>
           name: row['name'] as String,
           description: row['description'] as String?,
           price: row['price'] as int?,
+          status: row['status'] as String,
         );
       }).toList();
     });
@@ -93,12 +100,14 @@ class ProductsSelectBuilder extends QueryFuture<List<ProductsRow>>
     Condition? name,
     Condition? description,
     Condition? price,
+    Condition? status,
   }) {
     final newConditions = [...config.where];
     if (id != null) newConditions.add(id);
     if (name != null) newConditions.add(name);
     if (description != null) newConditions.add(description);
     if (price != null) newConditions.add(price);
+    if (status != null) newConditions.add(status);
 
     return ProductsSelectBuilder(
       db,
@@ -156,6 +165,7 @@ class ProductsInsertBuilder extends QueryFuture<int> with FutureMixin<int> {
   final String? _name;
   final String? _description;
   final int? _price;
+  final String? _status;
 
   ProductsInsertBuilder(
     this.db, {
@@ -163,16 +173,19 @@ class ProductsInsertBuilder extends QueryFuture<int> with FutureMixin<int> {
     String? name,
     String? description,
     int? price,
+    String? status,
   }) : _id = id,
        _name = name,
        _description = description,
-       _price = price;
+       _price = price,
+       _status = status;
 
   ProductsInsertBuilder values({
-    required int id,
+    int? id,
     required String name,
     String? description,
     int? price,
+    String? status,
   }) {
     return ProductsInsertBuilder(
       db,
@@ -180,24 +193,27 @@ class ProductsInsertBuilder extends QueryFuture<int> with FutureMixin<int> {
       name: name,
       description: description,
       price: price,
+      status: status,
     );
   }
 
   @override
   Future<int> execute() {
-    if (_id == null) {
-      throw StateError('Field `id` is required but not set');
-    }
     if (_name == null) {
       throw StateError('Field `name` is required but not set');
     }
+    // A column left unset here is filled by the database: a serial takes
+    // the next value of its sequence, a column with a default takes that.
+    final idValue = _id == null ? 'DEFAULT' : ':id';
+    final statusValue = _status == null ? 'DEFAULT' : ':status';
     final sql =
-        'INSERT INTO products (id, name, description, price) VALUES (:id, :name, :description, :price)';
+        'INSERT INTO products (id, name, description, price, status) VALUES ($idValue, :name, :description, :price, $statusValue)';
     final params = {
-      'id': _id,
+      if (_id != null) 'id': _id,
       'name': _name,
       'description': _description,
       'price': _price,
+      if (_status != null) 'status': _status,
     };
     return db.execute(sql, params: params);
   }
@@ -209,6 +225,7 @@ class ProductsUpdateBuilder extends QueryFuture<int> with FutureMixin<int> {
   final String? _name;
   final String? _description;
   final int? _price;
+  final String? _status;
   final List<Condition> _where;
 
   ProductsUpdateBuilder(
@@ -217,11 +234,13 @@ class ProductsUpdateBuilder extends QueryFuture<int> with FutureMixin<int> {
     String? name,
     String? description,
     int? price,
+    String? status,
     List<Condition>? where,
   }) : _id = id,
        _name = name,
        _description = description,
        _price = price,
+       _status = status,
        _where = where ?? [];
 
   // SET句（更新するカラムを指定）
@@ -230,6 +249,7 @@ class ProductsUpdateBuilder extends QueryFuture<int> with FutureMixin<int> {
     String? name,
     String? description,
     int? price,
+    String? status,
   }) {
     return ProductsUpdateBuilder(
       db,
@@ -238,6 +258,7 @@ class ProductsUpdateBuilder extends QueryFuture<int> with FutureMixin<int> {
       name: name,
       description: description,
       price: price,
+      status: status,
     );
   }
 
@@ -247,12 +268,14 @@ class ProductsUpdateBuilder extends QueryFuture<int> with FutureMixin<int> {
     Condition? name,
     Condition? description,
     Condition? price,
+    Condition? status,
   }) {
     final newConditions = [..._where];
     if (id != null) newConditions.add(id);
     if (name != null) newConditions.add(name);
     if (description != null) newConditions.add(description);
     if (price != null) newConditions.add(price);
+    if (status != null) newConditions.add(status);
     return ProductsUpdateBuilder(
       db,
       where: newConditions,
@@ -260,6 +283,7 @@ class ProductsUpdateBuilder extends QueryFuture<int> with FutureMixin<int> {
       name: _name,
       description: _description,
       price: _price,
+      status: _status,
     );
   }
 
@@ -283,6 +307,10 @@ class ProductsUpdateBuilder extends QueryFuture<int> with FutureMixin<int> {
     if (_price != null) {
       updates.add('price = :set_price');
       params['set_price'] = _price;
+    }
+    if (_status != null) {
+      updates.add('status = :set_status');
+      params['set_status'] = _status;
     }
 
     if (updates.isEmpty) throw StateError('No fields to update');
@@ -318,12 +346,14 @@ class ProductsDeleteBuilder extends QueryFuture<int> with FutureMixin<int> {
     Condition? name,
     Condition? description,
     Condition? price,
+    Condition? status,
   }) {
     final newConditions = [..._where];
     if (id != null) newConditions.add(id);
     if (name != null) newConditions.add(name);
     if (description != null) newConditions.add(description);
     if (price != null) newConditions.add(price);
+    if (status != null) newConditions.add(status);
     return ProductsDeleteBuilder(db, newConditions);
   }
 
