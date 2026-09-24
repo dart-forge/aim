@@ -153,6 +153,11 @@ not a claim about any other machine, Dart version, or package version,
 and it is not a ranking: read the numbers in a results file or a rendered
 table for what they say, not as an ordering of the apps.
 
+Each results file keeps all five per-scenario runs, not just the median,
+so a reader can compute the run-to-run spread themselves; in the first
+committed run, every app/scenario stayed within 10% of its median except
+`shelf_router`'s `params_json` (14%).
+
 ## Adding an app
 
 1. Create `bench/apps/<name>/` with its own `pubspec.yaml` and a

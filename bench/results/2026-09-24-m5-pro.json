@@ -1,0 +1,1182 @@
+{
+  "label": "m5-pro",
+  "timestamp": "2026-09-24T06:09:22.149604Z",
+  "environment": {
+    "os": "macOS 26.5.1",
+    "arch": "arm64",
+    "cpu": "Apple M5 Pro",
+    "cores": 15,
+    "memoryBytes": 51539607552,
+    "dart": "Dart SDK version: 3.13.3 (stable) (Tue Sep 1 01:07:17 2026 -0700) on \"macos_arm64\"",
+    "aimCommit": "b8d90b6"
+  },
+  "settings": {
+    "durationSeconds": 10,
+    "connections": 64,
+    "runs": 5,
+    "warmupSeconds": 3,
+    "pauseSeconds": 2,
+    "oha": "oha 1.16.0"
+  },
+  "apps": [
+    {
+      "name": "dart_io",
+      "versions": {},
+      "binaryBytes": 6093872,
+      "startupMs": 18,
+      "memoryKb": 39936,
+      "scenarios": [
+        {
+          "scenarioId": "plaintext",
+          "median": {
+            "rps": 21871.919436637436,
+            "p50Ms": 2.689,
+            "p99Ms": 5.413
+          },
+          "runs": [
+            {
+              "requestsPerSec": 21871.919436637436,
+              "p50Ms": 2.697,
+              "p99Ms": 5.413,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 218740
+              }
+            },
+            {
+              "requestsPerSec": 21834.112125439136,
+              "p50Ms": 2.689,
+              "p99Ms": 4.848,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 218330
+              }
+            },
+            {
+              "requestsPerSec": 22595.12952175986,
+              "p50Ms": 2.6,
+              "p99Ms": 5.63,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 225987
+              }
+            },
+            {
+              "requestsPerSec": 21807.94103306453,
+              "p50Ms": 2.689,
+              "p99Ms": 5.435,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 218080
+              }
+            },
+            {
+              "requestsPerSec": 22622.58961467042,
+              "p50Ms": 2.607,
+              "p99Ms": 5.253,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 226421
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "params_json",
+          "median": {
+            "rps": 21650.077962098992,
+            "p50Ms": 2.715,
+            "p99Ms": 5.484
+          },
+          "runs": [
+            {
+              "requestsPerSec": 21650.077962098992,
+              "p50Ms": 2.715,
+              "p99Ms": 5.868,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 216503
+              }
+            },
+            {
+              "requestsPerSec": 21874.263786236857,
+              "p50Ms": 2.681,
+              "p99Ms": 5.183,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 218744
+              }
+            },
+            {
+              "requestsPerSec": 20800.433656513105,
+              "p50Ms": 2.815,
+              "p99Ms": 5.484,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 208046
+              }
+            },
+            {
+              "requestsPerSec": 21300.730978688967,
+              "p50Ms": 2.721,
+              "p99Ms": 4.657,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 213004
+              }
+            },
+            {
+              "requestsPerSec": 22356.072388989985,
+              "p50Ms": 2.651,
+              "p99Ms": 5.552,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 223588
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "post_json",
+          "median": {
+            "rps": 20204.054650510618,
+            "p50Ms": 2.905,
+            "p99Ms": 5.711
+          },
+          "runs": [
+            {
+              "requestsPerSec": 20146.03350539946,
+              "p50Ms": 2.905,
+              "p99Ms": 5.711,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 201496
+              }
+            },
+            {
+              "requestsPerSec": 20397.16041590994,
+              "p50Ms": 2.852,
+              "p99Ms": 4.958,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 203962
+              }
+            },
+            {
+              "requestsPerSec": 19208.485129837925,
+              "p50Ms": 3.057,
+              "p99Ms": 5.783,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 192085
+              }
+            },
+            {
+              "requestsPerSec": 20204.054650510618,
+              "p50Ms": 2.922,
+              "p99Ms": 6.027,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 202058
+              }
+            },
+            {
+              "requestsPerSec": 20446.532400494114,
+              "p50Ms": 2.871,
+              "p99Ms": 5.09,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 204472
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "routes_100",
+          "median": {
+            "rps": 22482.019595029025,
+            "p50Ms": 2.608,
+            "p99Ms": 5.443
+          },
+          "runs": [
+            {
+              "requestsPerSec": 21007.287437008596,
+              "p50Ms": 2.782,
+              "p99Ms": 5.617,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 210086
+              }
+            },
+            {
+              "requestsPerSec": 22482.019595029025,
+              "p50Ms": 2.608,
+              "p99Ms": 5.443,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 224866
+              }
+            },
+            {
+              "requestsPerSec": 23098.139557980496,
+              "p50Ms": 2.558,
+              "p99Ms": 5.26,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 230985
+              }
+            },
+            {
+              "requestsPerSec": 23020.395113128397,
+              "p50Ms": 2.564,
+              "p99Ms": 5.453,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 230179
+              }
+            },
+            {
+              "requestsPerSec": 21971.46946574578,
+              "p50Ms": 2.712,
+              "p99Ms": 4.946,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 219763
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "aim",
+      "versions": {
+        "aim_server": "0.4.0 (path)",
+        "aim_core": "0.4.0"
+      },
+      "binaryBytes": 6175936,
+      "startupMs": 15,
+      "memoryKb": 39936,
+      "scenarios": [
+        {
+          "scenarioId": "plaintext",
+          "median": {
+            "rps": 20050.73063176166,
+            "p50Ms": 2.909,
+            "p99Ms": 5.125
+          },
+          "runs": [
+            {
+              "requestsPerSec": 20050.73063176166,
+              "p50Ms": 2.909,
+              "p99Ms": 5.458,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 200509
+              }
+            },
+            {
+              "requestsPerSec": 19959.825929100818,
+              "p50Ms": 2.931,
+              "p99Ms": 5.009,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 199637
+              }
+            },
+            {
+              "requestsPerSec": 20301.220021877303,
+              "p50Ms": 2.887,
+              "p99Ms": 4.987,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 203008
+              }
+            },
+            {
+              "requestsPerSec": 20707.55072131884,
+              "p50Ms": 2.829,
+              "p99Ms": 5.125,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 207068
+              }
+            },
+            {
+              "requestsPerSec": 19880.983042878706,
+              "p50Ms": 2.938,
+              "p99Ms": 5.966,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 198813
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "params_json",
+          "median": {
+            "rps": 20241.443114383692,
+            "p50Ms": 2.908,
+            "p99Ms": 5.508
+          },
+          "runs": [
+            {
+              "requestsPerSec": 20396.781391875167,
+              "p50Ms": 2.891,
+              "p99Ms": 5.508,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 203965
+              }
+            },
+            {
+              "requestsPerSec": 20236.705055866387,
+              "p50Ms": 2.915,
+              "p99Ms": 5.851,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 202387
+              }
+            },
+            {
+              "requestsPerSec": 20241.443114383692,
+              "p50Ms": 2.908,
+              "p99Ms": 5.305,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 202394
+              }
+            },
+            {
+              "requestsPerSec": 19490.191428147966,
+              "p50Ms": 2.966,
+              "p99Ms": 5.833,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 194888
+              }
+            },
+            {
+              "requestsPerSec": 20406.330647107286,
+              "p50Ms": 2.889,
+              "p99Ms": 5.396,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 204061
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "post_json",
+          "median": {
+            "rps": 18937.06296748774,
+            "p50Ms": 3.091,
+            "p99Ms": 5.339
+          },
+          "runs": [
+            {
+              "requestsPerSec": 19105.985854588213,
+              "p50Ms": 3.069,
+              "p99Ms": 5.39,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 191071
+              }
+            },
+            {
+              "requestsPerSec": 18885.611067681682,
+              "p50Ms": 3.109,
+              "p99Ms": 5.278,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 188867
+              }
+            },
+            {
+              "requestsPerSec": 18056.988094131997,
+              "p50Ms": 3.287,
+              "p99Ms": 6.112,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 180576
+              }
+            },
+            {
+              "requestsPerSec": 18937.06296748774,
+              "p50Ms": 3.091,
+              "p99Ms": 5.31,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 189396
+              }
+            },
+            {
+              "requestsPerSec": 19019.553241987935,
+              "p50Ms": 3.082,
+              "p99Ms": 5.339,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 190189
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "routes_100",
+          "median": {
+            "rps": 19907.410345910033,
+            "p50Ms": 2.934,
+            "p99Ms": 5.703
+          },
+          "runs": [
+            {
+              "requestsPerSec": 19435.81516058483,
+              "p50Ms": 3.038,
+              "p99Ms": 5.931,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 194359
+              }
+            },
+            {
+              "requestsPerSec": 20446.5449004016,
+              "p50Ms": 2.869,
+              "p99Ms": 5.703,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 204449
+              }
+            },
+            {
+              "requestsPerSec": 20510.902810349642,
+              "p50Ms": 2.869,
+              "p99Ms": 5.17,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 205117
+              }
+            },
+            {
+              "requestsPerSec": 19907.410345910033,
+              "p50Ms": 2.934,
+              "p99Ms": 4.92,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 199099
+              }
+            },
+            {
+              "requestsPerSec": 19534.42964280588,
+              "p50Ms": 3.038,
+              "p99Ms": 6.167,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 195317
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "shelf_router",
+      "versions": {
+        "shelf": "1.4.2",
+        "shelf_router": "1.1.4"
+      },
+      "binaryBytes": 6717680,
+      "startupMs": 18,
+      "memoryKb": 39936,
+      "scenarios": [
+        {
+          "scenarioId": "plaintext",
+          "median": {
+            "rps": 19626.856237390195,
+            "p50Ms": 2.98,
+            "p99Ms": 5.971
+          },
+          "runs": [
+            {
+              "requestsPerSec": 19626.856237390195,
+              "p50Ms": 2.975,
+              "p99Ms": 5.971,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 196265
+              }
+            },
+            {
+              "requestsPerSec": 19563.94503871522,
+              "p50Ms": 2.984,
+              "p99Ms": 5.624,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 195640
+              }
+            },
+            {
+              "requestsPerSec": 19713.116833447708,
+              "p50Ms": 2.98,
+              "p99Ms": 5.772,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 197152
+              }
+            },
+            {
+              "requestsPerSec": 19536.65270147904,
+              "p50Ms": 2.988,
+              "p99Ms": 6.177,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 195393
+              }
+            },
+            {
+              "requestsPerSec": 19869.981020698455,
+              "p50Ms": 2.97,
+              "p99Ms": 5.989,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 198712
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "params_json",
+          "median": {
+            "rps": 17567.78947946377,
+            "p50Ms": 3.341,
+            "p99Ms": 6.036
+          },
+          "runs": [
+            {
+              "requestsPerSec": 17824.910373227805,
+              "p50Ms": 3.312,
+              "p99Ms": 6.036,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 178240
+              }
+            },
+            {
+              "requestsPerSec": 17711.95487400346,
+              "p50Ms": 3.307,
+              "p99Ms": 5.675,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 177088
+              }
+            },
+            {
+              "requestsPerSec": 15291.948953725725,
+              "p50Ms": 3.835,
+              "p99Ms": 7.838,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 152902
+              }
+            },
+            {
+              "requestsPerSec": 15946.154624277939,
+              "p50Ms": 3.689,
+              "p99Ms": 7.079,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 159480
+              }
+            },
+            {
+              "requestsPerSec": 17567.78947946377,
+              "p50Ms": 3.341,
+              "p99Ms": 5.763,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 175660
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "post_json",
+          "median": {
+            "rps": 16743.20012577574,
+            "p50Ms": 3.516,
+            "p99Ms": 6.151
+          },
+          "runs": [
+            {
+              "requestsPerSec": 16743.20012577574,
+              "p50Ms": 3.516,
+              "p99Ms": 6.05,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 167425
+              }
+            },
+            {
+              "requestsPerSec": 16851.2646582839,
+              "p50Ms": 3.5,
+              "p99Ms": 6.151,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 168514
+              }
+            },
+            {
+              "requestsPerSec": 16558.359486202113,
+              "p50Ms": 3.559,
+              "p99Ms": 6.015,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 165572
+              }
+            },
+            {
+              "requestsPerSec": 16607.235824881085,
+              "p50Ms": 3.532,
+              "p99Ms": 6.564,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 166066
+              }
+            },
+            {
+              "requestsPerSec": 17006.980639532652,
+              "p50Ms": 3.492,
+              "p99Ms": 6.567,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 170048
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "routes_100",
+          "median": {
+            "rps": 15356.34828100013,
+            "p50Ms": 3.817,
+            "p99Ms": 6.495
+          },
+          "runs": [
+            {
+              "requestsPerSec": 15532.219061215643,
+              "p50Ms": 3.801,
+              "p99Ms": 6.232,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 155318
+              }
+            },
+            {
+              "requestsPerSec": 15356.34828100013,
+              "p50Ms": 3.833,
+              "p99Ms": 6.178,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 153549
+              }
+            },
+            {
+              "requestsPerSec": 15008.756168929807,
+              "p50Ms": 3.869,
+              "p99Ms": 7.106,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 150071
+              }
+            },
+            {
+              "requestsPerSec": 16066.267343070413,
+              "p50Ms": 3.697,
+              "p99Ms": 6.792,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 160674
+              }
+            },
+            {
+              "requestsPerSec": 15344.658100095448,
+              "p50Ms": 3.817,
+              "p99Ms": 6.495,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 153426
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "relic",
+      "versions": {
+        "relic": "1.2.0",
+        "relic_core": "1.2.0",
+        "relic_io": "1.2.0"
+      },
+      "binaryBytes": 7932448,
+      "startupMs": 17,
+      "memoryKb": 43008,
+      "scenarios": [
+        {
+          "scenarioId": "plaintext",
+          "median": {
+            "rps": 19057.002891079817,
+            "p50Ms": 3.078,
+            "p99Ms": 5.701
+          },
+          "runs": [
+            {
+              "requestsPerSec": 19247.942513803428,
+              "p50Ms": 3.06,
+              "p99Ms": 5.901,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 192467
+              }
+            },
+            {
+              "requestsPerSec": 19057.002891079817,
+              "p50Ms": 3.078,
+              "p99Ms": 5.673,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 190594
+              }
+            },
+            {
+              "requestsPerSec": 18835.1521175816,
+              "p50Ms": 3.091,
+              "p99Ms": 5.668,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 188353
+              }
+            },
+            {
+              "requestsPerSec": 18270.54465679002,
+              "p50Ms": 3.148,
+              "p99Ms": 5.906,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 182737
+              }
+            },
+            {
+              "requestsPerSec": 19352.132092605214,
+              "p50Ms": 3.032,
+              "p99Ms": 5.701,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 193555
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "params_json",
+          "median": {
+            "rps": 18484.616503008758,
+            "p50Ms": 3.177,
+            "p99Ms": 5.764
+          },
+          "runs": [
+            {
+              "requestsPerSec": 18948.254745292572,
+              "p50Ms": 3.137,
+              "p99Ms": 5.754,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 189473
+              }
+            },
+            {
+              "requestsPerSec": 17785.860419365963,
+              "p50Ms": 3.309,
+              "p99Ms": 6.64,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 177876
+              }
+            },
+            {
+              "requestsPerSec": 18622.330284222986,
+              "p50Ms": 3.162,
+              "p99Ms": 5.591,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 186220
+              }
+            },
+            {
+              "requestsPerSec": 18484.616503008758,
+              "p50Ms": 3.177,
+              "p99Ms": 5.764,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 184858
+              }
+            },
+            {
+              "requestsPerSec": 17239.01954126007,
+              "p50Ms": 3.465,
+              "p99Ms": 5.823,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 172385
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "post_json",
+          "median": {
+            "rps": 17036.122945396877,
+            "p50Ms": 3.455,
+            "p99Ms": 6.355
+          },
+          "runs": [
+            {
+              "requestsPerSec": 17036.122945396877,
+              "p50Ms": 3.455,
+              "p99Ms": 5.938,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 170345
+              }
+            },
+            {
+              "requestsPerSec": 16544.915300465815,
+              "p50Ms": 3.57,
+              "p99Ms": 6.355,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 165462
+              }
+            },
+            {
+              "requestsPerSec": 17656.790107775854,
+              "p50Ms": 3.367,
+              "p99Ms": 6.092,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 176574
+              }
+            },
+            {
+              "requestsPerSec": 16205.38645231366,
+              "p50Ms": 3.636,
+              "p99Ms": 6.708,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 162047
+              }
+            },
+            {
+              "requestsPerSec": 17661.348949657386,
+              "p50Ms": 3.367,
+              "p99Ms": 6.451,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 176627
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "routes_100",
+          "median": {
+            "rps": 18655.27038199976,
+            "p50Ms": 3.104,
+            "p99Ms": 5.654
+          },
+          "runs": [
+            {
+              "requestsPerSec": 18641.1942977543,
+              "p50Ms": 3.098,
+              "p99Ms": 5.782,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 186432
+              }
+            },
+            {
+              "requestsPerSec": 18715.000948837725,
+              "p50Ms": 3.104,
+              "p99Ms": 5.392,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 187155
+              }
+            },
+            {
+              "requestsPerSec": 18291.670412704796,
+              "p50Ms": 3.165,
+              "p99Ms": 5.654,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 182919
+              }
+            },
+            {
+              "requestsPerSec": 18655.27038199976,
+              "p50Ms": 3.134,
+              "p99Ms": 5.321,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 186557
+              }
+            },
+            {
+              "requestsPerSec": 19446.58906826743,
+              "p50Ms": 3.045,
+              "p99Ms": 5.905,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 194457
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dart_frog",
+      "versions": {
+        "dart_frog": "1.2.6",
+        "shelf": "1.4.2"
+      },
+      "binaryBytes": 6849008,
+      "startupMs": 17,
+      "memoryKb": 40960,
+      "scenarios": [
+        {
+          "scenarioId": "plaintext",
+          "median": {
+            "rps": 17453.250849862747,
+            "p50Ms": 3.381,
+            "p99Ms": 6.095
+          },
+          "runs": [
+            {
+              "requestsPerSec": 17453.250849862747,
+              "p50Ms": 3.381,
+              "p99Ms": 5.832,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 174529
+              }
+            },
+            {
+              "requestsPerSec": 17545.71373213155,
+              "p50Ms": 3.362,
+              "p99Ms": 6.006,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 175416
+              }
+            },
+            {
+              "requestsPerSec": 17338.51368818093,
+              "p50Ms": 3.414,
+              "p99Ms": 6.162,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 173374
+              }
+            },
+            {
+              "requestsPerSec": 17742.283916312328,
+              "p50Ms": 3.338,
+              "p99Ms": 6.095,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 177422
+              }
+            },
+            {
+              "requestsPerSec": 16724.32177480422,
+              "p50Ms": 3.396,
+              "p99Ms": 7.363,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 167248
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "params_json",
+          "median": {
+            "rps": 14296.555394200937,
+            "p50Ms": 4.143,
+            "p99Ms": 6.997
+          },
+          "runs": [
+            {
+              "requestsPerSec": 14490.582079828717,
+              "p50Ms": 4.118,
+              "p99Ms": 7.019,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 144876
+              }
+            },
+            {
+              "requestsPerSec": 14304.008015377565,
+              "p50Ms": 4.128,
+              "p99Ms": 6.997,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 143013
+              }
+            },
+            {
+              "requestsPerSec": 14296.555394200937,
+              "p50Ms": 4.143,
+              "p99Ms": 6.865,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 142956
+              }
+            },
+            {
+              "requestsPerSec": 14051.734354293741,
+              "p50Ms": 4.181,
+              "p99Ms": 6.819,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 140502
+              }
+            },
+            {
+              "requestsPerSec": 13422.2076480265,
+              "p50Ms": 4.48,
+              "p99Ms": 8.401,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 134204
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "post_json",
+          "median": {
+            "rps": 14767.202935145415,
+            "p50Ms": 4.002,
+            "p99Ms": 6.958
+          },
+          "runs": [
+            {
+              "requestsPerSec": 14343.633534172965,
+              "p50Ms": 4.1,
+              "p99Ms": 6.563,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 143429
+              }
+            },
+            {
+              "requestsPerSec": 14962.019353806272,
+              "p50Ms": 3.983,
+              "p99Ms": 6.988,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 149613
+              }
+            },
+            {
+              "requestsPerSec": 14767.202935145415,
+              "p50Ms": 4.002,
+              "p99Ms": 7.353,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 147647
+              }
+            },
+            {
+              "requestsPerSec": 14727.875108509346,
+              "p50Ms": 4.012,
+              "p99Ms": 6.767,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 147237
+              }
+            },
+            {
+              "requestsPerSec": 14992.255222265088,
+              "p50Ms": 3.976,
+              "p99Ms": 6.958,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 149904
+              }
+            }
+          ]
+        },
+        {
+          "scenarioId": "routes_100",
+          "median": {
+            "rps": 7872.5133021379925,
+            "p50Ms": 7.743,
+            "p99Ms": 11.484
+          },
+          "runs": [
+            {
+              "requestsPerSec": 7784.418143792497,
+              "p50Ms": 7.762,
+              "p99Ms": 10.979,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 77809
+              }
+            },
+            {
+              "requestsPerSec": 7841.350932997313,
+              "p50Ms": 7.775,
+              "p99Ms": 11.424,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 78379
+              }
+            },
+            {
+              "requestsPerSec": 7872.5133021379925,
+              "p50Ms": 7.743,
+              "p99Ms": 11.484,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 78686
+              }
+            },
+            {
+              "requestsPerSec": 7917.904474457262,
+              "p50Ms": 7.696,
+              "p99Ms": 12.217,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 79140
+              }
+            },
+            {
+              "requestsPerSec": 7922.952270448844,
+              "p50Ms": 7.678,
+              "p99Ms": 13.18,
+              "successRate": 1.0,
+              "statusCodes": {
+                "200": 79190
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "skipped": []
+}
