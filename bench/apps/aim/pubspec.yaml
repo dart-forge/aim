@@ -8,3 +8,6 @@ dependencies:
     path: ../../../packages/aim_server
 dev_dependencies:
   lints: ^6.0.0
+dependency_overrides:
+  aim_core:
+    path: ../../../packages/aim_core

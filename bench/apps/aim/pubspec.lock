@@ -2,12 +2,11 @@
 # See https://dart.dev/tools/pub/glossary#lockfile
 packages:
   aim_core:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: aim_core
-      sha256: "244e3dc90ae974aa47ec873aace2547955ef7b2cd7bbec89038c3d7f090d34f8"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../../../packages/aim_core"
+      relative: true
+    source: path
     version: "0.4.0"
   aim_server:
     dependency: "direct main"
