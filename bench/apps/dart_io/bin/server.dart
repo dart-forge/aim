@@ -6,7 +6,8 @@ const routeCount = 100;
 Future<void> main() async {
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
   final routes = <String, String>{
-    for (var i = 1; i <= routeCount; i++) '/r/item$i': 'item$i',
+    for (var i = 1; i <= routeCount; i++)
+      '/r/item${i.toString().padLeft(3, '0')}': 'item${i.toString().padLeft(3, '0')}',
   };
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
   server.listen((request) {

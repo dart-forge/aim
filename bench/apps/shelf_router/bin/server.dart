@@ -24,7 +24,7 @@ Future<void> main() async {
       return Response.ok(jsonEncode(jsonDecode(body)), headers: _json);
     });
   for (var i = 1; i <= routeCount; i++) {
-    final name = 'item$i';
+    final name = 'item${i.toString().padLeft(3, '0')}';
     router.get('/r/$name', (Request request) => Response.ok(name, headers: _text));
   }
 

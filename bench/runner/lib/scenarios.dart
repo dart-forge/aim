@@ -26,8 +26,10 @@ class Scenario {
   final Object expected;
 }
 
-/// Number of static routes `/r/item1` .. `/r/item<routeCount>` every app
-/// registers; the last one is the request in [scenarios].
+/// Number of static routes `/r/item001` .. `/r/item100` every app
+/// registers, zero-padded to 3 digits so lexicographic order (the order
+/// dart_frog's file-based routing registers routes in) matches
+/// registration order; the last one is the request in [scenarios].
 const int routeCount = 100;
 
 const List<Scenario> scenarios = [

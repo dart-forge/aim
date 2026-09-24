@@ -12,7 +12,7 @@ Future<void> main() async {
     ..get('/users/:id', _user)
     ..post('/json', _echoJson);
   for (var i = 1; i <= routeCount; i++) {
-    final name = 'item$i';
+    final name = 'item${i.toString().padLeft(3, '0')}';
     app.get('/r/$name', (Request request) {
       return Response.ok(body: Body.fromString(name));
     });
