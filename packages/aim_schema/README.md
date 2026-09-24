@@ -103,10 +103,9 @@ not ship one. Response schemas and OpenAPI generation do not exist yet.
 
 ## Installation
 
-```yaml
-dependencies:
-  aim_schema: ^0.4.0
-```
+Not published to pub.dev yet, so there is no `dart pub add aim_schema` or
+version constraint to add today. Once it is, its only runtime dependency is
+`aim_core`.
 
 ## Documentation
 

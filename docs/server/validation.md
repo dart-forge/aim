@@ -13,11 +13,17 @@ head:
 without a cast, without a code generation step, and without a second,
 hand-written type to keep in sync with the validation rules.
 
+::: warning Not yet published to pub.dev
+`aim_schema` lives in the [`dart-forge/aim`](https://github.com/dart-forge/aim)
+monorepo but is not published to pub.dev, so there is no `dart pub add
+aim_schema` command or `^x.y.z` version to depend on yet. Everything below
+describes the package as it exists in the repository today.
+:::
+
 ## Installation
 
-```bash
-dart pub add aim_schema
-```
+Not published to pub.dev yet (see the warning above). Once it is, installing
+it will add `aim_core` as its only runtime dependency.
 
 ::: tip Not the other schema
 `aim_orm` also uses the word "schema", for the shape of a database table

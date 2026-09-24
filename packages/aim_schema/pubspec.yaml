@@ -1,6 +1,7 @@
 name: aim_schema
 description: "Validate request data and read it back with static types, without code generation."
 version: 0.4.0
+publish_to: none
 repository: https://github.com/dart-forge/aim
 
 environment:
