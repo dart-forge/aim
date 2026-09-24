@@ -179,6 +179,89 @@ class DbGenerateCommand extends Command<void> {
     print('✅ Done!');
   }
 
+  /// Whether [annotation] is `@PgTable`, however the import was spelled.
+  ///
+  /// `@orm.PgTable('users')` has a prefixed name, and comparing the whole
+  /// of it to `PgTable` misses it. Both this reader's refusal and its scan
+  /// go through here, so they cannot disagree about which annotations
+  /// count.
+  bool _isPgTable(Annotation annotation) {
+    final name = annotation.name;
+    final simple = name is PrefixedIdentifier
+        ? name.identifier.name
+        : name.name;
+    return simple == 'PgTable';
+  }
+
+  /// Stops when [unit] carries a `@PgTable` annotation this reader cannot
+  /// take a table from.
+  ///
+  /// A table is a top-level variable holding a record literal, annotated
+  /// with the table's name written as a string literal. An annotation
+  /// anywhere else used to be passed over without a word: the command
+  /// reported "Found 0 tables", wrote no migration and exited zero, so a
+  /// schema that declares tables looked like a schema with none.
+  ///
+  /// The code generator refuses the same shapes, with the difference that
+  /// it reads resolved elements and so accepts a name that is a constant
+  /// rather than a literal. This reader works from source alone.
+  void _refuseUnreadableTables(CompilationUnit unit, String filePath) {
+    for (final declaration in unit.declarations) {
+      Annotation? pgTable;
+      for (final annotation in declaration.metadata) {
+        if (_isPgTable(annotation)) {
+          pgTable = annotation;
+          break;
+        }
+      }
+      if (pgTable == null) continue;
+
+      if (declaration is! TopLevelVariableDeclaration) {
+        throw FormatException(
+          '@PgTable in $filePath is on ${_describeDeclaration(declaration)}. '
+          'A table is a top-level variable holding a record, one field per '
+          "column:\n"
+          "  @PgTable('users')\n"
+          "  final users = (id: serial('id').primaryKey(), ...);",
+        );
+      }
+
+      final args = pgTable.arguments?.arguments;
+      final name = args == null || args.isEmpty ? null : args.first;
+      if (name is! SimpleStringLiteral) {
+        throw FormatException(
+          '@PgTable in $filePath needs the table name written as a string '
+          "literal, as in @PgTable('users'). This reader works from the "
+          'source text and cannot follow a name held somewhere else.',
+        );
+      }
+
+      for (final variable in declaration.variables.variables) {
+        if (variable.initializer is RecordLiteral) continue;
+        throw FormatException(
+          '@PgTable(\'${name.value}\') in $filePath is on '
+          '"${variable.name.lexeme}", whose value is not a record. A table '
+          'is a record with one field per column.',
+        );
+      }
+    }
+  }
+
+  /// What [declaration] is, for a message that has to say where the
+  /// annotation ended up.
+  ///
+  /// The kind is enough to find it: a schema file holds a handful of
+  /// declarations, and the message already names the file.
+  String _describeDeclaration(Declaration declaration) => switch (declaration) {
+    ClassDeclaration() => 'a class',
+    MixinDeclaration() => 'a mixin',
+    EnumDeclaration() => 'an enum',
+    ExtensionDeclaration() => 'an extension',
+    FunctionDeclaration() => 'a function',
+    TypeAlias() => 'a type alias',
+    _ => 'something this reader cannot take a table from',
+  };
+
   Future<Schema> _analyzeSchema(String tablesPath) async {
     final scanned = <_ScannedTable>[];
 
@@ -193,13 +276,15 @@ class DbGenerateCommand extends Command<void> {
 
         final unit = result.unit;
 
+        _refuseUnreadableTables(unit, filePath);
+
         // TopLevelVariableDeclaration を探す
         for (final decl in unit.declarations) {
           if (decl is! TopLevelVariableDeclaration) continue;
 
           // @PgTable アノテーションを探す
           for (final annotation in decl.metadata) {
-            if (annotation.name.name != 'PgTable') continue;
+            if (!_isPgTable(annotation)) continue;
 
             // テーブル名を取得
             final args = annotation.arguments?.arguments;
