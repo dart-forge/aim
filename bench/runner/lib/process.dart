@@ -79,11 +79,41 @@ Future<Duration> waitUntilReady(
   }
 }
 
-/// Resident set size in KB from `ps`, or null if the process is gone.
-Future<int?> residentSetKb(int pid) async {
-  final result = await Process.run('ps', ['-o', 'rss=', '-p', '$pid']);
-  if (result.exitCode != 0) return null;
-  return int.tryParse((result.stdout as String).trim());
+/// Physical memory footprint in KB, or null if the process is gone.
+///
+/// Reads `ps -o rss=` where the caller is allowed to see it; recent macOS
+/// blocks that column for unentitled callers (`ps: rss: requires
+/// entitlement`), in which case this falls back to `/usr/bin/footprint`.
+/// `footprint`'s number is the physical footprint, which is not strictly
+/// the same thing as RSS, but is the closest available substitute.
+Future<int?> memoryFootprintKb(int pid) async {
+  final ps = await Process.run('ps', ['-o', 'rss=', '-p', '$pid']);
+  if (ps.exitCode == 0) {
+    final kb = int.tryParse((ps.stdout as String).trim());
+    if (kb != null) return kb;
+  }
+  final footprint = await Process.run('footprint', ['$pid']);
+  if (footprint.exitCode != 0) return null;
+  return parseFootprintKb(footprint.stdout as String);
+}
+
+/// Parses the KB value out of `footprint`'s `Footprint: <n> <unit>` header
+/// line, converting MB/GB/B to KB (rounded to the nearest integer). Returns
+/// null when no such line is present.
+int? parseFootprintKb(String footprintOutput) {
+  final match = RegExp(r'Footprint:\s*([\d.]+)\s*(KB|MB|GB|bytes|B)\b')
+      .firstMatch(footprintOutput);
+  if (match == null) return null;
+  final value = double.tryParse(match.group(1)!);
+  if (value == null) return null;
+  final kb = switch (match.group(2)) {
+    'GB' => value * 1024 * 1024,
+    'MB' => value * 1024,
+    'KB' => value,
+    'bytes' || 'B' => value / 1024,
+    _ => null,
+  };
+  return kb?.round();
 }
 
 /// SIGTERM, then SIGKILL if the process is still alive after two seconds.

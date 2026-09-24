@@ -35,14 +35,25 @@ void main() {
     );
   });
 
-  test('residentSetKb reads this process', () async {
-    final rss = await residentSetKb(pid);
-    expect(rss, isNotNull);
-    expect(rss!, greaterThan(1000));
+  test('memoryFootprintKb reads this process', () async {
+    final kb = await memoryFootprintKb(pid);
+    expect(kb, isNotNull);
+    expect(kb!, greaterThan(1000));
   });
 
-  test('residentSetKb is null for a pid that does not exist', () async {
-    expect(await residentSetKb(999999), isNull);
+  test('memoryFootprintKb is null for a pid that does not exist', () async {
+    expect(await memoryFootprintKb(999999), isNull);
+  });
+
+  test('parseFootprintKb reads the KB value from the header line', () {
+    expect(
+      parseFootprintKb(
+        'zsh [9328]: 64-bit    Footprint: 1664 KB (16384 bytes per page)',
+      ),
+      1664,
+    );
+    expect(parseFootprintKb('Footprint: 45.2 MB'), 46285);
+    expect(parseFootprintKb('no header'), isNull);
   });
 
   test('runStep throws on a non-zero exit', () async {
