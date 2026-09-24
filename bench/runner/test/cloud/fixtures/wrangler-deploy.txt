@@ -1,0 +1,7 @@
+ ⛅️ wrangler 4.138.0
+───────────────────
+Total Upload: 168.06 KiB / gzip: 48.41 KiB
+Uploaded aim-bench-aim (2.01 sec)
+Deployed aim-bench-aim triggers (0.32 sec)
+  https://aim-bench-aim.example-account.workers.dev
+Current Version ID: 0f1e2d3c-...
