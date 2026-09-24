@@ -11,6 +11,16 @@ head:
 
 Native PostgreSQL driver for Dart. Implements the PostgreSQL Wire Protocol without external dependencies.
 
+::: warning `dart:io`-only
+`aim_postgres` depends on `dart:io` and runs on `aim_server` and
+`aim_functions` (Cloud Functions for Firebase compiles to a native binary,
+not WebAssembly). It cannot run inside a Cloudflare Worker or a Deno-based
+runtime such as Supabase Edge Functions, since both compile to
+WebAssembly without `dart:io` — use the platform's own bindings there
+instead (Cloudflare's D1 or Hyperdrive through `c.env`, for example). See
+[Workers limitations](/server/workers#limitations).
+:::
+
 ## Features
 
 - Native PostgreSQL Wire Protocol implementation

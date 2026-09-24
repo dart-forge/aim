@@ -22,6 +22,17 @@ Database packages for Dart. **Works independently of aim_server.**
 | aim_orm_postgres | PostgreSQL ORM implementation | Published |
 | aim_orm_codegen | ORM code generator (build_runner) | Published |
 
+::: warning `dart:io`-only — not for Workers or Deno
+`aim_postgres`, `aim_sqlite`, and the ORM (`aim_orm`/`aim_orm_postgres`)
+depend on `dart:io` and run on `aim_server` and on `aim_functions` (Cloud
+Functions for Firebase compiles to a native binary, not WebAssembly). They
+cannot run inside a Cloudflare Worker or a Deno-based runtime such as
+Supabase Edge Functions — both compile to WebAssembly without `dart:io`.
+On those, use the platform's own bindings instead (Cloudflare's D1 or
+Hyperdrive through `c.env`, for example); see
+[Workers limitations](/server/workers#limitations).
+:::
+
 ## Philosophy
 
 Aim's database packages are **completely independent** from `aim_server`.
@@ -118,7 +129,7 @@ void main() async {
   });
 
   app.get('/users/:id', (c) async {
-    final id = int.parse(c.param('id')!);
+    final id = int.parse(c.param('id'));
     final users = await db.query(
       r'SELECT * FROM users WHERE id = $1',
       args: [id],
