@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:aim_mysql/src/exceptions.dart';
 import 'package:aim_mysql/src/protocol/packet.dart';
 import 'package:test/test.dart';
 
@@ -164,6 +165,72 @@ void main() {
       reassembler.take();
 
       expect(reassembler.lastSequenceId, 6);
+    });
+  });
+
+  group('a large payload fed in small chunks', () {
+    test('reassembles correctly, including a header split across chunks',
+        () {
+      // maxPayloadLength is 0xffffff (~16 MB), so a payload a bit over
+      // that forces a split -- and feeding it a handful of bytes at a
+      // time forces every one of that split's two packet headers to land
+      // across an arbitrary number of small chunks too.
+      final size = maxPayloadLength + 12345;
+      final payload = Uint8List(size);
+      for (var i = 0; i < size; i++) {
+        payload[i] = i & 0xff;
+      }
+      final packets = framePackets(payload, 3);
+      final wire = BytesBuilder();
+      for (final packet in packets) {
+        wire.add(packet);
+      }
+      final wireBytes = wire.toBytes();
+
+      final reassembler = PacketReassembler();
+      const chunkSize = 7;
+      for (var offset = 0; offset < wireBytes.length; offset += chunkSize) {
+        final end = offset + chunkSize < wireBytes.length
+            ? offset + chunkSize
+            : wireBytes.length;
+        reassembler.add(Uint8List.sublistView(wireBytes, offset, end));
+      }
+
+      final result = reassembler.take();
+      expect(result, hasLength(size));
+      expect(result, payload);
+      expect(reassembler.take(), isNull);
+    });
+  });
+
+  group('sequence ids within a split logical packet', () {
+    test('a gap between physical packets throws', () {
+      final packets = framePackets(bytes(maxPayloadLength + 1), 0);
+      // packets[0] carries sequence id 0, packets[1] would carry 1 --
+      // bump it to 2 to open a gap.
+      final tampered = Uint8List.fromList(packets[1]);
+      tampered[3] = 2;
+
+      final reassembler = PacketReassembler()..add(packets[0]);
+
+      expect(
+        () => reassembler.add(tampered),
+        throwsA(isA<MySqlProtocolException>()),
+      );
+    });
+
+    test('wraps mod 256 without complaint', () {
+      final packets = framePackets(bytes(maxPayloadLength + 1), 255);
+
+      expect(packets[0][3], 255);
+      expect(packets[1][3], 0);
+
+      final reassembler = PacketReassembler();
+      for (final packet in packets) {
+        reassembler.add(packet);
+      }
+
+      expect(reassembler.take(), hasLength(maxPayloadLength + 1));
     });
   });
 

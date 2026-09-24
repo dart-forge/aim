@@ -134,9 +134,20 @@ class _CompletedPacket {
 final class PacketReassembler {
   /// Bytes that have arrived but have not yet been folded into
   /// [_currentPayload]: either fewer than [_headerLength] bytes, or a
-  /// header plus a partial payload. Always a copy -- see the class doc
-  /// comment on [add] -- and never aliased by anything handed to [add].
-  final BytesBuilder _pending = BytesBuilder();
+  /// header plus a partial payload.
+  ///
+  /// Valid bytes live at `[_pendingStart, _pendingEnd)`; everything before
+  /// [_pendingStart] is a physical packet already consumed. Growing this
+  /// buffer copies its still-unconsumed bytes at most once per growth (an
+  /// amortised, doubling grow-or-compact, exactly like [BytesBuilder]'s own
+  /// strategy) rather than copying the whole buffer on every byte that
+  /// arrives -- which is what re-deriving it from a [BytesBuilder] via
+  /// `toBytes()` on every call to [_drain] used to do, making a payload fed
+  /// in many small chunks (a large row streamed a few bytes at a time, for
+  /// instance) cost time quadratic in the number of chunks.
+  Uint8List _pendingBuffer = Uint8List(0);
+  int _pendingStart = 0;
+  int _pendingEnd = 0;
 
   /// The payload bytes of the logical packet currently being assembled:
   /// the physical packets seen so far whose length was exactly
@@ -149,6 +160,12 @@ final class PacketReassembler {
 
   int _lastSequenceId = 0;
 
+  /// The sequence id the next physical packet of the logical packet
+  /// currently being assembled must carry, or `null` when no logical
+  /// packet is mid-assembly (the next physical packet starts a new one,
+  /// whatever its sequence id).
+  int? _expectedNextSequenceId;
+
   /// Adds [chunk] -- any number of bytes, from any point in the packet
   /// stream -- and assembles as many complete logical packets out of the
   /// bytes accumulated so far as it can.
@@ -156,7 +173,7 @@ final class PacketReassembler {
   /// Copies [chunk] before doing anything else with it; see the class doc
   /// comment.
   void add(Uint8List chunk) {
-    _pending.add(chunk);
+    _appendPending(chunk);
     _drain();
   }
 
@@ -179,37 +196,89 @@ final class PacketReassembler {
   /// [take] most recently returned. `0` if [take] has never returned one.
   int get lastSequenceId => _lastSequenceId;
 
-  /// Consumes as many complete physical packets as [_pending] currently
-  /// holds, folding each one's payload into [_currentPayload], and moves
-  /// [_currentPayload] into [_completed] whenever a physical packet
-  /// shorter than [maxPayloadLength] shows that the logical packet just
-  /// ended.
+  /// Copies [chunk] onto the end of the unconsumed bytes in
+  /// [_pendingBuffer], growing (and, in the same pass, compacting away
+  /// already-consumed bytes) only when the current buffer has no room
+  /// left.
+  void _appendPending(Uint8List chunk) {
+    if (chunk.isEmpty) {
+      return;
+    }
+    if (_pendingEnd + chunk.length > _pendingBuffer.length) {
+      final unconsumedLength = _pendingEnd - _pendingStart;
+      final required = unconsumedLength + chunk.length;
+      final buffer = required <= _pendingBuffer.length
+          ? _pendingBuffer
+          : Uint8List(required * 2 > 64 ? required * 2 : 64);
+      if (unconsumedLength > 0) {
+        buffer.setRange(
+          0,
+          unconsumedLength,
+          Uint8List.sublistView(_pendingBuffer, _pendingStart, _pendingEnd),
+        );
+      }
+      _pendingBuffer = buffer;
+      _pendingStart = 0;
+      _pendingEnd = unconsumedLength;
+    }
+    _pendingBuffer.setRange(_pendingEnd, _pendingEnd + chunk.length, chunk);
+    _pendingEnd += chunk.length;
+  }
+
+  /// Consumes as many complete physical packets as [_pendingBuffer]
+  /// currently holds, folding each one's payload into [_currentPayload],
+  /// and moves [_currentPayload] into [_completed] whenever a physical
+  /// packet shorter than [maxPayloadLength] shows that the logical packet
+  /// just ended.
+  ///
+  /// Also checks, for a logical packet made of more than one physical
+  /// packet, that each physical packet's sequence id is exactly one more
+  /// (mod 256) than the previous one's -- the same numbering
+  /// [MySqlConnection] advances by one per physical packet it writes, and
+  /// which a real server does too. A gap here means a physical packet was
+  /// lost, duplicated or reordered somewhere below this class, which
+  /// leaves the payload being assembled built from the wrong bytes; there
+  /// is no way to recover from that other than refusing to hand it back.
   void _drain() {
     while (true) {
-      final available = _pending.toBytes();
-      if (available.length < _headerLength) {
+      final available = _pendingEnd - _pendingStart;
+      if (available < _headerLength) {
         return;
       }
 
-      final reader = ByteReader(available);
-      final length = reader.readUint24();
-      final sequenceId = reader.readUint8();
-      if (available.length - _headerLength < length) {
+      final length = _pendingBuffer[_pendingStart] |
+          (_pendingBuffer[_pendingStart + 1] << 8) |
+          (_pendingBuffer[_pendingStart + 2] << 16);
+      final sequenceId = _pendingBuffer[_pendingStart + 3];
+      if (available - _headerLength < length) {
         return;
       }
 
-      final payload = reader.readBytes(length);
+      final expected = _expectedNextSequenceId;
+      if (expected != null && sequenceId != expected) {
+        throw MySqlProtocolException(
+          'expected sequence id $expected for the next physical packet of '
+          'a split logical packet, got $sequenceId',
+        );
+      }
+
+      final payloadStart = _pendingStart + _headerLength;
+      final payload = Uint8List.sublistView(
+        _pendingBuffer,
+        payloadStart,
+        payloadStart + length,
+      );
       _currentPayload.add(payload);
-
-      final consumed = _headerLength + length;
-      _pending.clear();
-      if (available.length > consumed) {
-        _pending.add(Uint8List.sublistView(available, consumed));
-      }
+      _pendingStart = payloadStart + length;
 
       if (length < maxPayloadLength) {
-        _completed.add(_CompletedPacket(_currentPayload.toBytes(), sequenceId));
+        _completed.add(
+          _CompletedPacket(_currentPayload.toBytes(), sequenceId),
+        );
         _currentPayload.clear();
+        _expectedNextSequenceId = null;
+      } else {
+        _expectedNextSequenceId = (sequenceId + 1) & 0xff;
       }
     }
   }
