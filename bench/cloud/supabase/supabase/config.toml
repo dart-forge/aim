@@ -1,0 +1,8 @@
+project_id = "aim_bench"
+
+[functions.aim_bench_aim]
+static_files = [ "./functions/aim_bench_aim/main.wasm" ]
+verify_jwt = false
+
+[functions.aim_bench_native]
+verify_jwt = false

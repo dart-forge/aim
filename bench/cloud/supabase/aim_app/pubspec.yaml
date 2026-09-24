@@ -1,0 +1,15 @@
+name: bench_cloud_supabase_aim
+description: Aim benchmark app compiled to WebAssembly for Supabase Edge Functions.
+publish_to: none
+environment:
+  sdk: ^3.13.0
+dependencies:
+  aim_deno:
+    path: ../../../../packages/aim_deno
+dependency_overrides:
+  aim_core:
+    path: ../../../../packages/aim_core
+  aim_edge:
+    path: ../../../../packages/aim_edge
+dev_dependencies:
+  lints: ^6.0.0
