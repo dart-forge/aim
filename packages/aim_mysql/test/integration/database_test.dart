@@ -16,7 +16,9 @@ void main() {
   late MySqlDatabase db;
 
   setUp(() async {
-    db = await MySqlDatabase.connect('${lease.url}?sslmode=disable');
+    db = await MySqlDatabase.connect(
+      '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+    );
     await db.execute('DROP TABLE IF EXISTS people');
     await db.execute('''
       CREATE TABLE people (
@@ -198,7 +200,7 @@ void main() {
       // exact physical connection or a freshly opened one -- there is
       // nowhere else for it to come from.
       final solo = await MySqlDatabase.connect(
-        '${lease.url}?sslmode=disable',
+        '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
         maxConnections: 1,
       );
       addTearDown(solo.close);
@@ -230,6 +232,86 @@ void main() {
       expect(rows.single['Value'], 'ON');
     },
   );
+
+  test(
+    'a caller after SET autocommit = 0 gets a real, durable insert -- not '
+    "one the poisoned connection's own discard silently rolls back",
+    () async {
+      // The connection [SET autocommit = 0] itself ran on must never be
+      // handed to a later, unrelated caller: if it were, that caller's own
+      // INSERT would implicitly open a transaction it never asked for, get
+      // reported as a normal success, and then be rolled back by the
+      // server the moment this driver discards the connection out from
+      // under it -- a caller-visible success that silently did not
+      // happen. Discarding the connection right after the SET itself,
+      // before anything else ever borrows it, is what this test pins:
+      // it must never even reach the INSERT below.
+      final solo = await MySqlDatabase.connect(
+        '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+        maxConnections: 1,
+      );
+      addTearDown(solo.close);
+      await solo.execute('DROP TABLE IF EXISTS poisoned_insert_t');
+      await solo.execute(
+        'CREATE TABLE poisoned_insert_t (id INT PRIMARY KEY) ENGINE = InnoDB',
+      );
+
+      await solo.execute('SET autocommit = 0');
+      await solo.execute('INSERT INTO poisoned_insert_t VALUES (1)');
+
+      final rows = await solo.query('SELECT * FROM poisoned_insert_t');
+      expect(
+        rows,
+        hasLength(1),
+        reason:
+            'the INSERT ran on a fresh, autocommit-ON connection and must '
+            'still be there for a later caller to see',
+      );
+    },
+  );
+
+  test('any SET -- not just autocommit -- gets its connection discarded, so '
+      'session state never leaks to the next borrower', () async {
+    // time_zone is the concrete case that matters: it changes how every
+    // later TIMESTAMP on this connection is read back, and nothing
+    // about SET time_zone looks like an open transaction the way SET
+    // autocommit = 0 does, so this exercises a different path than the
+    // autocommit-specific tests above.
+    final solo = await MySqlDatabase.connect(
+      '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+      maxConnections: 1,
+    );
+    addTearDown(solo.close);
+    final destroyedBefore = solo.poolStats.destroyed;
+
+    await solo.execute("SET time_zone = '+09:00'");
+
+    expect(solo.poolStats.destroyed, greaterThan(destroyedBefore));
+
+    // The replacement connection comes back with this driver's own
+    // pinned zone, not the one the earlier caller set.
+    final rows = await solo.query('SELECT @@session.time_zone AS tz');
+    expect(rows.single['tz'], '+00:00');
+  });
+
+  test('a SET preceded by a comment is still recognised as a SET', () async {
+    final solo = await MySqlDatabase.connect(
+      '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+      maxConnections: 1,
+    );
+    addTearDown(solo.close);
+    final destroyedBefore = solo.poolStats.destroyed;
+
+    await solo.execute("/* comment */ SET time_zone = '+09:00'");
+
+    expect(
+      solo.poolStats.destroyed,
+      greaterThan(destroyedBefore),
+      reason:
+          'a leading comment must not hide the SET from the check that '
+          'discards the connection',
+    );
+  });
 
   test('the pool hands out more than one connection', () async {
     // connect opens one; four overlapping queries have to open more, which

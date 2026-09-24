@@ -140,13 +140,14 @@ class MySqlDatabase extends Database implements MySqlQueryable {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   }) {
-    return _withConnection((conn, _) async {
+    return _withConnection((conn, discard) async {
       final results = await _runQueryable(
         conn,
         sql,
         params: params,
         args: args,
       );
+      if (_leavesConnectionUnsafeForPool(sql, results)) discard();
       return (_resultsToMaps(results), results.inTransaction);
     });
   }
@@ -157,13 +158,14 @@ class MySqlDatabase extends Database implements MySqlQueryable {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   }) {
-    return _withConnection((conn, _) async {
+    return _withConnection((conn, discard) async {
       final results = await _runQueryable(
         conn,
         sql,
         params: params,
         args: args,
       );
+      if (_leavesConnectionUnsafeForPool(sql, results)) discard();
       return (results.totalAffectedRows, results.inTransaction);
     });
   }
@@ -174,13 +176,14 @@ class MySqlDatabase extends Database implements MySqlQueryable {
     Map<String, dynamic>? params,
     List<dynamic>? args,
   }) {
-    return _withConnection((conn, _) async {
+    return _withConnection((conn, discard) async {
       final results = await _runQueryable(
         conn,
         sql,
         params: params,
         args: args,
       );
+      if (_leavesConnectionUnsafeForPool(sql, results)) discard();
       return (results.lastInsertId, results.inTransaction);
     });
   }
@@ -212,7 +215,7 @@ class MySqlDatabase extends Database implements MySqlQueryable {
   Future<T> transaction<T>(Future<T> Function(MySqlTransaction tx) fn) {
     return _withConnection((conn, discard) async {
       await conn.runTextQuery('START TRANSACTION');
-      final tx = MySqlTransaction._(conn);
+      final tx = MySqlTransaction._(conn, discard);
       try {
         final result = await fn(tx);
         // Set before the COMMIT, not after: a caller holding tx past this
@@ -254,14 +257,24 @@ class MySqlDatabase extends Database implements MySqlQueryable {
       return result;
     } finally {
       // isOpen catches a connection a transport failure already made
-      // unusable. leftTransactionOpen catches the other way a connection
-      // can be unfit to recycle while still reporting isOpen: a caller's
-      // own SQL -- most concretely `SET autocommit = 0`, which succeeds
-      // and is never rejected the way a bare START TRANSACTION is --
-      // leaving an explicit transaction open on it. Handing a connection
-      // like that back to the pool would poison whichever unrelated
-      // caller borrows it next: a COMMIT or ROLLBACK it never asked for
-      // would land on this caller's still-open work instead of its own.
+      // unusable. leftTransactionOpen catches the other way a caller's own
+      // SQL can leave a connection unfit to recycle while still reporting
+      // isOpen: an explicit transaction left open by something other than
+      // this method's own START TRANSACTION / COMMIT / ROLLBACK. Handing a
+      // connection like that back to the pool would poison whichever
+      // unrelated caller borrows it next: a COMMIT or ROLLBACK it never
+      // asked for would land on this caller's still-open work instead of
+      // its own.
+      //
+      // A `SET autocommit = 0` is not caught by this check: its own OK
+      // reply has `SERVER_STATUS_IN_TRANS` cleared, because autocommit
+      // going off does not by itself open a transaction -- the next
+      // statement that runs on the connection is what does that, and by
+      // then the connection may already be back in the pool, in some
+      // other caller's hands. `_leavesConnectionUnsafeForPool`, called at
+      // every call site above and from `MySqlTransaction._runChecked`, is
+      // what catches that case instead, by discarding on the SET itself
+      // rather than waiting for a symptom of it.
       await _pool.release(
         conn,
         discard: forceDiscard || !conn.isOpen || leftTransactionOpen,
@@ -273,9 +286,18 @@ class MySqlDatabase extends Database implements MySqlQueryable {
 /// A transaction pinned to a single pooled connection for its whole
 /// lifetime. Obtained via [MySqlDatabase.transaction].
 class MySqlTransaction implements Transaction, MySqlQueryable {
-  MySqlTransaction._(this._connection);
+  MySqlTransaction._(this._connection, this._discard);
 
   final MySqlConnection _connection;
+
+  /// Marks this transaction's pinned connection for discard, rather than
+  /// return to the pool, once [MySqlDatabase.transaction] releases it --
+  /// the same callback [MySqlDatabase._withConnection] hands every other
+  /// caller, threaded through here so [_runChecked] can act on a
+  /// statement that leaves the connection unsafe to reuse (see
+  /// [_leavesConnectionUnsafeForPool]) without waiting for the whole
+  /// transaction to end first.
+  final void Function() _discard;
 
   /// Set by [MySqlDatabase.transaction] once the body it called has
   /// returned or thrown, before it commits or rolls back.
@@ -375,6 +397,9 @@ class MySqlTransaction implements Transaction, MySqlQueryable {
         throw MySqlTransactionEndedByDdl(sql, cause: error);
       }
       rethrow;
+    }
+    if (_leavesConnectionUnsafeForPool(sql, results)) {
+      _discard();
     }
     if (!results.inTransaction) {
       throw MySqlTransactionEndedByDdl(sql);
@@ -565,9 +590,65 @@ Future<MySqlResultSets> _runQueryable(
   return results;
 }
 
-/// Whether [sql] is, or starts as, a `SET` statement -- case- and
-/// leading-whitespace-insensitively.
-bool _isSetStatement(String sql) => sql.trim().toUpperCase().startsWith('SET');
+/// Whether running [sql] on a pooled connection leaves that connection
+/// unsafe to hand to the next, unrelated borrower.
+///
+/// Two independent reasons, either enough on its own:
+///
+/// - [sql] is a `SET` (see [_isSetStatement]). A session-scoped `SET` --
+///   `time_zone`, `autocommit`, a user variable this driver has no way to
+///   tell apart from one that matters -- changes state that outlives the
+///   statement itself and that no later `COMMIT`, `ROLLBACK` or ordinary
+///   query ever resets. Handing a connection like that back would leak
+///   whatever it just changed into every later caller's session, silently:
+///   `SET time_zone = '+09:00'` shifting every `TIMESTAMP` a completely
+///   unrelated later borrower reads back is the concrete case this exists
+///   to prevent.
+/// - [results] shows autocommit off ([MySqlResultSets.autocommitEnabled]
+///   is `false`). This is the symptom rather than the cause -- the cause
+///   is always a `SET autocommit = 0` or equivalent, already caught by the
+///   rule above -- kept as a second, independent check anyway because it
+///   asks the connection's own state rather than pattern-matching [sql],
+///   so it still catches whatever this driver's necessarily incomplete
+///   idea of "a SET" misses.
+bool _leavesConnectionUnsafeForPool(String sql, MySqlResultSets results) =>
+    _isSetStatement(sql) || !results.autocommitEnabled;
+
+/// Whether [sql] is, or starts as, a `SET` statement -- case-insensitively,
+/// and after skipping any leading whitespace and `/* ... */`, `-- ` or `#`
+/// comments. A `SET` preceded only by those is exactly as much a `SET` as
+/// one with nothing before it: none of them run anything, so the
+/// [_leavesConnectionUnsafeForPool] risk a bare `SET` poses is identical
+/// either way.
+bool _isSetStatement(String sql) =>
+    _skipLeadingCommentsAndWhitespace(sql).toUpperCase().startsWith('SET');
+
+/// Repeatedly strips leading whitespace, then one leading comment if
+/// there is one, until neither remains -- so that several comments (or a
+/// comment followed by more whitespace) in a row are all skipped, not
+/// just the first.
+String _skipLeadingCommentsAndWhitespace(String sql) {
+  var rest = sql;
+  while (true) {
+    final trimmed = rest.trimLeft();
+    if (trimmed.startsWith('/*')) {
+      final end = trimmed.indexOf('*/');
+      // An unterminated block comment is not valid SQL either way; giving
+      // up here just means the "SET" check below sees whatever text is
+      // left, which is no worse than not skipping the comment at all.
+      if (end == -1) return trimmed;
+      rest = trimmed.substring(end + 2);
+      continue;
+    }
+    if (trimmed.startsWith('--') || trimmed.startsWith('#')) {
+      final newline = trimmed.indexOf('\n');
+      if (newline == -1) return '';
+      rest = trimmed.substring(newline + 1);
+      continue;
+    }
+    return trimmed;
+  }
+}
 
 /// Whether [sql] is a `SET` that touches `sql_mode`.
 ///
