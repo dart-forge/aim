@@ -49,6 +49,12 @@ const List<AppSpec> apps = [
     entry: 'bin/server.dart',
     lockPackages: ['shelf', 'shelf_router'],
   ),
+  AppSpec(
+    name: 'relic',
+    directory: 'relic',
+    entry: 'bin/server.dart',
+    lockPackages: ['relic', 'relic_core', 'relic_io'],
+  ),
 ];
 
 /// `bench/`, resolved from this package's location (`bench/runner`).
