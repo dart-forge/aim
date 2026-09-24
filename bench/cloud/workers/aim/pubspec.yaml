@@ -1,0 +1,15 @@
+name: bench_cloud_workers_aim
+description: Aim benchmark app compiled to WebAssembly for Cloudflare Workers.
+publish_to: none
+environment:
+  sdk: ^3.13.0
+dependencies:
+  aim_workers:
+    path: ../../../../packages/aim_workers
+dependency_overrides:
+  aim_core:
+    path: ../../../../packages/aim_core
+  aim_edge:
+    path: ../../../../packages/aim_edge
+dev_dependencies:
+  lints: ^6.0.0

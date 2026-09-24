@@ -1,0 +1,5 @@
+{
+  "name": "aim-bench-aim",            // overridden by --name at deploy time
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-05-25"
+}
