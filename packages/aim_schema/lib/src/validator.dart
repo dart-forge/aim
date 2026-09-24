@@ -287,12 +287,7 @@ final class Validator implements Reader {
     }
     final resolved = _asEnumValue(value, values);
     if (resolved == null) {
-      errors.add(
-        ValidationError(
-          path,
-          'must be one of ${values.map((v) => v.name).join(', ')}',
-        ),
-      );
+      errors.add(ValidationError(path, constraints.mustBeOneOfMessage(values)));
       return values.first;
     }
     return resolved;
@@ -306,12 +301,7 @@ final class Validator implements Reader {
     if (value == null) return null;
     final resolved = _asEnumValue(value, values);
     if (resolved == null) {
-      errors.add(
-        ValidationError(
-          path,
-          'must be one of ${values.map((v) => v.name).join(', ')}',
-        ),
-      );
+      errors.add(ValidationError(path, constraints.mustBeOneOfMessage(values)));
       return null;
     }
     return resolved;
@@ -620,10 +610,7 @@ final class Validator implements Reader {
       final resolved = _asEnumValue(value[i], values);
       if (resolved == null) {
         errors.add(
-          ValidationError(
-            elementPath,
-            'must be one of ${values.map((v) => v.name).join(', ')}',
-          ),
+          ValidationError(elementPath, constraints.mustBeOneOfMessage(values)),
         );
       } else {
         result.add(resolved);
@@ -654,10 +641,7 @@ final class Validator implements Reader {
       final resolved = _asEnumValue(value[i], values);
       if (resolved == null) {
         errors.add(
-          ValidationError(
-            elementPath,
-            'must be one of ${values.map((v) => v.name).join(', ')}',
-          ),
+          ValidationError(elementPath, constraints.mustBeOneOfMessage(values)),
         );
       } else {
         result.add(resolved);

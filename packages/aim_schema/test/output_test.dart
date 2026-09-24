@@ -114,6 +114,41 @@ void main() {
     },
   );
 
+  test('toJsonSchema matches Schema for a list, an enum, a nested object, an '
+      'object list, and a dateTime with min/max', () {
+    final min = DateTime.utc(2020);
+    final max = DateTime.utc(2030);
+    final teamSchema = Schema((r) => (name: r.string('name', minLength: 1)));
+    final schema = Schema(
+      (r) => (
+        tags: r.stringList('tags', minItems: 1),
+        role: r.enumValue('role', Role.values),
+        team: r.object('team', teamSchema),
+        teams: r.objectList('teams', teamSchema),
+        at: r.dateTime('at', min: min, max: max),
+      ),
+    );
+    final out =
+        Output<
+          ({
+            List<String> tags,
+            Role role,
+            Team team,
+            List<Team> teams,
+            DateTime at,
+          })
+        >(
+          (w) => [
+            w.stringList('tags', (v) => v.tags, minItems: 1),
+            w.enumValue('role', (v) => v.role, Role.values),
+            w.object('team', (v) => v.team, teamOut),
+            w.objectList('teams', (v) => v.teams, teamOut),
+            w.dateTime('at', (v) => v.at, min: min, max: max),
+          ],
+        );
+    expect(out.toJsonSchema(), schema.toJsonSchema());
+  });
+
   test('duplicate field names are rejected', () {
     expect(
       () => Output<int>(
@@ -332,5 +367,67 @@ void main() {
         {'name': 'a'},
       ],
     });
+  });
+
+  // --- additional coverage: fix round 1 ---
+
+  test('integerList encodes', () {
+    final out = Output<List<int>>((w) => [w.integerList('n', (v) => v)]);
+    expect(out.encode([1, 2, 3]), {
+      'n': [1, 2, 3],
+    });
+  });
+
+  test('string minLength and maxLength violations are reported', () {
+    final out = Output<String>(
+      (w) => [w.string('s', (v) => v, minLength: 2, maxLength: 4)],
+    );
+    try {
+      out.encode('a');
+      fail('expected error');
+    } on ResponseValidationException catch (e) {
+      expect(e.errors.single.message, 'must be at least 2 characters');
+    }
+    try {
+      out.encode('abcde');
+      fail('expected error');
+    } on ResponseValidationException catch (e) {
+      expect(e.errors.single.message, 'must be at most 4 characters');
+    }
+  });
+
+  test('objectList minItems and maxItems violations are reported', () {
+    final out = Output<List<Team>>(
+      (w) => [
+        w.objectList('teams', (v) => v, teamOut, minItems: 1, maxItems: 2),
+      ],
+    );
+    try {
+      out.encode([]);
+      fail('expected error');
+    } on ResponseValidationException catch (e) {
+      expect(e.errors.single, isA<ValidationError>());
+      expect(e.errors.single.path, 'teams');
+      expect(e.errors.single.message, 'must have at least 1 item(s)');
+    }
+    try {
+      out.encode([(name: 'a'), (name: 'b'), (name: 'c')]);
+      fail('expected error');
+    } on ResponseValidationException catch (e) {
+      expect(e.errors.single.path, 'teams');
+      expect(e.errors.single.message, 'must have at most 2 item(s)');
+    }
+  });
+
+  test('number Infinity is rejected', () {
+    final out = Output<double>((w) => [w.number('n', (v) => v)]);
+    expect(
+      () => out.encode(double.infinity),
+      throwsA(isA<ResponseValidationException>()),
+    );
+    expect(
+      () => out.encode(double.negativeInfinity),
+      throwsA(isA<ResponseValidationException>()),
+    );
   });
 }

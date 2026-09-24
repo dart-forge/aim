@@ -1,13 +1,13 @@
-import 'package:aim_schema/src/errors.dart';
+// Constraint checks shared by Validator (reading requests) and Output
+// (writing responses).
+//
+// Each function appends to `errors` rather than returning a verdict, so
+// both callers can keep collecting every violation instead of stopping at
+// the first one. A response violation is reported with the exact same
+// wording a request validation error would use for the same problem, so
+// this is the one place that wording is written down.
 
-/// Constraint checks shared by [Validator] (reading requests) and [Output]
-/// (writing responses).
-///
-/// Each function appends to [errors] rather than returning a verdict, so
-/// both callers can keep collecting every violation instead of stopping at
-/// the first one. Messages and wording are identical to what a request
-/// validation error would say, on purpose — see the "Global Constraints"
-/// note that response errors reuse the request validator's wording exactly.
+import 'package:aim_schema/src/errors.dart';
 
 void checkStringConstraints(
   List<ValidationError> errors,
@@ -93,3 +93,8 @@ void checkListConstraints(
 
 String describePattern(Pattern pattern) =>
     pattern is RegExp ? pattern.pattern : pattern.toString();
+
+/// The message for a value that isn't one of an enum's allowed constants,
+/// e.g. `must be one of admin, member`.
+String mustBeOneOfMessage(Iterable<Enum> values) =>
+    'must be one of ${values.map((v) => v.name).join(', ')}';

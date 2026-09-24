@@ -569,10 +569,7 @@ final class Writer<T> {
       into[name] = v.name;
       if (!values.contains(v)) {
         errors.add(
-          ValidationError(
-            path,
-            'must be one of ${values.map((e) => e.name).join(', ')}',
-          ),
+          ValidationError(path, constraints.mustBeOneOfMessage(values)),
         );
       }
     },
@@ -599,10 +596,7 @@ final class Writer<T> {
       into[name] = v.name;
       if (!values.contains(v)) {
         errors.add(
-          ValidationError(
-            path,
-            'must be one of ${values.map((e) => e.name).join(', ')}',
-          ),
+          ValidationError(path, constraints.mustBeOneOfMessage(values)),
         );
       }
     },
@@ -632,7 +626,7 @@ final class Writer<T> {
           errors.add(
             ValidationError(
               '$path[$i]',
-              'must be one of ${values.map((e) => e.name).join(', ')}',
+              constraints.mustBeOneOfMessage(values),
             ),
           );
         }
@@ -676,7 +670,7 @@ final class Writer<T> {
           errors.add(
             ValidationError(
               '$path[$i]',
-              'must be one of ${values.map((e) => e.name).join(', ')}',
+              constraints.mustBeOneOfMessage(values),
             ),
           );
         }
