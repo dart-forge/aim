@@ -81,3 +81,7 @@ pubspec_overrides.yaml
 !/bench/cloud/workers/aim/pubspec.lock
 !/bench/cloud/supabase/aim_app/pubspec.lock
 !/bench/cloud/functions/aim/pubspec.lock
+
+# The repo-wide `*.js` rule above (meant for dart2js output) would otherwise
+# swallow this handler's source.
+!/bench/cloud/functions/native/index.js
