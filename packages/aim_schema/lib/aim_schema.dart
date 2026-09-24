@@ -8,4 +8,6 @@ export 'src/field_spec.dart' show FieldSpec;
 export 'src/middleware.dart' show validationErrorsAsBadRequest;
 export 'src/output.dart' show Output, OutputField, Writer;
 export 'src/reader.dart' show Reader;
+export 'src/responses.dart'
+    show Reply, ResponseBuilder, ResponseEntry, Responses, responses;
 export 'src/schema.dart' show Schema;
