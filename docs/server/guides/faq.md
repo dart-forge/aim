@@ -25,9 +25,10 @@ Aim is a lightweight, modular web framework for Dart. It's designed to be simple
 - **Runtime-independent core**: routing, middleware, and `Context` live in `aim_core`; the same application code runs on the Dart VM, Cloudflare Workers, Deno-based runtimes, and Cloud Functions for Firebase (with per-runtime caveats — see [Component Status](/status))
 - **Great DX**: Built-in hot reload (`aim dev`) and a dedicated testing package (`aim_server_testing`)
 
-No benchmark suite exists yet, so this list intentionally leaves out
-performance claims. See [Component Status](/status) for what has and hasn't
-been measured.
+This list leaves out performance adjectives on purpose. Measured numbers,
+with the machine and conditions they were taken under, are on the
+[Benchmarks](/benchmarks) page; [Component Status](/status) says what has
+and hasn't been tested.
 
 ### Is Aim production-ready?
 
