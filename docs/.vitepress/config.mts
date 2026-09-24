@@ -121,6 +121,7 @@ export default defineConfig({
       { text: 'Database', link: '/database/', activeMatch: '/database/' },
       { text: 'CLI', link: '/cli/', activeMatch: '/cli/' },
       { text: 'Status', link: '/status', activeMatch: '/status' },
+      { text: 'Benchmarks', link: '/benchmarks', activeMatch: '/benchmarks' },
       {
         text: `v${AIM_VERSION}`,
         items: [

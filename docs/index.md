@@ -119,8 +119,9 @@ or Hyperdrive through `c.env` on Workers, for example). See the
 - **Testing without a socket** — `aim_server_testing`'s `TestClient` runs
   the full request pipeline in-process.
 
-This list is intentionally free of performance claims: there is no
-benchmark suite in the repository yet.
+This list is intentionally free of performance adjectives; measured
+numbers, with the machine and conditions they were taken under, are on the
+[Benchmarks](/benchmarks) page.
 
 ## How mature is each piece?
 

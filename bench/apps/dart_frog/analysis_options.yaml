@@ -1,0 +1,11 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  exclude:
+    - build/**
+
+linter:
+  rules:
+    # [id].dart is dart_frog's own file-based-routing convention for a
+    # dynamic path segment, not a naming mistake.
+    file_names: false

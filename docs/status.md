@@ -100,7 +100,9 @@ application grows past a single file.
 
 ## Benchmarks
 
-There is no benchmark suite in the repository. Statements about Aim's
-performance on this site are limited to what can be read directly from the
-implementation (for example, that routing is a linear scan of registered
-routes with the first match winning) rather than comparative numbers.
+A benchmark suite now lives in `bench/`. The first measured results, with
+the machine, versions, and conditions, are on the
+[Benchmarks](/benchmarks) page; they cover hello-world-class handlers over
+loopback and say nothing about database-bound applications. Statements
+elsewhere on this site remain limited to what the implementation shows
+(linear-scan routing) and to those measured numbers.
