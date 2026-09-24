@@ -1,3 +1,4 @@
+import 'package:aim_schema/src/constraints.dart' as constraints;
 import 'package:aim_schema/src/errors.dart';
 import 'package:aim_schema/src/field_spec.dart';
 import 'package:aim_schema/src/reader.dart';
@@ -796,77 +797,50 @@ final class Validator implements Reader {
     return result;
   }
 
+  // Delegates to the shared constraint checks in constraints.dart, which
+  // Output (the response side) reuses so the two sides never drift apart
+  // in wording. Kept as thin wrappers here so every call site above stays
+  // unchanged.
   void _checkStringConstraints(
     String path,
     String value,
     int? minLength,
     int? maxLength,
     Pattern? pattern,
-  ) {
-    if (minLength != null && value.length < minLength) {
-      errors.add(
-        ValidationError(path, 'must be at least $minLength characters'),
-      );
-    }
-    if (maxLength != null && value.length > maxLength) {
-      errors.add(
-        ValidationError(path, 'must be at most $maxLength characters'),
-      );
-    }
-    _checkPattern(path, value, pattern);
-  }
+  ) => constraints.checkStringConstraints(
+    errors,
+    path,
+    value,
+    minLength,
+    maxLength,
+    pattern,
+  );
 
-  void _checkPattern(String path, String value, Pattern? pattern) {
-    if (pattern != null && pattern.allMatches(value).isEmpty) {
-      errors.add(
-        ValidationError(
-          path,
-          'must match the pattern ${_describePattern(pattern)}',
-        ),
-      );
-    }
-  }
+  void _checkPattern(String path, String value, Pattern? pattern) =>
+      constraints.checkPattern(errors, path, value, pattern);
 
-  void _checkNumConstraints(String path, num value, num? min, num? max) {
-    if (min != null && value < min) {
-      errors.add(ValidationError(path, 'must be at least $min'));
-    }
-    if (max != null && value > max) {
-      errors.add(ValidationError(path, 'must be at most $max'));
-    }
-  }
+  void _checkNumConstraints(String path, num value, num? min, num? max) =>
+      constraints.checkNumConstraints(errors, path, value, min, max);
 
   void _checkDateTimeBounds(
     String path,
     DateTime value,
     DateTime? min,
     DateTime? max,
-  ) {
-    if (min != null && value.isBefore(min)) {
-      errors.add(
-        ValidationError(path, 'must be at or after ${min.toIso8601String()}'),
-      );
-    }
-    if (max != null && value.isAfter(max)) {
-      errors.add(
-        ValidationError(path, 'must be at or before ${max.toIso8601String()}'),
-      );
-    }
-  }
+  ) => constraints.checkDateTimeBounds(errors, path, value, min, max);
 
   void _checkListConstraints(
     String path,
     int length,
     int? minItems,
     int? maxItems,
-  ) {
-    if (minItems != null && length < minItems) {
-      errors.add(ValidationError(path, 'must have at least $minItems item(s)'));
-    }
-    if (maxItems != null && length > maxItems) {
-      errors.add(ValidationError(path, 'must have at most $maxItems item(s)'));
-    }
-  }
+  ) => constraints.checkListConstraints(
+    errors,
+    path,
+    length,
+    minItems,
+    maxItems,
+  );
 
   String? _asString(Object? value) {
     // Deliberately one-directional: this only ever turns text into a
@@ -951,8 +925,5 @@ final class Validator implements Reader {
   Map<String, Object?> _asStringKeyedMap(Map value) =>
       value.map((key, v) => MapEntry(key.toString(), v));
 }
-
-String _describePattern(Pattern pattern) =>
-    pattern is RegExp ? pattern.pattern : pattern.toString();
 
 final _epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
