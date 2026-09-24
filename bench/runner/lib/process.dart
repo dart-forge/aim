@@ -1,0 +1,98 @@
+import 'dart:async';
+import 'dart:io';
+
+/// Runs [command] to completion, streaming its output; throws on failure.
+Future<void> runStep(
+  List<String> command, {
+  required Directory workingDirectory,
+}) async {
+  final process = await Process.start(
+    command.first,
+    command.skip(1).toList(),
+    workingDirectory: workingDirectory.path,
+    mode: ProcessStartMode.inheritStdio,
+  );
+  final code = await process.exitCode;
+  if (code != 0) {
+    throw ProcessException(
+      command.first,
+      command.skip(1).toList(),
+      'exited with $code in ${workingDirectory.path}',
+      code,
+    );
+  }
+}
+
+/// `dart compile exe <entry> -o <output>` run inside [workingDirectory].
+Future<File> compileExe({
+  required Directory workingDirectory,
+  required String entry,
+  required File output,
+}) async {
+  await output.parent.create(recursive: true);
+  await runStep(
+    ['dart', 'compile', 'exe', entry, '-o', output.absolute.path],
+    workingDirectory: workingDirectory,
+  );
+  return output;
+}
+
+/// Starts [binary] with `PORT` set; stdout/stderr are discarded so logging
+/// (which no app should do) cannot skew the measurement.
+Future<Process> startServer(
+  File binary, {
+  required int port,
+  required Directory workingDirectory,
+}) {
+  return Process.start(
+    binary.absolute.path,
+    const [],
+    workingDirectory: workingDirectory.path,
+    environment: {'PORT': '$port'},
+  );
+}
+
+/// Polls [url] until it answers 200; returns the time that took.
+Future<Duration> waitUntilReady(
+  Uri url, {
+  Duration timeout = const Duration(seconds: 30),
+  Duration interval = const Duration(milliseconds: 1),
+}) async {
+  final client = HttpClient()..connectionTimeout = timeout;
+  final watch = Stopwatch()..start();
+  try {
+    while (watch.elapsed < timeout) {
+      try {
+        final response = await client.getUrl(url).then((r) => r.close());
+        await response.drain<void>();
+        if (response.statusCode == 200) return watch.elapsed;
+      } on SocketException {
+        // Not listening yet.
+      } on HttpException {
+        // Connection dropped while starting up.
+      }
+      await Future<void>.delayed(interval);
+    }
+    throw TimeoutException('$url did not answer 200 within $timeout');
+  } finally {
+    client.close(force: true);
+  }
+}
+
+/// Resident set size in KB from `ps`, or null if the process is gone.
+Future<int?> residentSetKb(int pid) async {
+  final result = await Process.run('ps', ['-o', 'rss=', '-p', '$pid']);
+  if (result.exitCode != 0) return null;
+  return int.tryParse((result.stdout as String).trim());
+}
+
+/// SIGTERM, then SIGKILL if the process is still alive after two seconds.
+Future<void> stopServer(Process process) async {
+  process.kill(ProcessSignal.sigterm);
+  try {
+    await process.exitCode.timeout(const Duration(seconds: 2));
+  } on TimeoutException {
+    process.kill(ProcessSignal.sigkill);
+    await process.exitCode;
+  }
+}
