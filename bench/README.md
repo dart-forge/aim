@@ -299,7 +299,9 @@ to one target (`workers/aim`, `workers/native`, `supabase/aim`,
 also accepts `--cycles` (default 5) and `--requests` (default 100).
 
 `cloud verify` builds and deploys each target once and checks it answers
-all four scenarios; it does not measure anything.
+all four scenarios; it does not measure anything. Before checking, it
+waits up to 60 s for the deployed route to stop answering 404, the same
+wait `cloud run` gives a brand-new route.
 
 `cloud run` builds each target once, then deploys it `--cycles` times.
 Each deploy is a fresh deployment: cycle 1 goes cold → verify → warm;

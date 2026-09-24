@@ -5,11 +5,13 @@ import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:bench_runner/apps.dart';
 import 'package:bench_runner/cloud/config.dart';
+import 'package:bench_runner/cloud/probe.dart';
 import 'package:bench_runner/cloud/redact.dart';
 import 'package:bench_runner/cloud/render.dart';
 import 'package:bench_runner/cloud/results.dart';
 import 'package:bench_runner/cloud/runner.dart';
 import 'package:bench_runner/cloud/targets.dart';
+import 'package:bench_runner/cloud/urls.dart';
 import 'package:bench_runner/environment.dart';
 import 'package:bench_runner/oha.dart';
 import 'package:bench_runner/process.dart';
@@ -313,6 +315,16 @@ class CloudVerifyCommand extends Command<void> {
       if (base == null) {
         failed = true;
         stdout.writeln('   ${target.name}: could not find the deployed URL in the deploy output');
+        continue;
+      }
+      try {
+        // Same wait coldProbe gives cloud run: a brand-new route can 404
+        // for a while as it propagates, and checking it too soon would
+        // read that as a mismatch rather than as not-ready-yet.
+        await coldProbe(joinPath(base, '/'));
+      } on StateError catch (e) {
+        failed = true;
+        stdout.writeln('   ${target.name}: ${scrubReason(e.message, base, target.name)}');
         continue;
       }
       final mismatches = await verifyApp(base);

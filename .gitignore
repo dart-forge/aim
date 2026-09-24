@@ -72,6 +72,7 @@ pubspec_overrides.yaml
 /bench/cloud/supabase/supabase/functions/*/main.support.js
 /bench/cloud/supabase/supabase/functions/*/main.wasm.map
 /bench/cloud/supabase/supabase/.temp/
+/bench/cloud/supabase/.temp/
 /bench/cloud/functions/.firebaserc
 /bench/cloud/functions/.firebase/
 /bench/cloud/functions/native/node_modules/

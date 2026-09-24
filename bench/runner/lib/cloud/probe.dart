@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 /// Time from opening the request to receiving the response headers. With no
@@ -15,6 +16,7 @@ Future<Duration> timeToFirstByte(
     final request = await http.openUrl(method, url);
     if (jsonBody != null) {
       request.headers.contentType = ContentType.json;
+      request.contentLength = utf8.encode(jsonBody).length;
       request.write(jsonBody);
     }
     final response = await request.close();

@@ -47,7 +47,7 @@ class CloudTarget {
   String get name => '${runtime.name}/${variant.name}';
 }
 
-List<CloudTarget> cloudTargets = [
+final List<CloudTarget> cloudTargets = [
   CloudTarget(
     runtime: CloudRuntime.workers,
     variant: Variant.aim,
