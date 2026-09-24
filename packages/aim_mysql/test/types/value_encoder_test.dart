@@ -34,9 +34,38 @@ void main() {
     expect(encodeParameter(-1).unsigned, isFalse);
   });
 
+  test('a negative int keeps its two\'s-complement bytes, not the '
+      "all-ones pattern -1 shares with every other width", () {
+    final encoded = encodeParameter(-1000);
+
+    expect(
+      ByteData.sublistView(encoded.bytes).getInt64(0, Endian.little),
+      -1000,
+    );
+  });
+
   test('a double is an eight-byte DOUBLE', () {
     expect(encodeParameter(1.5).type, ColumnType.double);
     expect(encodeParameter(1.5).bytes, hasLength(8));
+  });
+
+  test('NaN is refused, not sent as a bit pattern MySQL has no DOUBLE '
+      'value for', () {
+    expect(
+      () => encodeParameter(double.nan),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('infinity, positive or negative, is refused the same way', () {
+    expect(
+      () => encodeParameter(double.infinity),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(
+      () => encodeParameter(double.negativeInfinity),
+      throwsA(isA<ArgumentError>()),
+    );
   });
 
   test('a String is a length-encoded VAR_STRING in UTF-8', () {
@@ -92,6 +121,25 @@ void main() {
 
       expect(encoded.bytes.sublist(8), [123, 0x00, 0x00, 0x00]);
     });
+
+    for (final year in [-1, 10000]) {
+      test('a year of $year is refused, naming the value', () {
+        // The wire's year field is two unsigned bytes: -1 does not fit at
+        // all, and 10000 would silently wrap to a different year since
+        // only the low 16 bits get sent -- either way the server would
+        // store a value nobody asked for.
+        expect(
+          () => encodeParameter(DateTime.utc(year, 1, 1)),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+    }
+
+    for (final year in [0, 9999]) {
+      test('a year of $year, right at the edge, is accepted', () {
+        expect(() => encodeParameter(DateTime.utc(year, 1, 1)), returnsNormally);
+      });
+    }
   });
 
   test('a type this driver cannot send is refused, naming the type', () {

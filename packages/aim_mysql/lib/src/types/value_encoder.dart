@@ -67,6 +67,19 @@ EncodedParameter encodeParameter(Object? value) {
     );
   }
   if (value is double) {
+    if (value.isNaN || value.isInfinite) {
+      // MySQL's DOUBLE column has no representation for either: sending
+      // the IEEE 754 bit pattern anyway does not fail on the wire, it just
+      // gets rejected by the server with its own generic error, or -- for
+      // some numeric contexts -- silently clamped. Failing here, before
+      // anything is sent, names the actual value instead of leaving the
+      // caller to guess from a server error what was wrong with it.
+      throw ArgumentError.value(
+        value,
+        'value',
+        'a double parameter must be a finite number, not NaN or infinite',
+      );
+    }
     final writer = ByteWriter()..writeBytes(_float64Bytes(value));
     return EncodedParameter(
       type: ColumnType.double,
@@ -129,6 +142,19 @@ Uint8List _float64Bytes(double value) {
 /// would shift the stored value by the difference between the two.
 Uint8List _encodeDateTime(DateTime value) {
   final utc = value.toUtc();
+  if (utc.year < 0 || utc.year > 9999) {
+    // The wire format's year field is 2 unsigned bytes, and MySQL's own
+    // DATE/DATETIME/TIMESTAMP range never goes outside 0000-9999. A year
+    // outside that would either not fit (negative) or silently wrap to a
+    // different year (above 9999, since only the low 16 bits get sent) --
+    // both cases the server would store as a value nobody asked for, with
+    // nothing on the wire to say so.
+    throw ArgumentError.value(
+      value,
+      'value',
+      'DATETIME/TIMESTAMP year must be between 0 and 9999, got ${utc.year}',
+    );
+  }
   final microsecondOfSecond = utc.millisecond * 1000 + utc.microsecond;
   final writer = ByteWriter()
     ..writeUint8(11)
