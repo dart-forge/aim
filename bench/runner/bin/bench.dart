@@ -259,6 +259,11 @@ Future<String> toolVersion(List<String> command) async {
 /// used when a skip reason has no resolved base to scrub against.
 String _truncated(String s) => s.length > 300 ? s.substring(0, 300) : s;
 
+/// Replaces every `https://...` run in [s] with `<url>`, for printing a
+/// failed command's raw output to stderr without also printing whatever
+/// deployed URL it happened to mention.
+String _scrubUrls(String s) => s.replaceAll(RegExp(r'https://\S+'), '<url>');
+
 /// `bench/results/cloud-<date>-<label>.json`, with [label] sanitized the
 /// same way stage 1's results file name is.
 File cloudResultsFile(String label, DateTime now) {
@@ -385,6 +390,19 @@ class CloudRunCommand extends Command<void> {
         final reason = base == null ? _truncated(e.message) : scrubReason(e.message, base!, target.name);
         stdout.writeln('   skipped: $reason');
         skipped.add(SkippedApp(target.name, reason));
+      } on ProcessException catch (e) {
+        // A build or deploy command failed outright (unlike the StateError
+        // cases above, which are the target answering, just not
+        // correctly). The command's captured output may contain a
+        // deployed URL, so it goes to stderr, scrubbed, rather than into
+        // the skip reason that ends up in the results file.
+        stderr.writeln('   ${target.name}: deploy failed; command output follows');
+        stderr.writeln(_scrubUrls(e.message));
+        skipped.add(SkippedApp(target.name, 'deploy failed: ${e.errorCode}'));
+        for (final remaining in targets.skip(i + 1)) {
+          skipped.add(SkippedApp(remaining.name, 'not attempted: an earlier deploy failed'));
+        }
+        break;
       }
       if (i < targets.length - 1) {
         await Future<void>.delayed(settings.pauseBetweenTargets);

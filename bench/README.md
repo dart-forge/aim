@@ -300,9 +300,16 @@ Each deploy is a fresh deployment: cycle 1 goes cold → verify → warm;
 later cycles go cold → warm, since verify already passed in cycle 1. After
 the last cycle it measures `--requests` sequential requests per scenario
 against that last deployment, then reads the upload size, then moves on
-to the next target. A target that fails to deploy, fails verify, or
-answers incorrectly once measurement starts is recorded under `skipped`
-instead of stopping the whole run.
+to the next target. A target that fails verify, or answers incorrectly
+once measurement starts, is recorded under `skipped` instead of stopping
+the whole run. A target whose build or deploy command itself fails is
+different: that command's output may contain a deployed URL, so it goes
+to stderr rather than into the results file, the failing target is
+recorded under `skipped` with reason `deploy failed: <exit code>`, every
+later target is recorded under `skipped` too with reason `not attempted:
+an earlier deploy failed`, and `cloud run` stops there — but it still
+writes the results file for every target already measured before the
+failure.
 
 Deploying a target is not instant: Cloud Run deploys in particular take
 minutes, not seconds, and this happens once per cycle for every target,
