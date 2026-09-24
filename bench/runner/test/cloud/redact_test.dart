@@ -28,18 +28,18 @@ void main() {
     final json = '{"url":"https://${config.supabaseProjectRef}.supabase.co/functions/v1/f"}';
     expect(
       leakedIdentifiers(json, config),
-      containsAll(['supabase.co', 'abcdefghijklmnopqrst']),
+      containsAll(['supabase.co', 'supabase project ref']),
     );
   });
 
   test('finds the firebase project id and workers name prefix even without a URL', () {
     expect(
       leakedIdentifiers('{"note":"my-firebase-project-id"}', config),
-      ['my-firebase-project-id'],
+      ['firebase project id'],
     );
     expect(
       leakedIdentifiers('{"note":"aim-bench-aim"}', config),
-      ['aim-bench'],
+      ['workers name prefix'],
     );
   });
 
@@ -48,5 +48,17 @@ void main() {
       leakedIdentifiers('{"runtime":"workers","variant":"aim","region":"nearest colo"}', config),
       isEmpty,
     );
+  });
+
+  test('the returned labels never contain the raw config value', () {
+    final json = '{"note":"${config.firebaseProject} ${config.supabaseProjectRef} '
+        '${config.workersNamePrefix}"}';
+    final found = leakedIdentifiers(json, config);
+    expect(found, isNotEmpty);
+    for (final label in found) {
+      expect(label, isNot(contains(config.firebaseProject)));
+      expect(label, isNot(contains(config.supabaseProjectRef)));
+      expect(label, isNot(contains(config.workersNamePrefix)));
+    }
   });
 }

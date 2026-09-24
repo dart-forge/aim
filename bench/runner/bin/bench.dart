@@ -354,12 +354,14 @@ class CloudRunCommand extends Command<void> {
     environment['supabase'] = await toolVersion(['supabase', '--version']);
     environment['firebase'] = await toolVersion(['firebase', '--version']);
     environment['node'] = await toolVersion(['node', '--version']);
-    environment['aimCommit'] = await gitShortHead(benchRoot().parent);
+    environment['aimCommit'] = await gitShortHead(benchRoot());
     environment['measuredFrom'] = config.label;
 
     final results = <TargetResult>[];
     final skipped = <SkippedApp>[];
-    for (final target in selectTargets(args)) {
+    final targets = selectTargets(args);
+    for (var i = 0; i < targets.length; i++) {
+      final target = targets[i];
       stdout.writeln('== ${target.name}');
       try {
         results.add(await measureTarget(target, config, settings, log: stdout.writeln));
@@ -367,7 +369,9 @@ class CloudRunCommand extends Command<void> {
         stdout.writeln('   skipped: ${e.message}');
         skipped.add(SkippedApp(target.name, e.message));
       }
-      await Future<void>.delayed(settings.pauseBetweenTargets);
+      if (i < targets.length - 1) {
+        await Future<void>.delayed(settings.pauseBetweenTargets);
+      }
     }
 
     final cloudResults = CloudResults(
@@ -382,7 +386,12 @@ class CloudRunCommand extends Command<void> {
     final json = const JsonEncoder.withIndent('  ').convert(cloudResults.toJson());
     final leaks = leakedIdentifiers(json, config);
     if (leaks.isNotEmpty) {
-      throw StateError('results would leak identifying information: ${leaks.join(', ')}');
+      // Report the category labels only (never the raw values that
+      // leakedIdentifiers matched) so this message itself cannot leak an
+      // identifier through stderr.
+      stderr.writeln('results not written: they would contain ${leaks.join(', ')}');
+      exitCode = 1;
+      return;
     }
 
     final file = cloudResultsFile(cloudResults.label, now);
