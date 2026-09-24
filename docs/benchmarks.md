@@ -303,17 +303,16 @@ kept-alive connection.
 
 - The "Cold" column is the first request after a deployment, and on
   every one of the six targets it exceeds the warm median right after by
-  60–100 ms. That difference is close to the cost of a new TCP and TLS
+  60–102 ms. That difference is close to the cost of a new TCP and TLS
   connection from Tokyo, so at this resolution the start-up cost of the
   WebAssembly or Dart instance is not separable from the connection cost.
 - On Cloud Run, a deployment starts an instance to check that it listens,
   so the first request after a deployment does not measure a
   scale-from-zero start.
-- The first cycle of each target — the session's first contact with that
-  platform — was often higher than the later four; the committed JSON
-  keeps all five.
+- The first cycle of each target was often higher than the later four;
+  the committed JSON keeps all five.
 - Warm p50 is dominated by round-trip time from Tokyo: about 25 ms to the
-  nearest Cloudflare colo, 90–130 ms to Singapore, 170–190 ms to
+  nearest Cloudflare colo, 88–131 ms to Singapore, 170–190 ms to
   us-central1.
 - Warm p50 within each runtime, Aim next to its baseline (ms):
 
@@ -331,11 +330,12 @@ kept-alive connection.
   | Cloud Functions | params_json | 174 | 189 |
   | Cloud Functions | post_json | 171 | 182 |
   | Cloud Functions | routes_100 | 171 | 183 |
-- Upload sizes: the WebAssembly build is about 155 KB (61 KB gzipped)
-  against about 1.3 KB of JavaScript; the Dart AOT bundle is 7.6 MB
-  against 1.1 KB of Node source, and the Node deployment additionally
-  pulls its dependencies on the platform, so those two are not the same
-  kind of number.
+- Upload sizes (KB here means 1000 bytes): the WebAssembly build is 159 KB
+  (61 KB gzipped) for Workers and 157 KB (61 KB gzipped) for Supabase,
+  against 1.3 KB of JavaScript for each native baseline; the Dart AOT
+  bundle for Cloud Functions is 7.6 MB against 1.1 KB of Node source, and
+  the Node deployment additionally pulls its dependencies on the
+  platform, so that last pair is not the same kind of number.
 - The native baselines route the 100 static routes with a `Map`, so
   `routes_100` on a native baseline measures no router. Both Supabase
   functions were deployed with JWT verification off. Both Cloud Functions
