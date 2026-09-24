@@ -19,6 +19,9 @@ String renderMarkdown(BenchResults r) {
     '- Machine: ${env['cpu']}, ${env['cores']} cores, $memoryGb GiB, ${env['os']} (${env['arch']})',
   );
   b.writeln('- Dart: ${env['dart']}');
+  if (env['aimCommit'] != null) {
+    b.writeln('- Aim commit: ${env['aimCommit']}');
+  }
   b.writeln(
     '- Load generator: ${r.settings['oha']}, ${r.settings['connections']} connections, ${r.settings['durationSeconds']} s per run, median of ${r.settings['runs']} runs',
   );

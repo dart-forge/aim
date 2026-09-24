@@ -14,6 +14,7 @@ void main() {
       'cores': 12,
       'memoryBytes': 51539607552,
       'dart': 'Dart SDK version: 3.13.0 (stable)',
+      'aimCommit': 'abc1234',
     },
     settings: {
       'durationSeconds': 10,
@@ -47,6 +48,7 @@ void main() {
     final md = renderMarkdown(results);
     expect(md, contains('Apple M4 Pro'));
     expect(md, contains('Dart SDK version: 3.13.0'));
+    expect(md, contains('abc1234'));
     expect(md, contains('### plaintext'));
     expect(md, contains('| dart_io |'));
     expect(md, contains('123,457'));
