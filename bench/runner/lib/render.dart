@@ -12,11 +12,19 @@ String renderMarkdown(BenchResults r) {
 
   b.writeln('## Environment');
   b.writeln();
-  b.writeln('- Date: ${r.timestamp.toUtc().toIso8601String().substring(0, 10)}');
-  b.writeln('- Machine: ${env['cpu']}, ${env['cores']} cores, $memoryGb GiB, ${env['os']} (${env['arch']})');
+  b.writeln(
+    '- Date: ${r.timestamp.toUtc().toIso8601String().substring(0, 10)}',
+  );
+  b.writeln(
+    '- Machine: ${env['cpu']}, ${env['cores']} cores, $memoryGb GiB, ${env['os']} (${env['arch']})',
+  );
   b.writeln('- Dart: ${env['dart']}');
-  b.writeln('- Load generator: ${r.settings['oha']}, ${r.settings['connections']} connections, ${r.settings['durationSeconds']} s per run, median of ${r.settings['runs']} runs');
-  b.writeln('- Every app is a `dart compile exe` binary, one isolate, bound to 127.0.0.1, no middleware.');
+  b.writeln(
+    '- Load generator: ${r.settings['oha']}, ${r.settings['connections']} connections, ${r.settings['durationSeconds']} s per run, median of ${r.settings['runs']} runs',
+  );
+  b.writeln(
+    "- Every app is a `dart compile exe` binary, one isolate, no middleware; the load generator connects to 127.0.0.1 (dart_frog's generated server listens on all interfaces, the others on loopback only).",
+  );
   b.writeln();
   b.writeln('## Versions');
   b.writeln();
@@ -41,17 +49,23 @@ String renderMarkdown(BenchResults r) {
       final s = app.scenarios.where((s) => s.scenarioId == scenario.id);
       if (s.isEmpty) continue;
       final m = s.single;
-      b.writeln('| ${app.name} | ${_thousands(m.medianRps)} | ${m.medianP50Ms.toStringAsFixed(2)} | ${m.medianP99Ms.toStringAsFixed(2)} |');
+      b.writeln(
+        '| ${app.name} | ${_thousands(m.medianRps)} | ${m.medianP50Ms.toStringAsFixed(2)} | ${m.medianP99Ms.toStringAsFixed(2)} |',
+      );
     }
     b.writeln();
   }
 
   b.writeln('### Footprint');
   b.writeln();
-  b.writeln('| App | Startup to first 200 (ms) | Memory after load (MiB) | Binary (MiB) |');
+  b.writeln(
+    '| App | Startup to first 200 (ms) | Memory after load (MiB) | Binary (MiB) |',
+  );
   b.writeln('|---|---:|---:|---:|');
   for (final app in r.apps) {
-    final memory = app.memoryKb == null ? '?' : (app.memoryKb! / 1024).toStringAsFixed(1);
+    final memory = app.memoryKb == null
+        ? '?'
+        : (app.memoryKb! / 1024).toStringAsFixed(1);
     final bin = (app.binaryBytes / (1024 * 1024)).toStringAsFixed(1);
     b.writeln('| ${app.name} | ${app.startupMs} | $memory | $bin |');
   }
