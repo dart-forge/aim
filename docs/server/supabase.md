@@ -88,10 +88,9 @@ A deployed function answers from the Dart application, so `static_files` does ca
 A Supabase project has a real PostgreSQL database behind it, but
 `aim_postgres` and the ORM depend on `dart:io` and cannot run inside the
 Edge Function's WebAssembly runtime — the same restriction described on
-[Cloudflare Workers](/server/workers#limitations). There is no Dart example
-in this repository for reaching Supabase's Postgres instance from a Deno
-wasm build; doing so would mean calling it over HTTP (Supabase's REST/data
-API) rather than through `aim_postgres`'s wire-protocol driver.
+[Cloudflare Workers](/server/workers#limitations). Reaching the project's
+Postgres instance from inside an Edge Function has not been verified and
+there is no example of it in this repository.
 
 ## Environment variables
 
