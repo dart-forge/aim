@@ -1,7 +1,7 @@
 # aim_schema
 
-Validate request data and read it back with static types — no code
-generation, no generated files.
+Validate requests and declare responses with static types, without code
+generation.
 
 [Documentation](https://aim-dart.dev/server/validation) | [pub.dev](https://pub.dev/packages/aim_schema)
 
@@ -10,7 +10,7 @@ generation, no generated files.
 Aim already uses the word "schema" for something else: `aim_orm`'s schema is
 the shape of a database — the `aim.database.schema` setting and the tables
 under `lib/schema/`. `aim_schema` is unrelated to that. It describes the
-shape of a request (and, later, a response), not a table.
+shape of a request and a response, not a table.
 
 ## Overview
 
@@ -50,6 +50,39 @@ against that record.
 
 `parse` collects every error it finds rather than stopping at the first, so a
 caller can fix a request in one round trip.
+
+## Declaring a response
+
+`Output` is the write-side counterpart of `Schema`: instead of reading
+fields out of a `Map`, it reads them off an already-typed value through a
+getter, and encodes them to JSON — checking the same kind of constraints
+along the way. `responses` collects a route's possible responses as named
+entries, and `typed` binds request schemas and those responses to one
+handler:
+
+```dart
+final userOut = Output<({int id, String name})>((w) => [
+      w.integer('id', (u) => u.id, min: 1),
+      w.string('name', (u) => u.name, minLength: 1),
+    ]);
+
+final userResponses = responses((r) => (ok: r(200, userOut)));
+
+app.get('/users/:id', typed(
+  path: Schema((r) => (id: r.integer('id'))),
+  responses: userResponses,
+  (c, req, res) async => res.ok((id: req.path.id, name: 'naoki')),
+));
+```
+
+A handler must return a `Reply`, which rules out `c.json(...)` or an
+ad-hoc map at compile time — it has to call one of the entries in `res`.
+Using `res` naturally keeps a handler to its own route's entries, but
+`Reply` itself isn't tied to a route, so calling an entry from a different
+route's `responses` and returning that instead would compile too. A value
+that doesn't match its entry's declared `Output` throws
+`ResponseValidationException` — the same kind of error, with every
+violation collected, that `Schema.parse` throws for a request.
 
 ## The procedure must be deterministic
 
@@ -97,9 +130,11 @@ its own.
 
 ## What is not here yet
 
-`toJsonSchema()` returns a JSON Schema description of a request schema. That
-is the material an OpenAPI generator would be built from — this package does
-not ship one. Response schemas and OpenAPI generation do not exist yet.
+`toJsonSchema()` returns a JSON Schema description of a request or response
+schema — the material an OpenAPI generator would be built from. `typed`
+records a route's schemas and responses (`routeContractOf`) so a generator
+could read them, but this package does not ship one; nothing here turns a
+route's contract into an OpenAPI document yet.
 
 ## Installation
 

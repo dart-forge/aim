@@ -40,3 +40,25 @@ final class ValidationException implements Exception {
   @override
   String toString() => 'ValidationException(${errors.join('; ')})';
 }
+
+/// Thrown by `Output.encode` when a value does not match its declared
+/// output.
+///
+/// Carries every error found, not just the first, the same as
+/// [ValidationException] does for requests. Unlike [ValidationException],
+/// its [toString] deliberately reports only how many errors there were:
+/// aim's default 500 handler puts `$e` straight into the response body, and
+/// a response violation is a bug in the server, not something to hand a
+/// client the details of.
+final class ResponseValidationException implements Exception {
+  ResponseValidationException(List<ValidationError> errors)
+    : errors = List.unmodifiable(errors),
+      assert(errors.isNotEmpty);
+
+  final List<ValidationError> errors;
+
+  @override
+  String toString() =>
+      'ResponseValidationException: the response did not match its '
+      'declared output (${errors.length} error(s))';
+}

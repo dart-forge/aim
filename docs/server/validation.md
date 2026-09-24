@@ -28,8 +28,8 @@ it will add `aim_core` as its only runtime dependency.
 ::: tip Not the other schema
 `aim_orm` also uses the word "schema", for the shape of a database table
 (the `aim.database.schema` setting, `lib/schema/`). This page is about
-`aim_schema`, which describes the shape of a request (and, later, a
-response), not a table.
+`aim_schema`, which describes the shape of a request and a response, not a
+table.
 :::
 
 ## Why
@@ -190,6 +190,157 @@ try {
   }
 }
 ```
+
+## Responses
+
+`aim_schema` also has a write side: `Output` declares the shape of a
+response body, the same way `Schema` declares the shape of a request.
+Where a `Schema`'s `Reader` reads fields out of an untyped `Map`, an
+`Output`'s `Writer` reads them off an already-typed value through a getter
+you supply, encodes them to JSON-ready values, and checks the same kind of
+constraints — `minLength`, `min`/`max`, `pattern`, `minItems`/`maxItems` —
+against what came out:
+
+```dart
+final userOut = Output<({int id, String name})>((w) => [
+      w.integer('id', (u) => u.id, min: 1),
+      w.string('name', (u) => u.name, minLength: 1, maxLength: 80),
+    ]);
+```
+
+Every `Reader` method has a `Writer` counterpart with the same name and the
+same constraint parameters — `string`/`stringOrNull`/`stringList`/
+`stringListOrNull`, `integer`, `number`, `boolean`, `dateTime`, `enumValue`,
+`object`, and their list and nullable forms. `encode` runs a value through
+them and returns a `Map<String, Object?>` ready for `Context.json`, or
+throws `ResponseValidationException` — carrying every violation found, the
+same as `ValidationException` does for requests — if the value doesn't
+match:
+
+```dart
+final json = userOut.encode((id: 1, name: 'naoki'));
+// {'id': 1, 'name': 'naoki'}
+
+userOut.encode((id: 0, name: '')); // throws ResponseValidationException
+```
+
+`w.dateTime` writes the value with `DateTime.toIso8601String()` as-is — a
+local (non-UTC) `DateTime` goes out without a `Z` or an offset, exactly as
+that method renders it; call `.toUtc()` in the getter if the response
+should always carry `Z`.
+
+Request and response declarations are separate types on purpose. A
+`Schema`'s `Reader` reads fields out of an untyped `Map` by name and hands
+back a typed value; an `Output`'s `Writer` does the opposite — it starts
+from an already-typed value and reads its fields by calling a getter,
+because Dart has no way to look up a record's field by a name given at
+runtime. `Schema` and `Output` share the same `FieldSpec` shape underneath
+— `toJsonSchema()` on either produces the same kind of description — but
+one can't stand in for the other.
+
+### Declaring a route's responses
+
+A route rarely returns just one shape — success, not found, a validation
+problem — each possibly with its own body. `responses` collects them as a
+record of named entries, each declared with a status code and an `Output`:
+
+```dart
+final userResponses = responses((r) => (
+      ok: r(200, userOut),
+      notFound: r(
+        404,
+        Output<String>((w) => [w.string('message', (m) => m)]),
+        description: 'no such user',
+      ),
+    ));
+```
+
+`build` runs once, eagerly, the same as `Schema`'s recording pass. Two
+entries can't share a status code, and a status outside 100–599 is
+rejected — both as `ArgumentError` — and the `ResponseBuilder` it received
+stops working once `responses` has returned, so it can't be captured and
+called again later.
+
+Calling an entry with a value encodes it through its `Output` and wraps the
+result in a `Reply`:
+
+```dart
+final reply = userResponses.entries.ok((id: 7, name: 'naoki'));
+reply.status; // 200
+reply.body;   // {'id': 7, 'name': 'naoki'}
+```
+
+`Reply` is opaque — the only way to make one is to call an entry — so a
+handler's return type of `Reply` rules out `c.json(...)` or an ad-hoc map
+at compile time; it must call some entry and return what that call
+produces. Using the `res` a handler receives (see below) naturally keeps
+it to its own route's entries, but `Reply` itself isn't tied to a route:
+nothing stops a handler from calling an entry that belongs to a different
+route's `responses` and returning that instead — `typed` and `Reply` don't
+catch that mismatch.
+
+### Binding it to a route with `typed`
+
+`typed` reads a route's request data through up to three `Schema`s —
+`path`, `query`, `body`, each optional — and hands the result, plus the
+responses' typed entries, to a handler that must return a `Reply`:
+
+```dart
+final userPath = Schema((r) => (id: r.integer('id')));
+
+app.get('/users/:id', typed(
+  path: userPath,
+  responses: userResponses,
+  (c, req, res) async {
+    final user = await findUser(req.path.id);
+    if (user == null) return res.notFound('no such user');
+    return res.ok((id: user.id, name: user.name));
+  },
+));
+```
+
+`req.body`, `req.query`, and `req.path` are typed from the `Schema`s passed
+to `typed` — a location left out reads as `null`, typed `Object?`. Reading
+fails exactly the way calling `Context.parse`/`parseQuery` directly would:
+any of the three throws `ValidationException` before the handler runs, so
+`validationErrorsAsBadRequest()` turns a bad request into a 400 the same
+way it already does for an untyped route. `typed` then calls the handler,
+encodes the `Reply` it returns, and sends it with `Context.json` at the
+status its entry declared.
+
+If the handler builds a value that doesn't match its declared `Output` — a
+bug in the handler, not in the request — the `ResponseEntry` call throws
+`ResponseValidationException` while encoding, before anything is sent.
+Left unhandled, that becomes whatever `Aim.onError` does with an uncaught
+error — a 500 by default — and, because `ResponseValidationException`'s
+`toString()` reports only how many violations there were, not their paths
+or values, a default 500 handler that puts `$e` straight into the response
+body doesn't leak which fields or values were wrong. Reading
+`ResponseValidationException.errors` — the same `List<ValidationError>`
+shape `ValidationException` carries — is how a custom `onError` would
+report or log the actual violations server-side.
+
+`typed` also records what it was given, for anything that wants to read a
+route's contract back rather than reproduce it — for example, a future
+generator that walks an app's routes and turns each one's `Schema`s and
+`Output`s (both already produce `toJsonSchema()`) into an OpenAPI document.
+`routeContractOf` looks it up by the handler function `typed` returned:
+
+```dart
+final handler = typed(
+  path: userPath,
+  responses: userResponses,
+  (c, req, res) async => res.ok((id: 1, name: 'a')),
+);
+
+final contract = routeContractOf(handler)!;
+contract.path;      // userPath
+contract.body;      // null — not declared
+contract.responses; // [ResponseEntry(200, ...), ResponseEntry(404, ...)]
+```
+
+Nothing in `aim_schema` turns that contract into OpenAPI yet — it's
+recorded so that kind of tooling can be built on top of it later.
 
 ## Nested and lists
 
@@ -376,8 +527,9 @@ print(createUser.toJsonSchema());
 
 This works today, for any schema — nested objects, lists, enums, and every
 constraint a `Reader` method accepts all come through, and it's covered by
-tests. It's the material an OpenAPI document or a response schema would be
-built from. Neither of those exists yet, though: there is no
-response-schema counterpart to `Schema`, and nothing in this package turns
-a `toJsonSchema()` output (or a whole app's routes) into an OpenAPI
-document.
+tests. It's the material an OpenAPI document would be built from. See
+[Responses](#responses) above for `Output`, the response-schema
+counterpart to `Schema`, which produces the same shape of `toJsonSchema()`
+output. Nothing in this package turns either one (or a whole app's routes)
+into an OpenAPI document yet; `typed`'s `routeContractOf` records what a
+route declares so that kind of tooling can be built against it later.
