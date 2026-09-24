@@ -75,6 +75,7 @@ class VerifyCommand extends Command<void> {
     var failed = false;
     for (final app in selectApps(argResults!)) {
       final binary = await buildApp(app);
+      await ensurePortFree(defaultPort);
       final process = await startServer(
         binary,
         port: defaultPort,

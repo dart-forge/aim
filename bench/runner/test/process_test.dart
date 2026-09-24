@@ -35,6 +35,18 @@ void main() {
     );
   });
 
+  test('ensurePortFree throws while the port is bound, completes once free',
+      () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = server.port;
+    await expectLater(
+      () => ensurePortFree(port),
+      throwsA(isA<StateError>()),
+    );
+    await server.close();
+    await expectLater(ensurePortFree(port), completes);
+  });
+
   test('memoryFootprintKb reads this process', () async {
     final kb = await memoryFootprintKb(pid);
     expect(kb, isNotNull);

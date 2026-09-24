@@ -66,6 +66,20 @@ void discardOutput(Process process) {
   unawaited(process.stderr.drain<void>());
 }
 
+/// Throws [StateError] if [port] is already bound on the loopback
+/// interface, so a leftover process from a previous run is never mistaken
+/// for the one about to be launched.
+Future<void> ensurePortFree(int port) async {
+  try {
+    final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+    await socket.close();
+  } on SocketException {
+    throw StateError(
+      'port $port is already in use; is a previous app still running?',
+    );
+  }
+}
+
 /// Polls [url] until it answers 200; returns the time that took.
 Future<Duration> waitUntilReady(
   Uri url, {

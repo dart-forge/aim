@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:bench_runner/apps.dart';
@@ -38,6 +39,10 @@ class BenchSettings {
 /// Starts [binary], waits for its first `200` on `/`, and returns how long
 /// that took together with the still-running [Process]. The caller decides
 /// whether to stop it or keep it running.
+///
+/// If waiting for readiness fails for any reason — including [binary]
+/// exiting before it answers — the process is stopped before the error is
+/// rethrown, so a failed launch never leaks a still-running process.
 Future<(Duration, Process)> _launchAndTime(
   File binary, {
   required int port,
@@ -49,8 +54,38 @@ Future<(Duration, Process)> _launchAndTime(
     port: port,
     workingDirectory: workingDirectory,
   );
-  final elapsed = await waitUntilReady(base.resolve('/'));
-  return (elapsed, process);
+  try {
+    final elapsed = await _waitOrExit(process, binary, base.resolve('/'));
+    return (elapsed, process);
+  } catch (_) {
+    await stopServer(process);
+    rethrow;
+  }
+}
+
+/// Races [waitUntilReady] against [process] exiting, so a process that
+/// crashes on startup is reported immediately instead of being waited out
+/// to [waitUntilReady]'s own timeout.
+Future<Duration> _waitOrExit(Process process, File binary, Uri url) {
+  final completer = Completer<Duration>();
+  waitUntilReady(url).then(
+    (elapsed) {
+      if (!completer.isCompleted) completer.complete(elapsed);
+    },
+    onError: (Object error, StackTrace stack) {
+      if (!completer.isCompleted) completer.completeError(error, stack);
+    },
+  );
+  process.exitCode.then((code) {
+    if (!completer.isCompleted) {
+      completer.completeError(
+        StateError(
+          '${p.basename(binary.path)} exited with code $code before answering',
+        ),
+      );
+    }
+  });
+  return completer.future;
 }
 
 /// Builds, verifies and measures one app. Throws [StateError] if the app
@@ -74,6 +109,7 @@ Future<AppResult> measureApp(
   final base = Uri.parse('http://127.0.0.1:$port');
   final workingDirectory = appBuildDirectory(app);
 
+  await ensurePortFree(port);
   final warmup = await _launchAndTime(
     binary,
     port: port,
