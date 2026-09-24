@@ -6,6 +6,7 @@ import 'package:bench_runner/oha.dart';
 import 'package:bench_runner/process.dart';
 import 'package:bench_runner/results.dart';
 import 'package:bench_runner/scenarios.dart';
+import 'package:bench_runner/stats.dart';
 import 'package:bench_runner/verify.dart';
 import 'package:path/path.dart' as p;
 
@@ -34,9 +35,34 @@ class BenchSettings {
       };
 }
 
+/// Starts [binary], waits for its first `200` on `/`, and returns how long
+/// that took together with the still-running [Process]. The caller decides
+/// whether to stop it or keep it running.
+Future<(Duration, Process)> _launchAndTime(
+  File binary, {
+  required int port,
+  required Directory workingDirectory,
+  required Uri base,
+}) async {
+  final process = await startServer(
+    binary,
+    port: port,
+    workingDirectory: workingDirectory,
+  );
+  final elapsed = await waitUntilReady(base.resolve('/'));
+  return (elapsed, process);
+}
+
 /// Builds, verifies and measures one app. Throws [StateError] if the app
 /// does not answer the scenarios identically — a non-comparable app is
 /// never measured.
+///
+/// Startup is the median of three launches, each measured after one
+/// discarded warm-up launch. The first launch of a freshly compiled binary
+/// pays macOS's one-time code-signing/first-execution check (measured
+/// 510–900 ms on this machine), while every later launch of the same
+/// binary takes 52–59 ms; without the warm-up launch, `startupMs` would
+/// record that one-time OS check instead of the app's own startup cost.
 Future<AppResult> measureApp(
   AppSpec app, {
   required BenchSettings settings,
@@ -45,13 +71,37 @@ Future<AppResult> measureApp(
 }) async {
   final binary = await build(app);
   final base = Uri.parse('http://127.0.0.1:$port');
-  final process = await startServer(
+  final workingDirectory = appBuildDirectory(app);
+
+  final warmup = await _launchAndTime(
     binary,
     port: port,
-    workingDirectory: appBuildDirectory(app),
+    workingDirectory: workingDirectory,
+    base: base,
   );
+  await stopServer(warmup.$2);
+
+  final startupSamples = <double>[];
+  late Process process;
+  for (var i = 0; i < 3; i++) {
+    final (elapsed, launched) = await _launchAndTime(
+      binary,
+      port: port,
+      workingDirectory: workingDirectory,
+      base: base,
+    );
+    startupSamples.add(elapsed.inMilliseconds.toDouble());
+    if (i < 2) {
+      await stopServer(launched);
+    } else {
+      // The last of the three measured launches is kept running for verify
+      // and the load runs below, instead of paying a fifth launch for it.
+      process = launched;
+    }
+  }
+  final startupMs = median(startupSamples).round();
+
   try {
-    final startup = await waitUntilReady(base.resolve('/'));
     final mismatches = await verifyApp(base);
     if (mismatches.isNotEmpty) {
       throw StateError('${app.name} is not comparable:\n  ${mismatches.join('\n  ')}');
@@ -83,7 +133,7 @@ Future<AppResult> measureApp(
       name: app.name,
       versions: versions,
       binaryBytes: binary.lengthSync(),
-      startupMs: startup.inMilliseconds,
+      startupMs: startupMs,
       memoryKb: memory,
       scenarios: results,
     );

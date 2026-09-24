@@ -194,8 +194,9 @@ class RenderCommand extends Command<void> {
   @override
   Future<void> run() async {
     final rest = argResults!.rest;
-    if (rest.length != 1)
+    if (rest.length != 1) {
       throw UsageException('one results file is required', invocation);
+    }
     final json = jsonDecode(
       File(rest.single).readAsStringSync(),
     ) as Map<String, Object?>;

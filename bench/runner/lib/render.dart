@@ -25,6 +25,12 @@ String renderMarkdown(BenchResults r) {
   b.writeln(
     "- Every app is a `dart compile exe` binary, one isolate, no middleware; the load generator connects to 127.0.0.1 (dart_frog's generated server listens on all interfaces, the others on loopback only).",
   );
+  b.writeln(
+    '- Startup is the median of three launches after one discarded launch; '
+    "the first launch of a freshly compiled binary pays macOS's one-time "
+    'code-signing check (measured 0.5–0.9 s here) and is not what a '
+    'redeploy sees.',
+  );
   b.writeln();
   b.writeln('## Versions');
   b.writeln();
@@ -59,7 +65,7 @@ String renderMarkdown(BenchResults r) {
   b.writeln('### Footprint');
   b.writeln();
   b.writeln(
-    '| App | Startup to first 200 (ms) | Memory after load (MiB) | Binary (MiB) |',
+    '| App | Startup to first 200, warm binary (ms) | Memory after load (MiB) | Binary (MiB) |',
   );
   b.writeln('|---|---:|---:|---:|');
   for (final app in r.apps) {
