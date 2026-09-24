@@ -152,7 +152,8 @@ export default defineConfig({
             { text: 'Context', link: '/server/concepts/context' },
             { text: 'Routing', link: '/server/concepts/routing' },
             { text: 'Middleware', link: '/server/concepts/middleware' },
-            { text: 'Request & Response', link: '/server/concepts/request-response' }
+            { text: 'Request & Response', link: '/server/concepts/request-response' },
+            { text: 'Validation', link: '/server/validation' }
           ]
         },
         {

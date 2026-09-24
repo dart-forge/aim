@@ -17,6 +17,7 @@ A lightweight, modular web framework for Dart.
 - **Routing** - Path parameters, wildcards, and method-based routing
 - **Middleware** - Composable middleware chain with early response support
 - **Type-Safe** - Custom `Variables` classes for type-safe context variables
+- **[Validation](/server/validation)** - Declare a request's shape once and read it back with static types, no code generation
 - **Modular** - Use only the middleware packages you need
 - **Runs anywhere** - The same app runs on the Dart VM (`aim_server`), on [Cloudflare Workers](/server/workers) (`aim_workers`), on [Supabase Edge Functions](/server/supabase) (`aim_deno`), and, experimentally, on [Cloud Functions for Firebase](/server/functions) (`aim_functions`)
 
@@ -99,3 +100,4 @@ void main() async {
 - [Cloud Functions for Firebase](/server/functions) - Deploy the same app as an HTTP function (experimental)
 - [Routing](/server/concepts/routing) - Path parameters and wildcards
 - [Middleware](/server/concepts/middleware) - Create custom middleware
+- [Validation](/server/validation) - Validate request bodies and query strings with static types
