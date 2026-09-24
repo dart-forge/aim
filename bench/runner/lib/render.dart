@@ -27,9 +27,8 @@ String renderMarkdown(BenchResults r) {
   );
   b.writeln(
     '- Startup is the median of three launches after one discarded launch; '
-    "the first launch of a freshly compiled binary pays macOS's one-time "
-    'code-signing check (measured 0.5–0.9 s here) and is not what a '
-    'redeploy sees.',
+    'the first launch of a freshly compiled binary pays a one-time '
+    'first-execution cost on macOS and is not what a redeploy sees.',
   );
   b.writeln();
   b.writeln('## Versions');

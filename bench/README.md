@@ -142,8 +142,8 @@ median across the measured runs (`--runs`, default 5), after a discarded
 warmup (`--warmup`). Startup time is the median of three launches (each
 measured from process spawn to the first successful `200` response on
 `/`), taken after one discarded warm-up launch: the first launch of a
-freshly compiled binary pays macOS's one-time code-signing check, which is
-not representative of what a redeploy sees, so it is excluded. Memory is
+freshly compiled binary pays a one-time first-execution cost on macOS,
+which is not what a redeploy sees, so it is excluded. Memory is
 read once, immediately after the load runs finish, from the still-running
 process — it is not a peak or an average over the run.
 

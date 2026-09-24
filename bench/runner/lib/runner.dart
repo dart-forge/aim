@@ -93,12 +93,11 @@ Future<Duration> _waitOrExit(Process process, File binary, Uri url) {
 /// status codes are not all `200` (a mismatch or a success rate below
 /// 100%) — a non-comparable app is never measured.
 ///
-/// Startup is the median of three launches, each measured after one
-/// discarded warm-up launch. The first launch of a freshly compiled binary
-/// pays macOS's one-time code-signing/first-execution check (measured
-/// 510–900 ms on this machine), while every later launch of the same
-/// binary takes 52–59 ms; without the warm-up launch, `startupMs` would
-/// record that one-time OS check instead of the app's own startup cost.
+/// Startup is the median of three launches after one discarded launch; the
+/// first launch of a freshly compiled binary pays a one-time
+/// first-execution cost on macOS and is not what a redeploy sees. Without
+/// the discarded warm-up launch, `startupMs` would record that one-time
+/// cost instead of the app's own startup time.
 Future<AppResult> measureApp(
   AppSpec app, {
   required BenchSettings settings,
