@@ -22,7 +22,7 @@ hero:
 features:
   - icon: 🌐
     title: Web Server
-    details: Lightweight, fast web framework with Context API, routing, middleware, and authentication.
+    details: Lightweight, modular web framework with Context API, routing, middleware, and authentication.
     link: /server/
     linkText: Get Started
   - icon: 🗄️
@@ -37,7 +37,7 @@ features:
     linkText: Get Started
   - icon: 🟢
     title: Supabase Edge Functions
-    details: Compile the same app to WebAssembly and run it as a Supabase Edge Function on Deno. Verified against a local Supabase stack; a production deploy is not yet verified.
+    details: Compile the same app to WebAssembly and run it as a Supabase Edge Function on Deno. Verified against a local Supabase stack and, for HTTP routing, a real deployed function; other aspects of a production deploy (cold start, bundle size, other Supabase features) are not yet verified.
     link: /server/supabase
     linkText: Get Started
   - icon: 🔥
@@ -87,6 +87,14 @@ target except `aim_server_static` and file-saving in
 [Cloudflare Workers](/server/workers), [Supabase Edge Functions](/server/supabase),
 and [Cloud Functions for Firebase](/server/functions) for what differs on
 each runtime.
+
+The database packages follow the same `dart:io` line: `aim_postgres`,
+`aim_sqlite`, and the ORM (`aim_orm`/`aim_orm_postgres`) need `dart:io` and
+run on `aim_server` and on `aim_functions` (a compiled native binary, not
+WebAssembly). They cannot run inside a Cloudflare Worker or a Deno wasm
+build — on those, use the platform's own bindings instead (Cloudflare's D1
+or Hyperdrive through `c.env` on Workers, for example). See the
+[Database](/database/) section and the [Workers limitations](/server/workers#limitations).
 
 ## Why Aim?
 
