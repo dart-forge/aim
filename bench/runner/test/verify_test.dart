@@ -6,7 +6,10 @@ import 'package:test/test.dart';
 
 /// Serves the four scenarios correctly, except where [broken] overrides.
 /// When [prefix] is set, it is stripped from the incoming path before
-/// routing, mimicking a Supabase function served under a base path.
+/// routing, mimicking a Supabase function served under a base path; a
+/// request whose path does not start with [prefix] gets a 404 instead of
+/// being routed, so a caller that drops the base path (e.g. reverting to
+/// `Uri.resolve`) is caught rather than accidentally matching anyway.
 Future<HttpServer> serveFake({
   Map<String, String> broken = const {},
   String prefix = '',
@@ -15,10 +18,17 @@ Future<HttpServer> serveFake({
   server.listen((req) async {
     final res = req.response;
     var path = req.uri.path;
-    if (path.startsWith(prefix)) {
+    String body;
+    if (prefix.isNotEmpty && !path.startsWith(prefix)) {
+      res.statusCode = 404;
+      body = 'wrong prefix';
+      res.write(body);
+      await res.close();
+      return;
+    }
+    if (prefix.isNotEmpty) {
       path = path.substring(prefix.length);
     }
-    String body;
     if (req.method == 'GET' && path == '/') {
       body = broken['/'] ?? 'Hello, World!';
     } else if (req.method == 'GET' && path == '/users/42') {
