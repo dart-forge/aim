@@ -111,9 +111,18 @@ Every app is started on port `18080`.
   into the next measurement.
 - Every scenario uses the same warmup duration and the same number of
   measured runs for every app.
-- An app that does not answer every scenario with the exact status code
-  and body defined in `scenarios.dart` is not measured at all; `verify`
-  and `run` both refuse to report numbers for it.
+- `verify` checks every app against every scenario and prints each
+  mismatch it finds, but keeps going on to the next app. `run` treats an
+  app the same way once it starts measuring it: an app that does not
+  answer every scenario with the exact status code and body defined in
+  `scenarios.dart`, or whose success rate drops below 100% under load, is
+  skipped rather than measured — `run` moves on to the next app instead of
+  stopping. A skipped app is recorded under `skipped` in the results JSON
+  (name and reason) and listed in a "Not measured" section of the
+  rendered table, never with fabricated numbers. The results file is
+  still written for every app that was measured, and `run` exits with a
+  non-zero status when anything was skipped, so a skipped app is never
+  silently missing.
 - The machine should be plugged in, otherwise idle (no other load-bearing
   processes, no browser windows open) for the duration of a `run`.
 - Every results file and rendered table records the date, the machine's

@@ -69,6 +69,15 @@ String renderMarkdown(BenchResults r) {
     final bin = (app.binaryBytes / (1024 * 1024)).toStringAsFixed(1);
     b.writeln('| ${app.name} | ${app.startupMs} | $memory | $bin |');
   }
+
+  if (r.skipped.isNotEmpty) {
+    b.writeln();
+    b.writeln('### Not measured');
+    b.writeln();
+    for (final s in r.skipped) {
+      b.writeln('- ${s.name}: ${s.reason}');
+    }
+  }
   return b.toString();
 }
 
