@@ -15,6 +15,32 @@ void main() {
     expect(result.statusCodes, {'200': 512345});
   });
 
+  test('parseOha names the missing top-level field', () {
+    expect(
+      () => parseOha('{}'),
+      throwsA(
+        isA<FormatException>().having(
+          (e) => e.message,
+          'message',
+          contains('metrics'),
+        ),
+      ),
+    );
+  });
+
+  test('parseOha names the missing nested field', () {
+    expect(
+      () => parseOha('{"metrics":{"success_rate":1,"requests_per_sec":1}}'),
+      throwsA(
+        isA<FormatException>().having(
+          (e) => e.message,
+          'message',
+          contains('latency_ms'),
+        ),
+      ),
+    );
+  });
+
   test('ohaArguments for a GET scenario', () {
     final args = ohaArguments(
       scenarios[0],

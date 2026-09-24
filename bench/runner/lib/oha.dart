@@ -36,21 +36,52 @@ class OhaResult {
       );
 }
 
-/// Parses `oha -j` output.
+/// Parses `oha --output-format json` output.
 OhaResult parseOha(String json) {
   final root = jsonDecode(json) as Map<String, Object?>;
-  final metrics = root['metrics'] as Map<String, Object?>;
-  final latency = metrics['latency_ms'] as Map<String, Object?>;
+  final metrics = _requireMap(root, 'metrics', 'metrics');
+  final latency = _requireMap(metrics, 'latency_ms', 'metrics.latency_ms');
   final codes = (root['statusCodeDistribution'] as Map? ?? const {})
       .map((k, v) => MapEntry(k as String, (v as num).toInt()));
   return OhaResult(
-    requestsPerSec: (metrics['requests_per_sec'] as num).toDouble(),
-    p50Ms: (latency['p50'] as num).toDouble(),
-    p99Ms: (latency['p99'] as num).toDouble(),
-    successRate: (metrics['success_rate'] as num).toDouble(),
+    requestsPerSec: _requireNum(
+      metrics,
+      'requests_per_sec',
+      'metrics.requests_per_sec',
+    ),
+    p50Ms: _requireNum(latency, 'p50', 'metrics.latency_ms.p50'),
+    p99Ms: _requireNum(latency, 'p99', 'metrics.latency_ms.p99'),
+    successRate: _requireNum(metrics, 'success_rate', 'metrics.success_rate'),
     statusCodes: codes,
   );
 }
+
+/// Reads a required [Map] field named [key] from [map], naming [path] (the
+/// field's dotted path in the oha output) in the error when it is missing or
+/// not a map.
+Map<String, Object?> _requireMap(
+  Map<String, Object?> map,
+  String key,
+  String path,
+) {
+  final value = map[key];
+  if (value is Map) return value.cast<String, Object?>();
+  _missingField(path);
+}
+
+/// Reads a required numeric field named [key] from [map], naming [path] (the
+/// field's dotted path in the oha output) in the error when it is missing or
+/// not a number.
+double _requireNum(Map<String, Object?> map, String key, String path) {
+  final value = map[key];
+  if (value is num) return value.toDouble();
+  _missingField(path);
+}
+
+Never _missingField(String path) => throw FormatException(
+      'oha output has no "$path" field; is this oha >= 1.16 with '
+      '--output-format json?',
+    );
 
 /// Command-line arguments for one scenario against [base].
 List<String> ohaArguments(
