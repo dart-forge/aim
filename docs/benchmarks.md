@@ -315,15 +315,14 @@ kept-alive connection.
 - Warm p50 is dominated by round-trip time from Tokyo: about 25 ms to the
   nearest Cloudflare colo, 90–130 ms to Singapore, 170–190 ms to
   us-central1.
-- Within each runtime, Aim's warm p50 against its native baseline, per
-  scenario: Workers — plaintext 24 vs. 25 (1 ms lower), params_json 24
-  vs. 26 (2 ms lower), post_json 26 vs. 26 (equal), routes_100 23 vs. 27
-  (4 ms lower). Supabase — plaintext 131 vs. 105 (26 ms higher),
-  params_json 128 vs. 105 (23 ms higher), post_json 124 vs. 99 (25 ms
-  higher), routes_100 98 vs. 88 (10 ms higher). Cloud Functions —
-  plaintext 175 vs. 175 (equal), params_json 174 vs. 189 (15 ms lower),
-  post_json 171 vs. 182 (11 ms lower), routes_100 171 vs. 183 (12 ms
-  lower).
+- Within each runtime, Aim's warm p50 minus the baseline's, in
+  milliseconds (negative means Aim answered sooner):
+
+  | Runtime | plaintext | params_json | post_json | routes_100 |
+  |---|---:|---:|---:|---:|
+  | Workers | -1 | -2 | 0 | -4 |
+  | Supabase | +26 | +23 | +25 | +10 |
+  | Cloud Functions | 0 | -15 | -11 | -12 |
 - Upload sizes: the WebAssembly build is about 155 KB (61 KB gzipped)
   against about 1.3 KB of JavaScript; the Dart AOT bundle is 7.6 MB
   against 1.1 KB of Node source, and the Node deployment additionally
