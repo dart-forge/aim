@@ -19,8 +19,18 @@ dart install aim_cli
 
 ## Verify Installation
 
-`aim` does not register a `--version` flag. Confirm the install with `--help`,
-which lists every command:
+Confirm the install with `--version`:
+
+```bash
+aim --version
+```
+
+Output:
+```
+aim_cli 0.4.0
+```
+
+To list every command, use `--help`:
 
 ```bash
 aim --help
@@ -33,7 +43,8 @@ Command-line tool for Aim framework
 Usage: aim <command> [arguments]
 
 Global options:
--h, --help    Print this usage information.
+-h, --help       Print this usage information.
+    --version    Print the aim_cli version.
 
 Available commands:
   build         Compile the server for production deployment
@@ -46,12 +57,6 @@ Available commands:
   dev           Start development server (with hot reload support)
 
 Run "aim help <command>" for more information about a command.
-```
-
-To check which version of `aim_cli` is installed, use pub itself:
-
-```bash
-dart pub global list
 ```
 
 ## PATH Configuration
