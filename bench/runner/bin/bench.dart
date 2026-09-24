@@ -4,6 +4,12 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:bench_runner/apps.dart';
+import 'package:bench_runner/cloud/config.dart';
+import 'package:bench_runner/cloud/redact.dart';
+import 'package:bench_runner/cloud/render.dart';
+import 'package:bench_runner/cloud/results.dart';
+import 'package:bench_runner/cloud/runner.dart';
+import 'package:bench_runner/cloud/targets.dart';
 import 'package:bench_runner/environment.dart';
 import 'package:bench_runner/oha.dart';
 import 'package:bench_runner/process.dart';
@@ -11,6 +17,7 @@ import 'package:bench_runner/render.dart';
 import 'package:bench_runner/results.dart';
 import 'package:bench_runner/runner.dart';
 import 'package:bench_runner/verify.dart';
+import 'package:path/path.dart' as p;
 
 const defaultPort = 18080;
 
@@ -22,7 +29,8 @@ Future<void> main(List<String> arguments) async {
         )
         ..addCommand(VerifyCommand())
         ..addCommand(RunCommand())
-        ..addCommand(RenderCommand());
+        ..addCommand(RenderCommand())
+        ..addCommand(CloudCommand());
   try {
     await runner.run(arguments);
   } on UsageException catch (e) {
@@ -203,5 +211,207 @@ class RenderCommand extends Command<void> {
       File(rest.single).readAsStringSync(),
     ) as Map<String, Object?>;
     stdout.write(renderMarkdown(BenchResults.fromJson(json)));
+  }
+}
+
+/// Resolves `--only` to the cloud targets to operate on.
+List<CloudTarget> selectTargets(ArgResults results) {
+  final only = results['only'] as String?;
+  if (only == null) return cloudTargets;
+  final target = findTarget(only);
+  if (target == null) {
+    throw UsageException(
+      'unknown target "$only"; known: ${cloudTargets.map((t) => t.name).join(', ')}',
+      '',
+    );
+  }
+  return [target];
+}
+
+/// Loads `bench/cloud/config.yaml`. On failure (most commonly: the file
+/// does not exist yet), prints the message — which names
+/// `config.example.yaml` — and sets `exitCode` to 64 instead of throwing, so
+/// callers can just check for null and return.
+Future<CloudConfig?> loadCloudConfigOrNull() async {
+  final file = File(p.join(cloudRoot().path, 'config.yaml'));
+  try {
+    return await loadCloudConfig(file);
+  } on FormatException catch (e) {
+    stderr.writeln(e.message);
+    exitCode = 64;
+    return null;
+  }
+}
+
+/// `<command> --version`, captured and trimmed; `'not installed'` instead
+/// of throwing when the executable cannot be found, so a missing tool never
+/// fails the whole run over a version string nobody strictly needs.
+Future<String> toolVersion(List<String> command) async {
+  try {
+    final output = await runCapturing(command, workingDirectory: cloudRoot());
+    return output.trim();
+  } on ProcessException {
+    return 'not installed';
+  }
+}
+
+/// `bench/results/cloud-<date>-<label>.json`, with [label] sanitized the
+/// same way stage 1's results file name is.
+File cloudResultsFile(String label, DateTime now) {
+  final date = now.toUtc().toIso8601String().substring(0, 10);
+  final safeLabel = label.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '-');
+  return File(p.join(benchRoot().path, 'results', 'cloud-$date-$safeLabel.json'));
+}
+
+class CloudCommand extends Command<void> {
+  CloudCommand() {
+    addSubcommand(CloudVerifyCommand());
+    addSubcommand(CloudRunCommand());
+    addSubcommand(CloudRenderCommand());
+  }
+
+  @override
+  final name = 'cloud';
+  @override
+  final description = 'Deploy and measure the cloud targets under bench/cloud.';
+}
+
+class CloudVerifyCommand extends Command<void> {
+  CloudVerifyCommand() {
+    argParser.addOption('only', help: 'Verify a single target (e.g. workers/aim).');
+  }
+
+  @override
+  final name = 'verify';
+  @override
+  final description = 'Deploy each cloud target once and check it answers every scenario.';
+
+  @override
+  Future<void> run() async {
+    final config = await loadCloudConfigOrNull();
+    if (config == null) return;
+
+    var failed = false;
+    for (final target in selectTargets(argResults!)) {
+      stdout.writeln('== ${target.name}');
+      final dir = Directory(p.join(cloudRoot().path, target.directory));
+      for (final step in target.build(config)) {
+        await runStep(step, workingDirectory: dir);
+      }
+      stdout.writeln('   ${target.name}: deploying');
+      final output = await runCapturing(target.deploy(config), workingDirectory: dir);
+      final base = target.url(config, output);
+      if (base == null) {
+        failed = true;
+        stdout.writeln('   ${target.name}: could not find the deployed URL in the deploy output');
+        continue;
+      }
+      final mismatches = await verifyApp(base);
+      if (mismatches.isEmpty) {
+        stdout.writeln('   ${target.name}: ok');
+      } else {
+        failed = true;
+        for (final m in mismatches) {
+          stdout.writeln('   ${target.name}: $m');
+        }
+      }
+    }
+    if (failed) exitCode = 1;
+  }
+}
+
+class CloudRunCommand extends Command<void> {
+  CloudRunCommand() {
+    argParser
+      ..addOption('only', help: 'Measure a single target (e.g. workers/aim).')
+      ..addOption('label', help: 'Results file suffix; defaults to the config label.')
+      ..addOption('cycles', help: 'Deploy-and-measure cycles.', defaultsTo: '5')
+      ..addOption('requests', help: 'Sequential requests per scenario.', defaultsTo: '100');
+  }
+
+  @override
+  final name = 'run';
+  @override
+  final description =
+      'Deploy, verify and measure the cloud targets; write bench/results/cloud-<date>-<label>.json.';
+
+  @override
+  Future<void> run() async {
+    final config = await loadCloudConfigOrNull();
+    if (config == null) return;
+
+    final args = argResults!;
+    final settings = CloudSettings(
+      cycles: int.parse(args['cycles'] as String),
+      requests: int.parse(args['requests'] as String),
+      arguments: args.arguments,
+    );
+    final label = (args['label'] as String?) ?? config.label;
+    final now = DateTime.now().toUtc();
+
+    final environment = await captureEnvironment();
+    environment['wrangler'] = await toolVersion(['npx', '--yes', 'wrangler@4', '--version']);
+    environment['supabase'] = await toolVersion(['supabase', '--version']);
+    environment['firebase'] = await toolVersion(['firebase', '--version']);
+    environment['node'] = await toolVersion(['node', '--version']);
+    environment['aimCommit'] = await gitShortHead(benchRoot().parent);
+    environment['measuredFrom'] = config.label;
+
+    final results = <TargetResult>[];
+    final skipped = <SkippedApp>[];
+    for (final target in selectTargets(args)) {
+      stdout.writeln('== ${target.name}');
+      try {
+        results.add(await measureTarget(target, config, settings, log: stdout.writeln));
+      } on StateError catch (e) {
+        stdout.writeln('   skipped: ${e.message}');
+        skipped.add(SkippedApp(target.name, e.message));
+      }
+      await Future<void>.delayed(settings.pauseBetweenTargets);
+    }
+
+    final cloudResults = CloudResults(
+      label: label,
+      timestamp: now,
+      environment: environment,
+      settings: settings.toJson(),
+      targets: results,
+      skipped: skipped,
+    );
+
+    final json = const JsonEncoder.withIndent('  ').convert(cloudResults.toJson());
+    final leaks = leakedIdentifiers(json, config);
+    if (leaks.isNotEmpty) {
+      throw StateError('results would leak identifying information: ${leaks.join(', ')}');
+    }
+
+    final file = cloudResultsFile(cloudResults.label, now);
+    await file.parent.create(recursive: true);
+    await file.writeAsString(json);
+    stdout.writeln('wrote ${file.path}');
+    stdout.writeln();
+    stdout.write(renderCloudMarkdown(cloudResults));
+    if (skipped.isNotEmpty) exitCode = 1;
+  }
+}
+
+class CloudRenderCommand extends Command<void> {
+  @override
+  final name = 'render';
+  @override
+  final description = 'Print a cloud results JSON file as Markdown tables.';
+  @override
+  String get invocation => 'bench cloud render <results.json>';
+
+  @override
+  Future<void> run() async {
+    final rest = argResults!.rest;
+    if (rest.length != 1) {
+      throw UsageException('one results file is required', invocation);
+    }
+    final json = jsonDecode(
+      File(rest.single).readAsStringSync(),
+    ) as Map<String, Object?>;
+    stdout.write(renderCloudMarkdown(CloudResults.fromJson(json)));
   }
 }

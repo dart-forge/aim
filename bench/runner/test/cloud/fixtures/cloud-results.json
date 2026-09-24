@@ -1,0 +1,297 @@
+{
+  "label": "tokyo-office",
+  "timestamp": "2026-09-24T12:00:00.000Z",
+  "environment": {
+    "os": "macOS 26.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 12,
+    "memoryBytes": 51539607552,
+    "dart": "Dart SDK version: 3.13.0 (stable)",
+    "wrangler": "4.138.0",
+    "supabase": "2.111.0",
+    "firebase": "15.30.0",
+    "node": "v22.11.0",
+    "aimCommit": "abc1234",
+    "measuredFrom": "tokyo-office"
+  },
+  "settings": {
+    "cycles": 5,
+    "warmAfterCold": 20,
+    "requests": 100,
+    "pauseBetweenTargetsSeconds": 5,
+    "arguments": []
+  },
+  "targets": [
+    {
+      "runtime": "workers",
+      "variant": "aim",
+      "region": "nearest Cloudflare colo",
+      "cold": {
+        "medianMs": 312.5,
+        "warmAfterColdMedianMs": 27.5,
+        "cycles": [
+          {
+            "coldMs": 320.0,
+            "warmMedianMs": 28.0
+          },
+          {
+            "coldMs": 305.0,
+            "warmMedianMs": 27.0
+          }
+        ]
+      },
+      "scenarios": [
+        {
+          "scenarioId": "plaintext",
+          "p50Ms": 21.0,
+          "p99Ms": 22.0,
+          "minMs": 20.0,
+          "samplesMs": [
+            20.0,
+            22.0,
+            21.0
+          ]
+        },
+        {
+          "scenarioId": "params_json",
+          "p50Ms": 25.0,
+          "p99Ms": 26.0,
+          "minMs": 24.0,
+          "samplesMs": [
+            24.0,
+            26.0,
+            25.0
+          ]
+        },
+        {
+          "scenarioId": "post_json",
+          "p50Ms": 31.0,
+          "p99Ms": 32.0,
+          "minMs": 30.0,
+          "samplesMs": [
+            30.0,
+            32.0,
+            31.0
+          ]
+        },
+        {
+          "scenarioId": "routes_100",
+          "p50Ms": 23.0,
+          "p99Ms": 24.0,
+          "minMs": 22.0,
+          "samplesMs": [
+            23.0,
+            24.0,
+            22.0
+          ]
+        }
+      ],
+      "upload": {
+        "bytes": 172032,
+        "gzipBytes": 49152
+      }
+    },
+    {
+      "runtime": "workers",
+      "variant": "native",
+      "region": "nearest Cloudflare colo",
+      "cold": {
+        "medianMs": 210.0,
+        "warmAfterColdMedianMs": 18.0,
+        "cycles": [
+          {
+            "coldMs": 210.0,
+            "warmMedianMs": 18.0
+          }
+        ]
+      },
+      "scenarios": [
+        {
+          "scenarioId": "plaintext",
+          "p50Ms": 13.0,
+          "p99Ms": 14.0,
+          "minMs": 12.0,
+          "samplesMs": [
+            12.0,
+            13.0,
+            14.0
+          ]
+        },
+        {
+          "scenarioId": "params_json",
+          "p50Ms": 16.0,
+          "p99Ms": 17.0,
+          "minMs": 15.0,
+          "samplesMs": [
+            15.0,
+            16.0,
+            17.0
+          ]
+        },
+        {
+          "scenarioId": "post_json",
+          "p50Ms": 19.0,
+          "p99Ms": 20.0,
+          "minMs": 18.0,
+          "samplesMs": [
+            18.0,
+            19.0,
+            20.0
+          ]
+        },
+        {
+          "scenarioId": "routes_100",
+          "p50Ms": 15.0,
+          "p99Ms": 16.0,
+          "minMs": 14.0,
+          "samplesMs": [
+            14.0,
+            15.0,
+            16.0
+          ]
+        }
+      ],
+      "upload": {
+        "bytes": 8192,
+        "gzipBytes": 3072
+      }
+    },
+    {
+      "runtime": "functions",
+      "variant": "aim",
+      "region": "us-central1",
+      "cold": {
+        "medianMs": 900.0,
+        "warmAfterColdMedianMs": 40.0,
+        "cycles": [
+          {
+            "coldMs": 900.0,
+            "warmMedianMs": 40.0
+          }
+        ]
+      },
+      "scenarios": [
+        {
+          "scenarioId": "plaintext",
+          "p50Ms": 36.0,
+          "p99Ms": 37.0,
+          "minMs": 35.0,
+          "samplesMs": [
+            35.0,
+            36.0,
+            37.0
+          ]
+        },
+        {
+          "scenarioId": "params_json",
+          "p50Ms": 39.0,
+          "p99Ms": 40.0,
+          "minMs": 38.0,
+          "samplesMs": [
+            38.0,
+            39.0,
+            40.0
+          ]
+        },
+        {
+          "scenarioId": "post_json",
+          "p50Ms": 42.0,
+          "p99Ms": 43.0,
+          "minMs": 41.0,
+          "samplesMs": [
+            41.0,
+            42.0,
+            43.0
+          ]
+        },
+        {
+          "scenarioId": "routes_100",
+          "p50Ms": 38.0,
+          "p99Ms": 39.0,
+          "minMs": 37.0,
+          "samplesMs": [
+            37.0,
+            38.0,
+            39.0
+          ]
+        }
+      ],
+      "upload": {
+        "bytes": 5242880,
+        "gzipBytes": null
+      }
+    },
+    {
+      "runtime": "functions",
+      "variant": "native",
+      "region": "us-central1",
+      "cold": {
+        "medianMs": 700.0,
+        "warmAfterColdMedianMs": 35.0,
+        "cycles": [
+          {
+            "coldMs": 700.0,
+            "warmMedianMs": 35.0
+          }
+        ]
+      },
+      "scenarios": [
+        {
+          "scenarioId": "plaintext",
+          "p50Ms": 31.0,
+          "p99Ms": 32.0,
+          "minMs": 30.0,
+          "samplesMs": [
+            30.0,
+            31.0,
+            32.0
+          ]
+        },
+        {
+          "scenarioId": "params_json",
+          "p50Ms": 34.0,
+          "p99Ms": 35.0,
+          "minMs": 33.0,
+          "samplesMs": [
+            33.0,
+            34.0,
+            35.0
+          ]
+        },
+        {
+          "scenarioId": "post_json",
+          "p50Ms": 37.0,
+          "p99Ms": 38.0,
+          "minMs": 36.0,
+          "samplesMs": [
+            36.0,
+            37.0,
+            38.0
+          ]
+        },
+        {
+          "scenarioId": "routes_100",
+          "p50Ms": 33.0,
+          "p99Ms": 34.0,
+          "minMs": 32.0,
+          "samplesMs": [
+            32.0,
+            33.0,
+            34.0
+          ]
+        }
+      ],
+      "upload": {
+        "bytes": 2048,
+        "gzipBytes": null
+      }
+    }
+  ],
+  "skipped": [
+    {
+      "name": "supabase/native",
+      "reason": "mismatch on params_json"
+    }
+  ]
+}
