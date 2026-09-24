@@ -1,6 +1,7 @@
 @Tags(['integration'])
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:aim_mysql/aim_mysql.dart';
@@ -311,6 +312,58 @@ void main() {
           'a leading comment must not hide the SET from the check that '
           'discards the connection',
     );
+  });
+
+  test('a query that outruns queryTimeout is killed, its connection '
+      'discarded, and the pool keeps working on a fresh one', () async {
+    // Nothing else in this driver times out a wait for a reply once the
+    // handshake is done; without exchange's own timeout, SELECT
+    // SLEEP(5) would just hang this test for 5 seconds instead of
+    // failing fast. queryTimeout=1 (a whole second, the URL parameter's
+    // only granularity) against a 5-second sleep leaves plenty of
+    // margin either way.
+    final solo = await MySqlDatabase.connect(
+      '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true'
+      '&queryTimeout=1',
+      maxConnections: 1,
+    );
+    addTearDown(solo.close);
+    final destroyedBefore = solo.poolStats.destroyed;
+
+    final stopwatch = Stopwatch()..start();
+    await expectLater(
+      solo.query('SELECT SLEEP(5)'),
+      throwsA(isA<TimeoutException>()),
+    );
+    stopwatch.stop();
+
+    expect(
+      stopwatch.elapsed,
+      lessThan(const Duration(seconds: 2)),
+      reason:
+          'it must have been queryTimeout (1s) that fired, not the '
+          'full 5-second sleep actually finishing',
+    );
+
+    expect(
+      solo.poolStats.destroyed,
+      greaterThan(destroyedBefore),
+      reason:
+          'the connection the timed-out query ran on must be discarded, '
+          'not handed to the next caller mid-SLEEP',
+    );
+
+    // The pool (size 1) has nowhere to get a connection from but a
+    // fresh one -- so this only succeeds if the timed-out connection
+    // was actually discarded rather than reused.
+    final rows = await solo.query('SELECT 1 AS one');
+    expect(rows.single['one'], 1);
+
+    // Closing must not hang behind the timed-out query's connection --
+    // it is already gone, not merely idle -- and must not wait for the
+    // server-side SLEEP(5), which keeps running independently of the
+    // now-closed socket.
+    await solo.close().timeout(const Duration(seconds: 2));
   });
 
   test('the pool hands out more than one connection', () async {
