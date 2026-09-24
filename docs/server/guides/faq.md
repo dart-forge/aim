@@ -380,10 +380,12 @@ See [CORS guide](/server/middleware/cors) for details.
 
 ### How fast is Aim?
 
-There is no published benchmark suite yet, so this FAQ makes no speed claim
-relative to other Dart frameworks. Routing is a linear scan of registered
+See the [Benchmarks](/benchmarks) page for measured numbers and the
+conditions they were taken under. Routing is a linear scan of registered
 routes with the first match winning; for applications with a very large
-number of routes, that is worth keeping in mind.
+number of routes, that is worth keeping in mind. In the measured run, the
+`routes_100` scenario (100 static routes) was 1.38% below the `plaintext`
+scenario's median.
 
 ### How do I optimize performance?
 
