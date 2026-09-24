@@ -216,9 +216,47 @@ void main() async {
 }
 ```
 
+### `app.onError`
+
+A try/catch middleware only catches errors thrown while `next()` runs — it
+still has to be registered before every route that can throw. `Aim` also
+has a single, centralized hook:
+
+```dart
+typedef ErrorHandler<E extends Variables> = Future<Response> Function(
+  Object error,
+  Context<E> c,
+);
+
+Aim<E> onError(ErrorHandler<E> handler);
+```
+
+```dart
+final app = Aim();
+
+app.onError((error, c) async {
+  return c.json({'error': error.toString()}, statusCode: 500);
+});
+
+app.get('/error', (c) async {
+  throw Exception('Something went wrong!');
+});
+```
+
+If no `onError` handler is registered, the behavior is adapter-specific:
+`aim_server` (the `dart:io` adapter) logs the error with its stack trace
+and responds with a plain 500. Whether the Workers, Deno, and Cloud
+Functions adapters do the same has not been separately verified here —
+check each runtime page if that matters for your deployment.
+
 ## Authentication Middleware
 
-Protect routes with authentication:
+`app.use()` appends to one middleware list that runs, in registration
+order, for **every** request that reaches routing — regardless of whether
+the middleware was registered before or after a given route. There is no
+way to make a middleware apply "only to routes registered after it".
+Registering `requireAuth` after `/login` does **not** exempt `/login`; the
+middleware itself must decide which requests to skip:
 
 ```dart
 class AuthVariables extends Variables {
@@ -226,6 +264,11 @@ class AuthVariables extends Variables {
 }
 
 Future<void> requireAuth(Context<AuthVariables> c, Next next) async {
+  const publicPaths = {'/login', '/register'};
+  if (publicPaths.contains(c.req.path)) {
+    return next();
+  }
+
   final token = c.req.headers['authorization'];
 
   if (token == null) {
@@ -250,12 +293,10 @@ void main() async {
     variablesFactory: () => AuthVariables(),
   );
 
-  // Public routes
-  app.post('/login', loginHandler);
-  app.post('/register', registerHandler);
-
-  // Protected routes
   app.use(requireAuth);
+
+  app.post('/login', loginHandler);       // skipped by requireAuth's own check
+  app.post('/register', registerHandler); // skipped by requireAuth's own check
   app.get('/profile', profileHandler);
   app.get('/dashboard', dashboardHandler);
 
@@ -263,9 +304,15 @@ void main() async {
 }
 ```
 
+`aim_server_jwt`'s built-in middleware has the same constraint and solves
+it with `JwtOptions.excludedPaths` instead of an inline path check — see
+[JWT Authentication](/server/auth/jwt).
+
 ## Conditional Middleware
 
-Apply middleware only to specific routes:
+The same principle applies to any middleware that should only act on part
+of the route tree: check the path inside the middleware itself, since
+`use()` cannot scope by registration position.
 
 ```dart
 void main() async {
@@ -357,8 +404,12 @@ import 'package:aim_server_cors/aim_server_cors.dart';
 import 'package:aim_server_jwt/aim_server_jwt.dart';
 
 final app = Aim<JwtVariables>(
-  variablesFactory: () => JwtVariables(
-    secret: 'your-secret-key',
+  variablesFactory: () => JwtVariables.create(
+    JwtOptions(
+      algorithm: HS256(
+        secretKey: SecretKey(secret: 'your-secret-key-at-least-32-characters'),
+      ),
+    ),
   ),
 );
 

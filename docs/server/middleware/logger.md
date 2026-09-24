@@ -48,7 +48,7 @@ The default format includes:
 
 - Request direction (`<--`)
 - HTTP method (`GET`, `POST`, etc.)
-- Request path
+- Request URI, including the query string if present (`c.req.uri`, not just `c.req.path`)
 - Response direction (`-->`)
 - Status code
 - Response time in milliseconds
@@ -56,6 +56,9 @@ The default format includes:
 ```
 <-- POST /api/users
 --> POST /api/users 201 15ms
+
+<-- GET /search?q=dart
+--> GET /search?q=dart 200 3ms
 ```
 
 ## Custom Logging
@@ -217,5 +220,5 @@ Output:
 ## Next Steps
 
 - Learn about [Middleware patterns](/server/concepts/middleware)
-- Explore [Error handling](/server/concepts/middleware#error-handling)
-- Read about [Performance monitoring](/server/concepts/context#performance)
+- Explore [Error handling](/server/concepts/middleware#error-handling-middleware)
+- Read about the [Context API](/server/concepts/context) for request/response handling
