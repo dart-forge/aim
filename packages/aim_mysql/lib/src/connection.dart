@@ -142,9 +142,15 @@ final class MySqlConnectionSettings {
   final String? database;
   final MySqlSslMode sslMode;
 
-  /// A CA certificate file to trust in addition to (`verify-ca`) or instead
-  /// of the system roots, for [MySqlSslMode.verifyCa] and
+  /// A CA certificate file to trust for [MySqlSslMode.verifyCa] and
   /// [MySqlSslMode.verifyFull]. Ignored by every other mode.
+  ///
+  /// Giving this **replaces** the system's trusted roots rather than
+  /// adding to them, in both modes: the [SecurityContext] built from it
+  /// is created with `withTrustedRoots: false`. A server certificate
+  /// that would otherwise verify against the system roots is refused
+  /// once [caFile] is set, unless that same certificate is also signed
+  /// by (or is itself) the CA in [caFile].
   final String? caFile;
 
   /// Bounds only the initial `Socket.connect`, not the handshake,

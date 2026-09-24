@@ -23,8 +23,15 @@ Native MySQL driver for Dart. Implements the MySQL wire protocol from scratch, w
 
 ## Installation
 
-```bash
-dart pub add aim_mysql
+`aim_mysql` is not published to pub.dev yet, so `dart pub add aim_mysql`
+does not work. Depend on it from the repository instead:
+
+```yaml
+dependencies:
+  aim_mysql:
+    git:
+      url: https://github.com/dart-forge/aim.git
+      path: packages/aim_mysql
 ```
 
 ## Connection
@@ -60,8 +67,13 @@ mysql://user:password@host:port/database?param=value
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `sslmode` | TLS connection mode | `prefer` |
+| `sslrootcert` | CA certificate file to trust for `verify-ca` / `verify-full` | none |
+| `allowPublicKeyRetrieval` | Allow `caching_sha2_password`'s full-authentication path to fetch the server's RSA public key over a connection that is not encrypted | `false` |
+| `queryTimeout` | Seconds to wait for the handshake, or for any single reply, before giving up with `TimeoutException` | `30` |
 
-See SSL/TLS below for the full set of modes.
+See SSL/TLS below for the full set of modes, and
+[Authentication](#authentication) for what `allowPublicKeyRetrieval`
+protects against.
 
 ### Connection Pooling
 
@@ -193,6 +205,52 @@ month or day -- raises `MySqlDecodeException` rather than becoming `null` or
 year zero.** MySQL stores that value as distinct from SQL `NULL`; mapping it
 to either `null` or a real `DateTime` would lose the distinction the column
 was recording, not just represent it awkwardly.
+
+### Limitations
+
+- **`FLOAT` loses precision beyond the usual `float32` range.** It comes
+  back as a `double`, but only after being widened from a 4-byte
+  `float32`, so `1.1` decodes as `1.100000023841858`, not `1.1`. Use
+  `DOUBLE` or `DECIMAL` for a value that needs to round-trip exactly.
+- **A JSON `null` and SQL `NULL` are indistinguishable.** `jsonDecode`
+  turns a stored `null` into Dart's `null`, the same value a `NULL`
+  column reports. There is no way to tell "the column has no value" from
+  "the column holds the JSON value `null`" from the return of `query()`
+  alone.
+- **A JSON integer outside the range a double can represent exactly
+  loses precision.** `JSON` decoding goes through `jsonDecode`, which
+  parses a bare integer in the source text as a Dart `int` when it fits,
+  but a large enough one that came from JSON's own unbounded-precision
+  number syntax can still round on the way through, the same as it would
+  for any other `jsonDecode` call.
+- **An integer at or above 2^63 cannot be bound as a parameter.** Every
+  Dart `int` parameter is sent as an 8-byte signed `BIGINT`, and a value
+  that large does not fit signed 64 bits; there is no unsigned parameter
+  type to fall back to.
+- **`TINYINT(1)` is always read as `bool`.** A `TINYINT` column declared
+  with a length of 1 is assumed to be a boolean flag, matching every
+  other MySQL client's convention. There is no way to opt a `TINYINT(1)`
+  column back into `int`.
+- **`ANSI_QUOTES` is not tracked.** The placeholder scanner always treats
+  a double-quoted run as a string literal, the default `sql_mode`'s
+  reading. Under `ANSI_QUOTES`, a double-quoted run is actually a quoted
+  identifier, the same case `` `...` `` already covers, and a
+  placeholder-shaped sequence inside one would be misread as a
+  placeholder instead of being skipped as part of the identifier.
+- **Session state other than what a `SET` statement changes does not
+  travel with a pooled connection.** A user variable (`SET @x := ...`)
+  and a `TEMPORARY` table are both scoped to the connection that created
+  them, and the pool is free to hand a later call a different one; see
+  [What Pooling Changes](#what-pooling-changes) above.
+- **A connection that ran any `SET` statement is discarded when
+  released, not recycled.** `sql_mode` in particular is read once and
+  cached per connection, so a `SET` that changed it could otherwise leave
+  a stale reading behind for the next borrower. Discarding on every
+  `SET`, not only ones touching `sql_mode`, keeps that one rule simple.
+- **A connection with autocommit turned off is discarded the same way.**
+  `SET autocommit = 0` is caught alongside every other `SET`; see
+  [Manual Transaction Control Is Not
+  Supported](#manual-transaction-control-is-not-supported).
 
 ### DateTime Is Always UTC
 
@@ -360,6 +418,12 @@ no way to check a certificate's CA without also checking that it names the
 host being connected to, so there is no weaker check for `verify-ca` to
 offer than what `verify-full` already does.
 
+**`prefer` does not fall back to plaintext if a TLS handshake it started
+then fails.** It only skips TLS up front when the server's own handshake
+says TLS is not offered at all; once the upgrade begins, a failure (a
+timeout, a reset connection, anything short of the server saying no TLS)
+still fails the connection rather than quietly continuing in plaintext.
+
 ```dart
 // Require TLS
 final db = await MySqlDatabase.connect(
@@ -374,6 +438,11 @@ final db = await MySqlDatabase.connect(
 
 A CA file to trust, for `verify-ca` and `verify-full`, is the
 `sslrootcert` parameter.
+
+**Giving `sslrootcert` replaces the system's trusted roots, in both
+modes, rather than adding to them.** A server certificate that would
+otherwise verify fine against the system's own CA bundle is refused once
+`sslrootcert` is set, unless it also verifies against the CA file given.
 
 ## Authentication
 
@@ -452,6 +521,7 @@ final rows = await db.query('SELECT LAST_INSERT_ID() AS id');
 ```dart
 try {
   final result = await db.query('SELECT ...');
+  print(result.first);
 } on MySqlException catch (e) {
   // Handle database errors
   print('Database error: ${e.message}');
