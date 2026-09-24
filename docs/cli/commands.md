@@ -525,11 +525,11 @@ This command:
 - Compares your current schema definitions with the last migration
 - Detects added/removed tables, columns, indexes, and constraints
 - Generates both UP and DOWN SQL migrations
-- Creates a file in `migrations/` directory
+- Creates a file in the `db/migrations/` directory
 
 **Output:**
 ```
-migrations/
+db/migrations/
 └── 20250121_120000_add_users_table.sql
 ```
 
