@@ -100,7 +100,7 @@ Object? _decodeValue(ByteReader reader, ColumnDefinition column) {
       // BLOB/VARCHAR/STRING below, a DECIMAL's charset id is not a
       // binary/text signal to branch on -- the contract is that no driver
       // rounds a decimal on the way out, full stop.
-      return decodeUtf8(_readLenencBytes(reader));
+      return _decodeUtf8Value(_readLenencBytes(reader), column);
 
     case ColumnType.date:
     case ColumnType.dateTime:
@@ -133,7 +133,7 @@ Object? _decodeValue(ByteReader reader, ColumnDefinition column) {
       // half; getting it backwards hands back binary data as a broken
       // string, or text as bytes.
       final bytes = _readLenencBytes(reader);
-      return column.isBinary ? bytes : decodeUtf8(bytes);
+      return column.isBinary ? bytes : _decodeUtf8Value(bytes, column);
 
     default:
       // GEOMETRY, which this driver does not model into any structured
@@ -146,7 +146,27 @@ Object? _decodeValue(ByteReader reader, ColumnDefinition column) {
       // *protocol* one, the caller loses the whole connection over it, not
       // just this value.
       final bytes = _readLenencBytes(reader);
-      return column.isBinary ? bytes : decodeUtf8(bytes);
+      return column.isBinary ? bytes : _decodeUtf8Value(bytes, column);
+  }
+}
+
+/// Decodes [bytes] as UTF-8 for [column]'s value, the same way
+/// [decodeUtf8] does, but on bad bytes throws [MySqlDecodeException]
+/// instead of [MySqlProtocolException].
+///
+/// A short or misaligned read desynchronises every column after it and
+/// deserves to take the whole connection down with [MySqlProtocolException];
+/// bytes that are simply not valid UTF-8 do not -- the stream is still in
+/// step, the row's other columns are still readable, and the caller should
+/// get a per-value error naming the column, not lose the connection over
+/// one bad string.
+String _decodeUtf8Value(Uint8List bytes, ColumnDefinition column) {
+  try {
+    return decodeUtf8(bytes);
+  } on MySqlProtocolException catch (e) {
+    throw MySqlDecodeException(
+      'column "${column.name}" is not valid UTF-8: ${e.message}',
+    );
   }
 }
 
@@ -226,7 +246,7 @@ Uint8List _readLenencBytes(ByteReader reader) {
 /// Decodes a `JSON` value: the underlying bytes are a length-encoded UTF-8
 /// string holding JSON text, which is then parsed.
 Object? _decodeJson(ByteReader reader, ColumnDefinition column) {
-  final text = decodeUtf8(_readLenencBytes(reader));
+  final text = _decodeUtf8Value(_readLenencBytes(reader), column);
   try {
     return jsonDecode(text);
   } on FormatException catch (e) {

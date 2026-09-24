@@ -94,6 +94,33 @@ void main() {
         [null, null],
       );
     });
+
+    test('a mixed NULL/non-NULL row of more than six columns crosses a '
+        'byte boundary in the bitmap correctly', () {
+      // 8 columns plus the 2 reserved bits need 2 bitmap bytes, so column
+      // 5's bit (position 7) is the last bit of byte 0 and column 6's bit
+      // (position 8) is the first bit of byte 1 -- exactly the boundary a
+      // single-byte bitmap can never exercise. NULL: columns 1, 4 and 7
+      // (0-based), one on each side of the boundary and one within each
+      // byte, so a bitmap read shifted by even a single byte or bit would
+      // desynchronise some but not all of them.
+      final columns = List.generate(8, (i) => column(ColumnType.tiny));
+      // Bit position = column index + 2. NULL columns: 1 -> bit 3,
+      // 4 -> bit 6, 7 -> bit 9.
+      // Byte 0 (bits 0-7): bits 3 and 6 set -> 0b0100_1000 = 0x48.
+      // Byte 1 (bits 8-15): bit 9 (bit 1 of byte 1) set -> 0x02.
+      final payload = Uint8List.fromList([
+        0x00,
+        0x48,
+        0x02,
+        10, 30, 40, 50, 60, // values for non-NULL columns 0,2,3,5,6
+      ]);
+
+      expect(
+        decodeBinaryRow(payload, columns),
+        [10, null, 30, 40, null, 50, 60, null],
+      );
+    });
   });
 
   group('integers', () {
@@ -130,6 +157,34 @@ void main() {
           column(ColumnType.longLong),
         ]),
         [-1],
+      );
+    });
+
+    test('SHORT reads a specific negative value, not just -1', () {
+      // -1's bytes are all-ones at any width, so a decoder reading the
+      // wrong number of bytes (or the wrong endianness) could still
+      // produce -1 by accident. -30000 does not have that shape.
+      expect(
+        decodeBinaryRow(row(1, [0xd0, 0x8a]), [column(ColumnType.short)]),
+        [-30000],
+      );
+    });
+
+    test('INT24 (MEDIUMINT) reads a specific negative value', () {
+      expect(
+        decodeBinaryRow(row(1, [0x00, 0x00, 0xf0, 0xff]), [
+          column(ColumnType.int24),
+        ]),
+        [-1048576],
+      );
+    });
+
+    test('LONG reads a specific negative value', () {
+      expect(
+        decodeBinaryRow(row(1, [0x00, 0x00, 0x00, 0x80]), [
+          column(ColumnType.long),
+        ]),
+        [-2147483648],
       );
     });
 
@@ -254,6 +309,19 @@ void main() {
       );
     });
 
+    test('invalid UTF-8 in a text column is a decode error, not a '
+        'protocol one -- it does not have to take the connection down '
+        'with it', () {
+      // 0xff is never a valid UTF-8 lead byte. The bitmap and every other
+      // column are still perfectly readable; only this one value is bad.
+      expect(
+        () => decodeBinaryRow(row(1, [1, 0xff]), [
+          column(ColumnType.varString, name: 'bad'),
+        ]),
+        throwsA(isA<MySqlDecodeException>()),
+      );
+    });
+
     test('a binary column is a Uint8List', () {
       final decoded = decodeBinaryRow(row(1, [3, 0x00, 0xff, 0x80]), [
         column(ColumnType.blob, charset: binaryCharsetId),
@@ -303,6 +371,16 @@ void main() {
       );
     });
 
+    test('invalid UTF-8 in a DECIMAL is a decode error, not a protocol '
+        'one', () {
+      expect(
+        () => decodeBinaryRow(row(1, [1, 0xff]), [
+          column(ColumnType.newDecimal, name: 'bad'),
+        ]),
+        throwsA(isA<MySqlDecodeException>()),
+      );
+    });
+
     test('BIT is a Uint8List', () {
       final decoded = decodeBinaryRow(row(1, [1, 0x05]), [
         column(ColumnType.bit, charset: binaryCharsetId),
@@ -330,16 +408,33 @@ void main() {
       );
     });
 
-    test('GEOMETRY, which this driver does not model, becomes a String', () {
-      // The contract's fallback. Better than throwing on a column the
-      // caller may not even be reading.
+    test('invalid UTF-8 in a JSON value is a decode error, not a '
+        'protocol one', () {
       expect(
-        decodeBinaryRow(row(1, lenenc('POINT(1 1)')), [
-          column(ColumnType.geometry),
+        () => decodeBinaryRow(row(1, [1, 0xff]), [
+          column(ColumnType.json, name: 'doc'),
         ]),
-        ['POINT(1 1)'],
+        throwsA(isA<MySqlDecodeException>()),
       );
     });
+
+    test(
+      'GEOMETRY on a text charset decodes as a String, the same as any '
+      'other unrecognised type would',
+      () {
+        // A real GEOMETRY column always reports the binary charset (63) --
+        // see the case right below this one, which is the shape a server
+        // actually sends. This one only exercises the fallback branch's
+        // charset check on a column shape no real server produces; it is
+        // not evidence that a server ever hands back GEOMETRY as text.
+        expect(
+          decodeBinaryRow(row(1, lenenc('POINT(1 1)')), [
+            column(ColumnType.geometry),
+          ]),
+          ['POINT(1 1)'],
+        );
+      },
+    );
 
     test(
       'GEOMETRY on the binary charset is raw bytes, not decoded as UTF-8',
