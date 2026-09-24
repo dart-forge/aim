@@ -224,6 +224,11 @@ final json = userOut.encode((id: 1, name: 'naoki'));
 userOut.encode((id: 0, name: '')); // throws ResponseValidationException
 ```
 
+`w.dateTime` writes the value with `DateTime.toIso8601String()` as-is — a
+local (non-UTC) `DateTime` goes out without a `Z` or an offset, exactly as
+that method renders it; call `.toUtc()` in the getter if the response
+should always carry `Z`.
+
 Request and response declarations are separate types on purpose. A
 `Schema`'s `Reader` reads fields out of an untyped `Map` by name and hands
 back a typed value; an `Output`'s `Writer` does the opposite — it starts
@@ -266,8 +271,13 @@ reply.body;   // {'id': 7, 'name': 'naoki'}
 ```
 
 `Reply` is opaque — the only way to make one is to call an entry — so a
-handler can only ever return a response from its own route's `responses`,
-not an arbitrary value.
+handler's return type of `Reply` rules out `c.json(...)` or an ad-hoc map
+at compile time; it must call some entry and return what that call
+produces. Using the `res` a handler receives (see below) naturally keeps
+it to its own route's entries, but `Reply` itself isn't tied to a route:
+nothing stops a handler from calling an entry that belongs to a different
+route's `responses` and returning that instead — `typed` and `Reply` don't
+catch that mismatch.
 
 ### Binding it to a route with `typed`
 

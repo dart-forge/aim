@@ -86,7 +86,13 @@ final class Responses<R> {
   /// The record [build] returned, keeping each entry's type.
   final R entries;
 
-  /// Every [ResponseEntry] declared in this call, in declaration order.
+  /// Every [ResponseEntry] declared in this call, in declaration order —
+  /// for reading back what statuses and [Output]s were declared (e.g. to
+  /// build an OpenAPI document), not for calling. Calling an entry from
+  /// this list still works at runtime, but its static type is
+  /// `ResponseEntry<Object?>`, so the compile-time check that [call]'s
+  /// argument matches the entry's declared type is gone; call through
+  /// [entries] instead to keep it.
   final List<ResponseEntry<Object?>> all;
 }
 

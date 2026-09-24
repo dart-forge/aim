@@ -53,7 +53,11 @@ final class RouteContract {
   /// The path parameters schema, or `null` if none was declared.
   final Schema<Object?>? path;
 
-  /// Every response this route can return, in declaration order.
+  /// Every response this route can return, in declaration order — for
+  /// reading back the declared statuses and [Output]s (e.g. to build an
+  /// OpenAPI document), not for calling: an entry read from here has lost
+  /// the static type [ResponseEntry.call] would otherwise check its
+  /// argument against.
   final List<ResponseEntry<Object?>> responses;
 }
 
@@ -61,6 +65,12 @@ final _contracts = Expando<RouteContract>();
 
 /// The [RouteContract] [typed] attached to [handler], or `null` if
 /// [handler] was not made by [typed].
+///
+/// Looks [handler] up by identity against the exact function [typed]
+/// returned. Wrapping that function in another one — `(c) => handler(c)`,
+/// a closure, a different `Handler` that merely calls it — produces a new
+/// function the [Expando] has nothing recorded against, so the contract is
+/// lost; keep and register the function [typed] itself returned.
 RouteContract? routeContractOf(Function handler) => _contracts[handler];
 
 /// Binds request schemas and a [Responses] declaration to a route.

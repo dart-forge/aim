@@ -435,6 +435,10 @@ final class Writer<T> {
     },
   );
 
+  /// Writes [get]'s result with `DateTime.toIso8601String()`, unchanged —
+  /// a local (non-UTC) `DateTime` is written without a `Z` or an offset,
+  /// exactly as `toIso8601String()` renders it. Call `.toUtc()` in [get]
+  /// first if the response should always carry `Z`.
   OutputField<T> dateTime(
     String name,
     DateTime Function(T) get, {
@@ -455,6 +459,9 @@ final class Writer<T> {
     },
   );
 
+  /// The nullable counterpart of [dateTime]; a non-null result is written
+  /// with [DateTime.toIso8601String] as-is — see [dateTime] for the local
+  /// vs. UTC note.
   OutputField<T> dateTimeOrNull(
     String name,
     DateTime? Function(T) get, {
@@ -480,6 +487,9 @@ final class Writer<T> {
     },
   );
 
+  /// The list counterpart of [dateTime]; each element is written with
+  /// [DateTime.toIso8601String] as-is — see [dateTime] for the local vs.
+  /// UTC note.
   OutputField<T> dateTimeList(
     String name,
     List<DateTime> Function(T) get, {
@@ -514,6 +524,9 @@ final class Writer<T> {
     },
   );
 
+  /// The nullable list counterpart of [dateTime]; each element is written
+  /// with [DateTime.toIso8601String] as-is — see [dateTime] for the local
+  /// vs. UTC note.
   OutputField<T> dateTimeListOrNull(
     String name,
     List<DateTime>? Function(T) get, {

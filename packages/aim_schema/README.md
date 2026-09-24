@@ -75,9 +75,13 @@ app.get('/users/:id', typed(
 ));
 ```
 
-A handler can only return a `Reply` made by calling one of its own route's
-response entries, and a value that doesn't match its declared `Output`
-throws `ResponseValidationException` — the same kind of error, with every
+A handler must return a `Reply`, which rules out `c.json(...)` or an
+ad-hoc map at compile time — it has to call one of the entries in `res`.
+Using `res` naturally keeps a handler to its own route's entries, but
+`Reply` itself isn't tied to a route, so calling an entry from a different
+route's `responses` and returning that instead would compile too. A value
+that doesn't match its entry's declared `Output` throws
+`ResponseValidationException` — the same kind of error, with every
 violation collected, that `Schema.parse` throws for a request.
 
 ## The procedure must be deterministic
