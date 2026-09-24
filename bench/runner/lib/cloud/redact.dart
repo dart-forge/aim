@@ -30,3 +30,19 @@ List<String> leakedIdentifiers(String json, CloudConfig config) {
   }
   return found;
 }
+
+/// A skip reason as it will be shown and recorded: every occurrence of
+/// [base]'s origin and its bare host replaced with [targetName], and the
+/// result truncated to 300 characters.
+///
+/// A skip reason can come from a response body (a mismatch) or from any
+/// [StateError] a target's build, deploy or measurement raised, and either
+/// can carry the deployed host — a platform's own error page tends to
+/// repeat it. This runs right before that reason is recorded, so it is
+/// scrubbed once, the same way, regardless of where it came from.
+String scrubReason(String reason, Uri base, String targetName) {
+  final scrubbed = reason
+      .replaceAll(base.toString(), targetName)
+      .replaceAll(base.host, targetName);
+  return scrubbed.length > 300 ? scrubbed.substring(0, 300) : scrubbed;
+}

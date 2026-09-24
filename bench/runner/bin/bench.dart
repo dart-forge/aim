@@ -255,6 +255,10 @@ Future<String> toolVersion(List<String> command) async {
   }
 }
 
+/// Truncates [s] to 300 characters, the same limit [scrubReason] applies —
+/// used when a skip reason has no resolved base to scrub against.
+String _truncated(String s) => s.length > 300 ? s.substring(0, 300) : s;
+
 /// `bench/results/cloud-<date>-<label>.json`, with [label] sanitized the
 /// same way stage 1's results file name is.
 File cloudResultsFile(String label, DateTime now) {
@@ -363,11 +367,24 @@ class CloudRunCommand extends Command<void> {
     for (var i = 0; i < targets.length; i++) {
       final target = targets[i];
       stdout.writeln('== ${target.name}');
+      Uri? base;
       try {
-        results.add(await measureTarget(target, config, settings, log: stdout.writeln));
+        results.add(
+          await measureTarget(
+            target,
+            config,
+            settings,
+            log: stdout.writeln,
+            onBaseResolved: (b) => base = b,
+          ),
+        );
       } on StateError catch (e) {
-        stdout.writeln('   skipped: ${e.message}');
-        skipped.add(SkippedApp(target.name, e.message));
+        // base is only set once a URL has been resolved for this target;
+        // a failure before that point (an unrecognized deploy output, for
+        // example) has nothing to scrub.
+        final reason = base == null ? _truncated(e.message) : scrubReason(e.message, base!, target.name);
+        stdout.writeln('   skipped: $reason');
+        skipped.add(SkippedApp(target.name, reason));
       }
       if (i < targets.length - 1) {
         await Future<void>.delayed(settings.pauseBetweenTargets);

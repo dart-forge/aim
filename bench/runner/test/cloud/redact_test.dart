@@ -61,4 +61,24 @@ void main() {
       expect(label, isNot(contains(config.workersNamePrefix)));
     }
   });
+
+  group('scrubReason', () {
+    test('replaces the host, wherever it appears, with the target name', () {
+      final base = Uri.parse('https://x.example-account.workers.dev');
+      final reason = scrubReason(
+        'GET https://x.example-account.workers.dev/ answered 500 '
+        '<html>x.example-account.workers.dev</html>',
+        base,
+        'workers/aim',
+      );
+      expect(reason, isNot(contains('workers.dev')));
+      expect(reason, contains('workers/aim'));
+    });
+
+    test('truncates to 300 characters', () {
+      final base = Uri.parse('https://x.example-account.workers.dev');
+      final reason = scrubReason('a' * 1000, base, 'workers/aim');
+      expect(reason.length, 300);
+    });
+  });
 }

@@ -65,11 +65,16 @@ double _ms(Duration d) => d.inMicroseconds / 1000;
 /// that build output did not land in) is recorded as-is with a warning
 /// logged through [log]; it does not fail the run — that is left to
 /// whoever reads the results.
+///
+/// [onBaseResolved], if given, is called with the deployed origin as soon
+/// as it is known each cycle — before a caller has a base of its own to
+/// scrub a later failure's message with.
 Future<TargetResult> measureTarget(
   CloudTarget target,
   CloudConfig config,
   CloudSettings settings, {
   required void Function(String) log,
+  void Function(Uri)? onBaseResolved,
 }) async {
   final dir = Directory(p.join(cloudRoot().path, target.directory));
   for (final step in target.build(config)) {
@@ -84,6 +89,7 @@ Future<TargetResult> measureTarget(
     lastDeploy = await runCapturing(target.deploy(config), workingDirectory: dir);
     base = target.url(config, lastDeploy) ??
         (throw StateError('${target.name}: could not find the deployed URL in the deploy output'));
+    onBaseResolved?.call(base);
 
     // Cold sample: a fresh client, so this includes a new TCP + TLS
     // handshake, exactly what a genuinely cold request pays. Right after a

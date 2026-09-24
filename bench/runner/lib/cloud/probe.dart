@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 /// Time from opening the request to receiving the response headers. With no
@@ -20,9 +19,9 @@ Future<Duration> timeToFirstByte(
     }
     final response = await request.close();
     final elapsed = watch.elapsed;
-    final body = await utf8.decoder.bind(response).join();
+    await response.drain<void>();
     if (response.statusCode != 200) {
-      throw StateError('$method $url answered ${response.statusCode}: $body');
+      throw StateError('$method ${url.path} answered ${response.statusCode}');
     }
     return elapsed;
   } finally {
@@ -54,15 +53,18 @@ Future<ColdProbe> coldProbe(
       final request = await http.openUrl('GET', url);
       final response = await request.close();
       final elapsed = requestWatch.elapsed;
-      final body = await utf8.decoder.bind(response).join();
+      await response.drain<void>();
       if (response.statusCode == 200) {
         return ColdProbe(ttfb: elapsed, notFoundRetries: retries);
       }
       if (response.statusCode != 404) {
-        throw StateError('GET $url answered ${response.statusCode}: $body');
+        throw StateError('GET ${url.path} answered ${response.statusCode}');
       }
       if (watch.elapsed >= timeout) {
-        throw StateError('GET $url kept answering 404 after ${watch.elapsed}: $body');
+        throw StateError(
+          'GET ${url.path} kept answering 404 for ${watch.elapsed}; either '
+          'the route is still propagating or the app has no such route',
+        );
       }
       retries++;
       await Future<void>.delayed(interval);

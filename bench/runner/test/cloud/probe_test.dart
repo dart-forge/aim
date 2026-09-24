@@ -65,6 +65,19 @@ void main() {
     expect(() => timeToFirstByte(Uri.parse('http://127.0.0.1:${server.port}/fail')), throwsStateError);
   });
 
+  test('the non-200 StateError message does not contain the server host', () async {
+    final server = await slowServer(Duration.zero);
+    addTearDown(server.close);
+    final url = Uri.parse('http://127.0.0.1:${server.port}/fail');
+    try {
+      await timeToFirstByte(url);
+      fail('expected a StateError');
+    } on StateError catch (e) {
+      expect(e.message, isNot(contains(url.host)));
+      expect(e.message, contains('/fail'));
+    }
+  });
+
   test('coldProbe retries past a brand-new route\'s 404s and returns the first 200', () async {
     final server = await notFoundThenOkServer(2);
     addTearDown(server.close);
