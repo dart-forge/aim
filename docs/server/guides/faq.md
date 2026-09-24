@@ -384,8 +384,8 @@ See the [Benchmarks](/benchmarks) page for measured numbers and the
 conditions they were taken under. Routing is a linear scan of registered
 routes with the first match winning; for applications with a very large
 number of routes, that is worth keeping in mind. In the measured run, the
-`routes_100` scenario (100 static routes) was 1.38% below the `plaintext`
-scenario's median.
+`routes_100` scenario (100 static routes, last one requested) was about 1%
+below the `plaintext` scenario's median, within run-to-run noise.
 
 ### How do I optimize performance?
 

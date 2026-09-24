@@ -141,10 +141,11 @@ machine on a single day is one data point, not a ranking.
 
 Aim's router is a linear scan of registered routes with the first match
 winning. In this run, aim's `routes_100` median of 20,022 requests/s (100
-static routes, last one requested) was 1.38% below its `plaintext` median
-of 20,303 requests/s. Over bare dart:io, aim's median requests/s was 7.15%
-lower on `plaintext`, 9.76% lower on `params_json`, and 9.83% lower on
-`post_json`.
+static routes, last one requested) was about 1% below its `plaintext`
+median of 20,303 requests/s. Over bare dart:io, aim's median requests/s was
+7% lower on `plaintext` and 10% lower on `params_json` and `post_json`.
+Run-to-run spread in this data is 2–12%, so differences of a few percent
+are within noise.
 
 ## Reproduce
 
