@@ -329,6 +329,10 @@ non-zero exit code, and stop there instead of proceeding without it.
 - Both Supabase functions (`aim_bench_aim` and `aim_bench_native`) are
   deployed with `--no-verify-jwt`: JWT verification is off for both, so
   neither variant is measured with it and the other without.
+- Both Cloud Functions (`functions/aim` and `functions/native`) are
+  deployed as public HTTP endpoints (an `allUsers` → `roles/run.invoker`
+  binding on the underlying Cloud Run service), so neither variant is
+  measured behind auth and the other in front of it.
 - Every other setting — compatibility date, memory, region, Node
   version — is left at each platform's default, the same for the Aim
   variant and the native baseline. Nothing is tuned to make the two more

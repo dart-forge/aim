@@ -6,7 +6,9 @@ for (let i = 1; i <= 100; i++) {
   routes.set(`/r/${name}`, name);
 }
 
-export const benchNative = onRequest((req, res) => {
+// Explicit invoker: 'public' matches the Dart function's deployment (public HTTP endpoint),
+// so both variants are reachable the same way.
+export const benchNative = onRequest({ invoker: 'public' }, (req, res) => {
   const path = req.path;
   if (req.method === 'GET' && path === '/') return res.type('text/plain').send('Hello, World!');
   if (req.method === 'GET' && path.startsWith('/users/') && !path.slice(7).includes('/')) {
