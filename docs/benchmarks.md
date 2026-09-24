@@ -1,6 +1,6 @@
 ---
 title: Benchmarks - Aim
-description: Measured request rates, latency, startup time, and memory for aim_server and four other Dart HTTP setups on one machine, with the conditions the numbers were taken under.
+description: Measured request rates, latency, startup time, and memory for aim_server and four other Dart HTTP setups on one machine, with the conditions the numbers were taken under, plus cold start, warm latency, and upload size for Aim on Cloudflare Workers, Supabase Edge Functions, and Cloud Functions for Firebase.
 head:
   - - meta
     - name: keywords
@@ -167,4 +167,197 @@ dart run bin/bench.dart render ../results/<date>-<label>.json
 Results files, with all runs kept (not just the median), live under
 `bench/results/`. The full suite, including the fairness rules and how to
 add another app, is on
+[GitHub](https://github.com/dart-forge/aim/tree/main/bench).
+
+## Edge and serverless runtimes
+
+The same Aim app is deployed to Cloudflare Workers (compiled to
+WebAssembly), Supabase Edge Functions (WebAssembly running on Deno), and
+Cloud Functions for Firebase (a Dart binary running on Cloud Run), each
+one next to a plain JS/TS baseline written directly against that
+platform's own API (a `fetch` handler for Workers, `Deno.serve` for
+Supabase, a Node `onRequest` handler for Cloud Functions). Both variants
+answer the same four scenarios as the suite above. Everything below was
+measured from one machine in Tokyo. Runtimes are not compared with each
+other: Workers answers from the nearest Cloudflare colo, Supabase from
+Southeast Asia (Singapore), and Cloud Functions from us-central1 — three
+different regions from the measuring machine — so the numbers to read are
+the Aim-versus-baseline pairs within one runtime, not one runtime against
+another.
+
+### What is measured
+
+- **Cold start.** The time to first byte of the first request sent right
+  after a fresh deployment, over a new TCP + TLS connection. Measured
+  once per deploy cycle, over 5 deploy cycles, reported as a median. A
+  404 returned while a brand-new route is still propagating is retried
+  and counted; it was 0 here on every target.
+- **Warm latency.** 100 sequential requests per scenario, concurrency 1,
+  on a single kept-alive connection, reported as p50, p99, and min.
+- **Upload size.** What each platform actually received: wrangler's own
+  reported upload for Workers; `main.wasm` + `main.mjs` + `index.ts` for
+  Supabase's Aim variant (`index.ts` alone for its native baseline, which
+  has no wasm to ship); for Cloud Functions, the Dart AOT bundle
+  directory for the Aim variant against the Node source files for the
+  native baseline. The last pair is not the same kind of artifact — a
+  compiled bundle versus source that the platform builds itself — and the
+  numbers below say so rather than treat them as comparable.
+
+### What is not measured
+
+- Throughput: no load is put on any of these targets, which are shared
+  cloud platforms, not a machine this suite owns.
+- A comparison between runtimes: the three runtimes deploy to different
+  regions, so a difference between, say, Workers and Cloud Functions may
+  be network distance rather than the runtime.
+- Database or other I/O-bound work: none of the six targets touch one.
+- More than one measurement origin: every number here comes from one
+  machine in Tokyo.
+- Cold starts after idle eviction: every cold sample here follows a fresh
+  deployment, not a platform evicting an idle instance later.
+
+### Environment
+
+- Measured from: Tokyo, office network
+- workers region: nearest Cloudflare colo
+- supabase region: Southeast Asia (Singapore)
+- functions region: us-central1
+- Tool versions: wrangler 4.138.0, supabase 2.111.0, firebase 15.30.0, node v26.8.2
+- Dart: Dart SDK version: 3.13.3 (stable) (Tue Sep 1 01:07:17 2026 -0700) on "macos_arm64"
+- Aim commit: 0ab0fcd
+- 5 deploy cycles, 100 requests per scenario.
+- Runtimes are not compared with each other: each region above is that runtime's own deployment region, and they differ from one runtime to the next, so a latency difference between runtimes may reflect network distance rather than the runtime itself.
+
+### Results
+
+#### Cold start
+
+| Runtime | Variant | Cold, median (ms) | Warm right after, median (ms) | Difference (ms) | 404 retries before first answer (sum) |
+|---|---|---:|---:|---:|---:|
+| workers | aim | 101 | 28 | 74 | 0 |
+| workers | native | 104 | 27 | 77 | 0 |
+| supabase | aim | 209 | 130 | 79 | 0 |
+| supabase | native | 192 | 107 | 85 | 0 |
+| functions | aim | 235 | 174 | 62 | 0 |
+| functions | native | 275 | 173 | 102 | 0 |
+
+Warm latency: 100 sequential requests per scenario, concurrency 1, on a
+kept-alive connection.
+
+#### plaintext
+
+| Runtime | Variant | p50 (ms) | p99 (ms) | min (ms) |
+|---|---|---:|---:|---:|
+| workers | aim | 24 | 123 | 17 |
+| workers | native | 25 | 48 | 18 |
+| supabase | aim | 131 | 254 | 47 |
+| supabase | native | 105 | 170 | 38 |
+| functions | aim | 175 | 245 | 159 |
+| functions | native | 175 | 266 | 156 |
+
+#### params_json
+
+| Runtime | Variant | p50 (ms) | p99 (ms) | min (ms) |
+|---|---|---:|---:|---:|
+| workers | aim | 24 | 38 | 19 |
+| workers | native | 26 | 69 | 20 |
+| supabase | aim | 128 | 230 | 46 |
+| supabase | native | 105 | 141 | 44 |
+| functions | aim | 174 | 196 | 158 |
+| functions | native | 189 | 246 | 167 |
+
+#### post_json
+
+| Runtime | Variant | p50 (ms) | p99 (ms) | min (ms) |
+|---|---|---:|---:|---:|
+| workers | aim | 26 | 50 | 20 |
+| workers | native | 26 | 35 | 19 |
+| supabase | aim | 124 | 160 | 38 |
+| supabase | native | 99 | 129 | 43 |
+| functions | aim | 171 | 205 | 156 |
+| functions | native | 182 | 233 | 160 |
+
+#### routes_100
+
+| Runtime | Variant | p50 (ms) | p99 (ms) | min (ms) |
+|---|---|---:|---:|---:|
+| workers | aim | 23 | 45 | 18 |
+| workers | native | 27 | 48 | 19 |
+| supabase | aim | 98 | 204 | 42 |
+| supabase | native | 88 | 139 | 36 |
+| functions | aim | 171 | 187 | 158 |
+| functions | native | 183 | 247 | 161 |
+
+#### Upload size
+
+| Runtime | Variant | Bytes | gzip | Note |
+|---|---|---:|---:|---|
+| workers | aim | 158956 | 61184 |  |
+| workers | native | 1290 | 645 |  |
+| supabase | aim | 156608 | 60795 |  |
+| supabase | native | 1327 | 668 |  |
+| functions | aim | 7558216 | ? | AOT bundle |
+| functions | native | 1115 | 668 | source only |
+
+### Reading the numbers
+
+- The "Cold" column is the first request after a deployment, and on
+  every one of the six targets it exceeds the warm median right after by
+  60–100 ms. That difference is close to the cost of a new TCP and TLS
+  connection from Tokyo, so at this resolution the start-up cost of the
+  WebAssembly or Dart instance is not separable from the connection cost.
+- On Cloud Run, a deployment starts an instance to check that it listens,
+  so the first request after a deployment does not measure a
+  scale-from-zero start.
+- The first cycle of each target — the session's first contact with that
+  platform — was often higher than the later four; the committed JSON
+  keeps all five.
+- Warm p50 is dominated by round-trip time from Tokyo: about 25 ms to the
+  nearest Cloudflare colo, 90–130 ms to Singapore, 170–190 ms to
+  us-central1.
+- Within each runtime, Aim's warm p50 against its native baseline, per
+  scenario: Workers — plaintext 24 vs. 25 (1 ms lower), params_json 24
+  vs. 26 (2 ms lower), post_json 26 vs. 26 (equal), routes_100 23 vs. 27
+  (4 ms lower). Supabase — plaintext 131 vs. 105 (26 ms higher),
+  params_json 128 vs. 105 (23 ms higher), post_json 124 vs. 99 (25 ms
+  higher), routes_100 98 vs. 88 (10 ms higher). Cloud Functions —
+  plaintext 175 vs. 175 (equal), params_json 174 vs. 189 (15 ms lower),
+  post_json 171 vs. 182 (11 ms lower), routes_100 171 vs. 183 (12 ms
+  lower).
+- Upload sizes: the WebAssembly build is about 155 KB (61 KB gzipped)
+  against about 1.3 KB of JavaScript; the Dart AOT bundle is 7.6 MB
+  against 1.1 KB of Node source, and the Node deployment additionally
+  pulls its dependencies on the platform, so those two are not the same
+  kind of number.
+- The native baselines route the 100 static routes with a `Map`, so
+  `routes_100` on a native baseline measures no router. Both Supabase
+  functions were deployed with JWT verification off. Both Cloud Functions
+  are public HTTP endpoints. All other platform settings are defaults.
+
+### Reproduce
+
+Prerequisites:
+
+- [`wrangler`](https://developers.cloudflare.com/workers/wrangler/),
+  logged in.
+- The [Supabase CLI](https://supabase.com/docs/guides/cli), logged in,
+  with Docker running.
+- [`firebase-tools`](https://firebase.google.com/docs/cli), logged in, on
+  a Blaze-plan project, with the `dartfunctions` experiment enabled
+  (`firebase experiments:enable dartfunctions`).
+- Node 22 as the Cloud Functions runtime for the native baseline.
+- `bench/cloud/config.yaml`, copied from `bench/cloud/config.example.yaml`
+  and filled in with real values.
+
+```bash
+cd bench/runner
+dart pub get
+dart run bin/bench.dart cloud verify                        # every target must answer identically
+dart run bin/bench.dart cloud run --label <short-description>
+dart run bin/bench.dart cloud render ../results/cloud-<date>-<label>.json
+```
+
+Results files live under `bench/results/`, in the same shape
+`cloud render` reads back. The full cloud suite, including the fairness
+rules and what is never recorded, is on
 [GitHub](https://github.com/dart-forge/aim/tree/main/bench).
