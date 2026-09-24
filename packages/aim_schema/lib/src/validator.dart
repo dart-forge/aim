@@ -898,9 +898,20 @@ final class Validator implements Reader {
   }
 
   double? _asNumber(Object? value) {
-    if (value is num) return value.toDouble();
-    if (coerce && value is String) return double.tryParse(value);
-    return null;
+    final double? number;
+    if (value is num) {
+      number = value.toDouble();
+    } else if (coerce && value is String) {
+      number = double.tryParse(value);
+    } else {
+      return null;
+    }
+    // double.tryParse accepts 'NaN', 'Infinity' and '-Infinity', and a query
+    // string is always coerced, so without this ?price=NaN reached handlers.
+    // NaN is also the one value min and max cannot stop: every comparison
+    // with it is false, so it slipped past both bounds at once. JSON itself
+    // cannot carry these, but parse also takes a map built in code.
+    return number != null && number.isFinite ? number : null;
   }
 
   bool? _asBoolean(Object? value) {

@@ -120,4 +120,47 @@ void main() {
       );
     });
   });
+
+  group('non-finite numbers', () {
+    final bounded = Schema((r) => (p: r.number('p', min: 0, max: 10)));
+    final unbounded = Schema((r) => (p: r.number('p')));
+
+    // Every comparison with NaN is false, so a NaN used to slip past both
+    // bounds at once. double.tryParse accepts all three spellings, and a
+    // query string is always coerced, so ?price=NaN reached handlers.
+    for (final text in ['NaN', 'Infinity', '-Infinity']) {
+      test('"$text" from text is rejected, even with no bounds', () {
+        expect(
+          () => unbounded.parse({'p': text}, coerce: true),
+          throwsA(isA<ValidationException>()),
+        );
+      });
+    }
+
+    test('NaN does not slip past min and max', () {
+      expect(
+        () => bounded.parse({'p': 'NaN'}, coerce: true),
+        throwsA(isA<ValidationException>()),
+      );
+    });
+
+    test('a non-finite double handed in directly is rejected too', () {
+      // JSON cannot carry NaN, but parse also takes a map built in code.
+      for (final value in [
+        double.nan,
+        double.infinity,
+        double.negativeInfinity,
+      ]) {
+        expect(
+          () => unbounded.parse({'p': value}),
+          throwsA(isA<ValidationException>()),
+        );
+      }
+    });
+
+    test('ordinary finite numbers are still accepted', () {
+      expect(unbounded.parse({'p': '3.5'}, coerce: true).p, 3.5);
+      expect(bounded.parse({'p': 10}).p, 10.0);
+    });
+  });
 }

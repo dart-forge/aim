@@ -91,6 +91,11 @@ final createUser = Schema((r) => (
 | `r.boolean(name)` | `bool` | — |
 | `r.dateTime(name)` | `DateTime` | parsed from an ISO 8601 string |
 
+A `number` field rejects `NaN`, `Infinity` and `-Infinity`. Dart's number
+parser accepts all three spellings, and a query string is always coerced, so
+without this `?price=NaN` would reach a handler — and `NaN` is the one value
+`min` and `max` cannot stop, since every comparison with it is false.
+
 An `integer` field also accepts a JSON number with nothing after the decimal
 point — `3.0`, not `3.7` — regardless of `coerce`. Some JSON encoders (a
 Python client, Dart's own `double` literals) write a whole number this way,
@@ -291,6 +296,21 @@ A rejected request gets:
     {"path": "age", "message": "must be at least 0"}
   ]
 }
+```
+
+A body that is not valid JSON, or is valid JSON but not an object (an array,
+a string, `null`), is the client's mistake like any failed field, so it gets
+the same 400. No single field is at fault, so the path is empty, and the two
+cases say different things so the client can tell which mistake it made:
+
+```json
+{"error": "Bad Request",
+ "details": [{"path": "", "message": "the request body is not valid JSON"}]}
+```
+
+```json
+{"error": "Bad Request",
+ "details": [{"path": "", "message": "the request body must be a JSON object"}]}
 ```
 
 Any error that isn't a `ValidationException` passes through untouched, so
