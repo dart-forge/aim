@@ -35,4 +35,14 @@ void main() {
     expect(back.targets.single.upload.gzipBytes, 400);
     expect(back.skipped.single.name, 'supabase/native');
   });
+
+  test('ColdCycle round-trips notFoundRetries and defaults it when absent', () {
+    final withRetries = ColdCycle(coldMs: 300, warmMedianMs: 30, notFoundRetries: 4);
+    expect(withRetries.toJson()['notFoundRetries'], 4);
+    final back = ColdCycle.fromJson(withRetries.toJson());
+    expect(back.notFoundRetries, 4);
+
+    final legacy = ColdCycle.fromJson({'coldMs': 300, 'warmMedianMs': 30});
+    expect(legacy.notFoundRetries, 0);
+  });
 }

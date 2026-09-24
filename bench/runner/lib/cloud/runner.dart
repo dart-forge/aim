@@ -86,8 +86,11 @@ Future<TargetResult> measureTarget(
         (throw StateError('${target.name}: could not find the deployed URL in the deploy output'));
 
     // Cold sample: a fresh client, so this includes a new TCP + TLS
-    // handshake, exactly what a genuinely cold request pays.
-    final cold = await timeToFirstByte(joinPath(base, '/'));
+    // handshake, exactly what a genuinely cold request pays. Right after a
+    // brand-new deployment, the platform's edge may 404 for a while as the
+    // route propagates; coldProbe retries past that instead of counting it
+    // as the app's own answer.
+    final cold = await coldProbe(joinPath(base, '/'));
 
     if (i == 1) {
       final mismatches = await verifyApp(base);
@@ -103,10 +106,17 @@ Future<TargetResult> measureTarget(
     } finally {
       client.close(force: true);
     }
-    cycles.add(ColdCycle(coldMs: _ms(cold), warmMedianMs: median([for (final d in warm) _ms(d)])));
+    cycles.add(
+      ColdCycle(
+        coldMs: _ms(cold.ttfb),
+        warmMedianMs: median([for (final d in warm) _ms(d)]),
+        notFoundRetries: cold.notFoundRetries,
+      ),
+    );
     log(
       '${target.name}: cold ${cycles.last.coldMs.toStringAsFixed(0)} ms, '
-      'warm median ${cycles.last.warmMedianMs.toStringAsFixed(0)} ms',
+      'warm median ${cycles.last.warmMedianMs.toStringAsFixed(0)} ms'
+      '${cold.notFoundRetries > 0 ? ', ${cold.notFoundRetries} 404 retries before first answer' : ''}',
     );
   }
 

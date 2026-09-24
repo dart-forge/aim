@@ -30,6 +30,48 @@ Future<Duration> timeToFirstByte(
   }
 }
 
+class ColdProbe {
+  const ColdProbe({required this.ttfb, required this.notFoundRetries});
+  final Duration ttfb;
+  final int notFoundRetries;
+}
+
+/// First request to a freshly deployed target over a new connection. A 404
+/// is retried (the platform's edge answers 404 while a brand-new route is
+/// still propagating; that answer never reaches the app, so it does not warm
+/// it). The first non-404 response's TTFB is the cold sample.
+Future<ColdProbe> coldProbe(
+  Uri url, {
+  Duration timeout = const Duration(seconds: 60),
+  Duration interval = const Duration(seconds: 1),
+}) async {
+  final watch = Stopwatch()..start();
+  var retries = 0;
+  while (true) {
+    final http = HttpClient();
+    try {
+      final requestWatch = Stopwatch()..start();
+      final request = await http.openUrl('GET', url);
+      final response = await request.close();
+      final elapsed = requestWatch.elapsed;
+      final body = await utf8.decoder.bind(response).join();
+      if (response.statusCode == 200) {
+        return ColdProbe(ttfb: elapsed, notFoundRetries: retries);
+      }
+      if (response.statusCode != 404) {
+        throw StateError('GET $url answered ${response.statusCode}: $body');
+      }
+      if (watch.elapsed >= timeout) {
+        throw StateError('GET $url kept answering 404 after ${watch.elapsed}: $body');
+      }
+      retries++;
+      await Future<void>.delayed(interval);
+    } finally {
+      http.close(force: true);
+    }
+  }
+}
+
 /// [count] requests one after another on a kept-alive [client].
 Future<List<Duration>> sequentialLatencies(
   Uri url,

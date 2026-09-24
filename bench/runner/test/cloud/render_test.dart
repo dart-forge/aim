@@ -10,8 +10,8 @@ CloudResults _results({List<SkippedApp> skipped = const []}) {
     variant: 'aim',
     region: 'nearest Cloudflare colo',
     cycles: [
-      ColdCycle(coldMs: 320, warmMedianMs: 28),
-      ColdCycle(coldMs: 305, warmMedianMs: 27),
+      ColdCycle(coldMs: 320, warmMedianMs: 28, notFoundRetries: 3),
+      ColdCycle(coldMs: 305, warmMedianMs: 27, notFoundRetries: 2),
     ],
     scenarios: [
       ScenarioLatency.fromSamples('plaintext', [20, 22, 21]),
@@ -104,6 +104,7 @@ void main() {
     expect(md, contains('| workers | aim |'));
     expect(md, contains('(ms)'));
     expect(md, contains('tokyo-office'));
+    expect(md, contains('404 retries before first answer (sum)'));
   });
 
   test('never prints identifying URLs', () {
@@ -122,6 +123,12 @@ void main() {
   test('renders no "Not measured" section when nothing was skipped', () {
     final clean = _results();
     expect(renderCloudMarkdown(clean), isNot(contains('## Not measured')));
+  });
+
+  test('sums 404 retries across cycles in the Cold start table', () {
+    final md = renderCloudMarkdown(results);
+    final row = md.split('\n').firstWhere((line) => line.startsWith('| workers | aim |'));
+    expect(row, endsWith('| 5 |'));
   });
 
   test('lists skipped targets under "Not measured"', () {

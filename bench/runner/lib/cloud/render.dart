@@ -43,13 +43,17 @@ String renderCloudMarkdown(CloudResults r) {
 
   b.writeln('## Cold start');
   b.writeln();
-  b.writeln('| Runtime | Variant | Cold, median (ms) | Warm right after, median (ms) | Difference (ms) |');
-  b.writeln('|---|---|---:|---:|---:|');
+  b.writeln(
+    '| Runtime | Variant | Cold, median (ms) | Warm right after, median (ms) | Difference (ms) | '
+    '404 retries before first answer (sum) |',
+  );
+  b.writeln('|---|---|---:|---:|---:|---:|');
   for (final t in r.targets) {
     final diff = t.coldMedianMs - t.warmAfterColdMedianMs;
+    final notFoundRetries = t.cycles.fold<int>(0, (sum, c) => sum + c.notFoundRetries);
     b.writeln(
       '| ${t.runtime} | ${t.variant} | ${t.coldMedianMs.toStringAsFixed(0)} | '
-      '${t.warmAfterColdMedianMs.toStringAsFixed(0)} | ${diff.toStringAsFixed(0)} |',
+      '${t.warmAfterColdMedianMs.toStringAsFixed(0)} | ${diff.toStringAsFixed(0)} | $notFoundRetries |',
     );
   }
   b.writeln();

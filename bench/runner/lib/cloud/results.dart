@@ -3,12 +3,21 @@ import 'package:bench_runner/results.dart' show SkippedApp;
 import 'package:bench_runner/stats.dart';
 
 class ColdCycle {
-  const ColdCycle({required this.coldMs, required this.warmMedianMs});
+  const ColdCycle({required this.coldMs, required this.warmMedianMs, this.notFoundRetries = 0});
   final double coldMs;
   final double warmMedianMs;
-  Map<String, Object?> toJson() => {'coldMs': coldMs, 'warmMedianMs': warmMedianMs};
-  factory ColdCycle.fromJson(Map<String, Object?> j) =>
-      ColdCycle(coldMs: (j['coldMs'] as num).toDouble(), warmMedianMs: (j['warmMedianMs'] as num).toDouble());
+
+  /// How many 404s the cold probe retried past before its first non-404
+  /// answer — a brand-new deployment's route still propagating on the
+  /// platform's edge, not the app itself.
+  final int notFoundRetries;
+
+  Map<String, Object?> toJson() => {'coldMs': coldMs, 'warmMedianMs': warmMedianMs, 'notFoundRetries': notFoundRetries};
+  factory ColdCycle.fromJson(Map<String, Object?> j) => ColdCycle(
+    coldMs: (j['coldMs'] as num).toDouble(),
+    warmMedianMs: (j['warmMedianMs'] as num).toDouble(),
+    notFoundRetries: (j['notFoundRetries'] as num?)?.toInt() ?? 0,
+  );
 }
 
 class ScenarioLatency {
