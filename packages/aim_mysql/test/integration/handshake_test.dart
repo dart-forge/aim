@@ -15,7 +15,9 @@ void main() {
       final lease = useMySql(version: version);
 
       test('connects over a plaintext socket', () async {
-        final connection = await open('${lease.url}?sslmode=disable');
+        final connection = await open(
+          '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+        );
         addTearDown(connection.close);
 
         expect(connection.isOpen, isTrue);
@@ -44,7 +46,9 @@ void main() {
       test('and a plaintext connection is not, by the same measure', () async {
         // The other side of the same reading, so the assertion above is
         // known to distinguish the two rather than always holding.
-        final connection = await open('${lease.url}?sslmode=disable');
+        final connection = await open(
+          '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+        );
         addTearDown(connection.close);
 
         expect(
@@ -87,7 +91,9 @@ void main() {
 
       test('reads sql_mode off the session', () async {
         // Not to change it — to know where a string literal ends.
-        final connection = await open('${lease.url}?sslmode=disable');
+        final connection = await open(
+          '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+        );
         addTearDown(connection.close);
 
         expect(
@@ -106,7 +112,9 @@ void main() {
         //
         // Turning the mode on also exercises refreshSqlMode end to end,
         // which nothing else here does.
-        final connection = await open('${lease.url}?sslmode=disable');
+        final connection = await open(
+          '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+        );
         addTearDown(connection.close);
 
         expect(
@@ -136,7 +144,7 @@ void main() {
         );
 
         await expectLater(
-          open('$wrong?sslmode=disable'),
+          open('$wrong?sslmode=disable&allowPublicKeyRetrieval=true'),
           throwsA(isA<MySqlAccessDenied>()),
         );
       });
@@ -146,7 +154,7 @@ void main() {
             '${lease.url.substring(0, lease.url.lastIndexOf('/'))}/no_such_db';
 
         await expectLater(
-          open('$missing?sslmode=disable'),
+          open('$missing?sslmode=disable&allowPublicKeyRetrieval=true'),
           throwsA(isA<MySqlException>()),
         );
       });
@@ -160,7 +168,9 @@ void main() {
           // this would pass without encrypting anything.
           await lease.flushAuthCache();
 
-          final connection = await open('${lease.url}?sslmode=disable');
+          final connection = await open(
+            '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+          );
           addTearDown(connection.close);
 
           expect(await connection.ping(), isTrue);
@@ -171,10 +181,14 @@ void main() {
         // The 0x03 branch. Running it right after the cold one is what
         // makes it the warm case rather than a second cold one.
         await lease.flushAuthCache();
-        final first = await open('${lease.url}?sslmode=disable');
+        final first = await open(
+          '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+        );
         await first.close();
 
-        final second = await open('${lease.url}?sslmode=disable');
+        final second = await open(
+          '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+        );
         addTearDown(second.close);
 
         expect(await second.ping(), isTrue);
@@ -196,7 +210,9 @@ void main() {
       test(
         'a closed connection says so instead of writing to a dead socket',
         () async {
-          final connection = await open('${lease.url}?sslmode=disable');
+          final connection = await open(
+            '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+          );
           await connection.close();
 
           expect(connection.isOpen, isFalse);
@@ -221,7 +237,9 @@ void main() {
       final lease = useMySql(version: version, auth: MySqlAuth.nativePassword);
 
       test('connects over a plaintext socket', () async {
-        final connection = await open('${lease.url}?sslmode=disable');
+        final connection = await open(
+          '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+        );
         addTearDown(connection.close);
 
         expect(await connection.ping(), isTrue);
@@ -241,7 +259,7 @@ void main() {
         );
 
         await expectLater(
-          open('$wrong?sslmode=disable'),
+          open('$wrong?sslmode=disable&allowPublicKeyRetrieval=true'),
           throwsA(isA<MySqlAccessDenied>()),
         );
       });

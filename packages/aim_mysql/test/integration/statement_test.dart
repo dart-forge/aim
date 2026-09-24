@@ -15,7 +15,9 @@ void main() {
 
   setUp(() async {
     connection = await MySqlConnection.connect(
-      MySqlConnectionSettings.parse('${lease.url}?sslmode=disable'),
+      MySqlConnectionSettings.parse(
+        '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+      ),
     );
   });
 

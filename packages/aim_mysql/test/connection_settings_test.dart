@@ -113,6 +113,40 @@ void main() {
         '/tmp/ca.pem',
       );
     });
+
+    test('queryTimeout defaults to 30 seconds', () {
+      expect(
+        MySqlConnectionSettings.parse('mysql://alice@db.example/shop')
+            .queryTimeout,
+        const Duration(seconds: 30),
+      );
+    });
+
+    test('queryTimeout is settable from the URL, in seconds', () {
+      expect(
+        MySqlConnectionSettings.parse(
+          'mysql://alice@db.example/shop?queryTimeout=5',
+        ).queryTimeout,
+        const Duration(seconds: 5),
+      );
+    });
+
+    test('allowPublicKeyRetrieval defaults to false', () {
+      expect(
+        MySqlConnectionSettings.parse('mysql://alice@db.example/shop')
+            .allowPublicKeyRetrieval,
+        isFalse,
+      );
+    });
+
+    test('allowPublicKeyRetrieval is settable from the URL', () {
+      expect(
+        MySqlConnectionSettings.parse(
+          'mysql://alice@db.example/shop?allowPublicKeyRetrieval=true',
+        ).allowPublicKeyRetrieval,
+        isTrue,
+      );
+    });
   });
 
   group('rejecting what it cannot connect to', () {

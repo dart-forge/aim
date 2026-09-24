@@ -57,6 +57,8 @@ final class MySqlConnectionSettings {
     this.sslMode = MySqlSslMode.prefer,
     this.caFile,
     this.connectTimeout = const Duration(seconds: 10),
+    this.queryTimeout = const Duration(seconds: 30),
+    this.allowPublicKeyRetrieval = false,
   });
 
   /// Parses a `mysql://user:password@host:port/database?sslmode=...`
@@ -127,6 +129,9 @@ final class MySqlConnectionSettings {
           ? MySqlSslMode.prefer
           : _parseSslMode(sslModeParam),
       caFile: uri.queryParameters['sslrootcert'],
+      allowPublicKeyRetrieval:
+          uri.queryParameters['allowPublicKeyRetrieval'] == 'true',
+      queryTimeout: _parseQueryTimeout(uri.queryParameters['queryTimeout']),
     );
   }
 
@@ -145,6 +150,47 @@ final class MySqlConnectionSettings {
   /// Bounds only the initial `Socket.connect`, not the handshake,
   /// authentication or session setup that follow it.
   final Duration connectTimeout;
+
+  /// Bounds the handshake and authentication that follow `Socket.connect`,
+  /// and every reply this connection waits for afterwards -- one bound per
+  /// round trip, not a total budget for the connection's whole life. A
+  /// server that stops answering (a network partition, a lock held
+  /// forever on the other end) would otherwise hang the caller, and
+  /// [close] and pool shutdown, indefinitely: nothing else in this driver
+  /// times out a wait for a reply.
+  ///
+  /// On expiry the socket is closed and the connection is marked unusable,
+  /// so a pool discards it instead of handing it to the next caller.
+  final Duration queryTimeout;
+
+  /// Whether this driver may fetch the server's RSA public key over an
+  /// unencrypted connection, when `caching_sha2_password` falls back to
+  /// full authentication and TLS is not in use.
+  ///
+  /// Defaults to `false`: doing this by default would let anyone on the
+  /// network path between this driver and the server read the key
+  /// exchange and, with it, recover the password. Set `true` (or
+  /// `allowPublicKeyRetrieval=true` on the connection URL) only when that
+  /// risk is accepted -- typically because the network itself is already
+  /// trusted -- or use `sslmode` to encrypt the connection instead.
+  final bool allowPublicKeyRetrieval;
+}
+
+/// Parses the `queryTimeout` URL query parameter -- a whole number of
+/// seconds -- or falls back to [MySqlConnectionSettings.queryTimeout]'s own
+/// default when [raw] is `null`. Throws [ArgumentError] for anything else
+/// that is not a valid non-negative integer.
+Duration _parseQueryTimeout(String? raw) {
+  if (raw == null) return const Duration(seconds: 30);
+  final seconds = int.tryParse(raw);
+  if (seconds == null || seconds < 0) {
+    throw ArgumentError.value(
+      raw,
+      'queryTimeout',
+      'must be a non-negative whole number of seconds',
+    );
+  }
+  return Duration(seconds: seconds);
 }
 
 MySqlSslMode _parseSslMode(String raw) => switch (raw.toLowerCase()) {
@@ -185,11 +231,12 @@ abstract interface class ResponseReader {
 /// never used again. Recovery is not attempted, because there is nothing
 /// short of a fresh connection to recover to.
 final class MySqlConnection {
-  MySqlConnection._(this._channel) {
+  MySqlConnection._(this._channel, this._queryTimeout) {
     _statements = statementCacheFor(this);
   }
 
   final _PacketChannel _channel;
+  final Duration _queryTimeout;
   bool _isOpen = true;
   late String _sqlMode;
   late final StatementCache _statements;
@@ -264,82 +311,18 @@ final class MySqlConnection {
 
     var channel = _PacketChannel(socket);
     try {
-      final firstPacket = await channel.readPacket();
-      if (isServerRefusalBeforeHandshake(firstPacket)) {
-        // The server is refusing the connection outright -- too many
-        // connections, a blocked host, an unprivileged one -- rather than
-        // starting a handshake at all. Reporting it as a server error
-        // rather than a bad protocol version is what lets a caller
-        // catching MySqlException read the real errno and message.
-        throw mysqlErrorFor(parseCommandPacket(firstPacket) as ErrPacket);
-      }
-      final handshake = parseInitialHandshake(firstPacket);
-      final pluginName = handshake.authPluginName;
-      if (pluginName == null) {
-        throw MySqlProtocolException(
-          'the initial handshake did not name an authentication plugin, '
-          'which this driver has no way to authenticate without',
-        );
-      }
-
-      final serverOffersTls = handshake.capabilities & Capabilities.ssl != 0;
-      final useTls = switch (settings.sslMode) {
-        MySqlSslMode.disable => false,
-        MySqlSslMode.prefer => serverOffersTls,
-        MySqlSslMode.require ||
-        MySqlSslMode.verifyCa ||
-        MySqlSslMode.verifyFull => true,
-      };
-
-      final capabilities = negotiateCapabilities(
-        handshake,
-        useTls: useTls,
-        withDatabase: settings.database != null,
-      );
-
-      var isSecure = false;
-      int nextSequenceId;
-      if (useTls) {
-        final sslRequestId = channel.lastSequenceId + 1;
-        channel.write(framePacket(buildSslRequest(capabilities), sslRequestId));
-        await channel.flush();
-
-        // The socket hands itself over to SecureSocket.secure below; nothing
-        // may read from the plaintext side of it again after this.
-        channel.pauseForUpgrade();
-        final secureSocket = await SecureSocket.secure(
-          socket,
-          host: settings.host,
-          context: _securityContextFor(settings.caFile),
-          onBadCertificate: _verifiesCertificate(settings.sslMode)
-              ? null
-              : (_) => true,
-        );
-
-        channel = _PacketChannel(secureSocket);
-        isSecure = true;
-        nextSequenceId = (sslRequestId + 1) & 0xff;
-      } else {
-        nextSequenceId = (channel.lastSequenceId + 1) & 0xff;
-      }
-
-      await authenticate(
-        transport: _ConnectionAuthTransport(
-          channel,
-          isSecure: isSecure,
-          nextSequenceId: nextSequenceId,
+      return await _handshakeAndAuthenticate(
+        channel: channel,
+        socket: socket,
+        settings: settings,
+        setChannel: (newChannel) => channel = newChannel,
+      ).timeout(
+        settings.queryTimeout,
+        onTimeout: () => throw TimeoutException(
+          'connecting to the server (handshake and authentication) did '
+          'not finish within ${settings.queryTimeout}',
         ),
-        capabilities: capabilities,
-        user: settings.user,
-        password: settings.password,
-        database: settings.database,
-        initialPluginName: pluginName,
-        initialScramble: handshake.authPluginData,
       );
-
-      final connection = MySqlConnection._(channel);
-      await connection._pinSession();
-      return connection;
     } catch (_) {
       try {
         await channel.destroy();
@@ -350,6 +333,102 @@ final class MySqlConnection {
       }
       rethrow;
     }
+  }
+
+  /// The handshake-and-authenticate half of [connect], pulled out on its
+  /// own so [connect] can wrap it in a single [Duration.timeout] bounding
+  /// the whole exchange -- there is no reply to a stuck server yet, so
+  /// [exchange]'s own per-call timeout is not in play until [MySqlConnection]
+  /// exists at the very end of this.
+  ///
+  /// [setChannel] writes a TLS upgrade's new channel back into [connect]'s
+  /// own local variable, so that method's `catch` block destroys whichever
+  /// channel is actually live -- the plaintext one, or the secure one that
+  /// replaced it -- rather than always the one it started with.
+  static Future<MySqlConnection> _handshakeAndAuthenticate({
+    required _PacketChannel channel,
+    required Socket socket,
+    required MySqlConnectionSettings settings,
+    required void Function(_PacketChannel) setChannel,
+  }) async {
+    final firstPacket = await channel.readPacket();
+    if (isServerRefusalBeforeHandshake(firstPacket)) {
+      // The server is refusing the connection outright -- too many
+      // connections, a blocked host, an unprivileged one -- rather than
+      // starting a handshake at all. Reporting it as a server error
+      // rather than a bad protocol version is what lets a caller
+      // catching MySqlException read the real errno and message.
+      throw mysqlErrorFor(parseCommandPacket(firstPacket) as ErrPacket);
+    }
+    final handshake = parseInitialHandshake(firstPacket);
+    final pluginName = handshake.authPluginName;
+    if (pluginName == null) {
+      throw MySqlProtocolException(
+        'the initial handshake did not name an authentication plugin, '
+        'which this driver has no way to authenticate without',
+      );
+    }
+
+    final serverOffersTls = handshake.capabilities & Capabilities.ssl != 0;
+    final useTls = switch (settings.sslMode) {
+      MySqlSslMode.disable => false,
+      MySqlSslMode.prefer => serverOffersTls,
+      MySqlSslMode.require ||
+      MySqlSslMode.verifyCa ||
+      MySqlSslMode.verifyFull => true,
+    };
+
+    final capabilities = negotiateCapabilities(
+      handshake,
+      useTls: useTls,
+      withDatabase: settings.database != null,
+    );
+
+    var isSecure = false;
+    int nextSequenceId;
+    if (useTls) {
+      final sslRequestId = channel.lastSequenceId + 1;
+      channel.write(framePacket(buildSslRequest(capabilities), sslRequestId));
+      await channel.flush();
+
+      // The socket hands itself over to SecureSocket.secure below; nothing
+      // may read from the plaintext side of it again after this.
+      channel.pauseForUpgrade();
+      final secureSocket = await SecureSocket.secure(
+        socket,
+        host: settings.host,
+        context: _securityContextFor(settings.caFile),
+        onBadCertificate: _verifiesCertificate(settings.sslMode)
+            ? null
+            : (_) => true,
+      );
+
+      channel = _PacketChannel(secureSocket);
+      setChannel(channel);
+      isSecure = true;
+      nextSequenceId = (sslRequestId + 1) & 0xff;
+    } else {
+      nextSequenceId = (channel.lastSequenceId + 1) & 0xff;
+    }
+
+    await authenticate(
+      transport: _ConnectionAuthTransport(
+        channel,
+        isSecure: isSecure,
+        nextSequenceId: nextSequenceId,
+      ),
+      capabilities: capabilities,
+      user: settings.user,
+      password: settings.password,
+      database: settings.database,
+      initialPluginName: pluginName,
+      initialScramble: handshake.authPluginData,
+      allowPublicKeyRetrieval: settings.allowPublicKeyRetrieval,
+    );
+
+    final connection = MySqlConnection._(channel, settings.queryTimeout);
+    await connection._pinSession();
+    return connection;
   }
 
   /// Runs one command: sends [command] followed by [body] as a single
@@ -397,7 +476,13 @@ final class MySqlConnection {
           _channel.write(packet);
         }
         await _channel.flush();
-        return await readResponse(_ExchangeResponseReader(_channel));
+        return await readResponse(_ExchangeResponseReader(_channel)).timeout(
+          _queryTimeout,
+          onTimeout: () => throw TimeoutException(
+            "waiting for the server's reply took longer than "
+            '$_queryTimeout',
+          ),
+        );
       } on MySqlException {
         // The server refused the command cleanly; its reply packet fully
         // arrived and ended the exchange the same way a successful one

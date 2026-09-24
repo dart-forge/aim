@@ -10,7 +10,9 @@ void main() {
   late MySqlDatabase db;
 
   setUp(() async {
-    db = await MySqlDatabase.connect('${lease.url}?sslmode=disable');
+    db = await MySqlDatabase.connect(
+      '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+    );
     await db.execute('DROP TABLE IF EXISTS accounts');
     // InnoDB, because MyISAM would silently ignore every rollback here.
     await db.execute('''

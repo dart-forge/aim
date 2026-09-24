@@ -12,7 +12,9 @@ void main() {
   late MySqlDatabase db;
 
   setUp(() async {
-    db = await MySqlDatabase.connect('${lease.url}?sslmode=disable');
+    db = await MySqlDatabase.connect(
+      '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+    );
   });
 
   tearDown(() => db.close());
@@ -99,7 +101,9 @@ void main() {
     );
     await db.execute('INSERT INTO locked VALUES (1)');
 
-    final other = await MySqlDatabase.connect('${lease.url}?sslmode=disable');
+    final other = await MySqlDatabase.connect(
+      '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+    );
     addTearDown(other.close);
 
     // The completer is what makes this deterministic: without it the second
@@ -193,7 +197,9 @@ void main() {
     );
     await db.execute('INSERT INTO crossed VALUES (1), (2)');
 
-    final other = await MySqlDatabase.connect('${lease.url}?sslmode=disable');
+    final other = await MySqlDatabase.connect(
+      '${lease.url}?sslmode=disable&allowPublicKeyRetrieval=true',
+    );
     addTearDown(other.close);
 
     final hasFirst = Completer<void>();

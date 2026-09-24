@@ -115,6 +115,7 @@ Future<void> authenticate({
   String? database,
   required String initialPluginName,
   required Uint8List initialScramble,
+  bool allowPublicKeyRetrieval = false,
 }) async {
   var pluginName = initialPluginName;
   var scramble = initialScramble;
@@ -165,6 +166,7 @@ Future<void> authenticate({
           password: password,
           scramble: scramble,
           transport: transport,
+          allowPublicKeyRetrieval: allowPublicKeyRetrieval,
         );
 
       case EofPacket():
@@ -244,6 +246,7 @@ Future<void> _handleAuthMoreData({
   required String password,
   required Uint8List scramble,
   required AuthTransport transport,
+  required bool allowPublicKeyRetrieval,
 }) async {
   if (pluginName != 'caching_sha2_password') {
     throw MySqlProtocolException(
@@ -267,11 +270,39 @@ Future<void> _handleAuthMoreData({
         await transport.send(passwordWithNul);
         return;
       }
+      if (!allowPublicKeyRetrieval) {
+        throw MySqlException(
+          errorCode: 0,
+          sqlState: '',
+          message:
+              'the server asked for full authentication '
+              '(caching_sha2_password) without TLS, which means fetching '
+              'its RSA public key over this unencrypted connection would '
+              'let anyone on the network path read it and decrypt the '
+              'password sent under it. Refused by default: pass '
+              'allowPublicKeyRetrieval=true (or add it to the connection '
+              'URL) to allow it, or use sslmode to encrypt the connection '
+              'instead',
+        );
+      }
       await transport.send(Uint8List.fromList([0x02]));
       final pem = decodeUtf8(await _expectPublicKey(transport));
       final key = parsePublicKeyPem(pem);
       final masked = xorWithScramble(passwordWithNul, scramble);
-      await transport.send(rsaOaepEncrypt(message: masked, key: key));
+      final Uint8List ciphertext;
+      try {
+        ciphertext = rsaOaepEncrypt(message: masked, key: key);
+      } on ArgumentError catch (error) {
+        throw MySqlException(
+          errorCode: 0,
+          sqlState: '',
+          message:
+              'the password is too long to encrypt under the server\'s RSA '
+              'public key; use a shorter password or a TLS connection '
+              '(sslmode) instead of the RSA fallback ($error)',
+        );
+      }
+      await transport.send(ciphertext);
       return;
 
     default:

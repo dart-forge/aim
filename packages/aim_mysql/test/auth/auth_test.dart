@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:aim_mysql/src/auth/auth.dart';
 import 'package:aim_mysql/src/auth/caching_sha2.dart';
 import 'package:aim_mysql/src/auth/native_password.dart';
+import 'package:aim_mysql/src/connection.dart';
 import 'package:aim_mysql/src/exceptions.dart';
 import 'package:aim_mysql/src/protocol/handshake.dart';
 import 'package:aim_mysql/src/protocol/wire.dart';
@@ -92,6 +93,7 @@ Future<void> run(
   String plugin = 'caching_sha2_password',
   String password = 'secret',
   String? database,
+  bool allowPublicKeyRetrieval = false,
 }) => authenticate(
   transport: transport,
   capabilities:
@@ -105,6 +107,7 @@ Future<void> run(
   database: database,
   initialPluginName: plugin,
   initialScramble: scramble,
+  allowPublicKeyRetrieval: allowPublicKeyRetrieval,
 );
 
 void main() {
@@ -229,7 +232,7 @@ void main() {
     test('asks for the public key first', () async {
       final transport = ScriptedTransport(script());
 
-      await run(transport);
+      await run(transport, allowPublicKeyRetrieval: true);
 
       expect(transport.sent[1], [0x02]);
     });
@@ -237,7 +240,7 @@ void main() {
     test('then sends a ciphertext of the key width', () async {
       final transport = ScriptedTransport(script());
 
-      await run(transport);
+      await run(transport, allowPublicKeyRetrieval: true);
 
       expect(transport.sent, hasLength(3));
       expect(transport.sent[2], hasLength(256));
@@ -247,7 +250,7 @@ void main() {
       // The whole reason this path exists.
       final transport = ScriptedTransport(script());
 
-      await run(transport);
+      await run(transport, allowPublicKeyRetrieval: true);
 
       for (final packet in transport.sent) {
         expect(
@@ -264,8 +267,8 @@ void main() {
         final first = ScriptedTransport(script());
         final second = ScriptedTransport(script());
 
-        await run(first);
-        await run(second);
+        await run(first, allowPublicKeyRetrieval: true);
+        await run(second, allowPublicKeyRetrieval: true);
 
         expect(first.sent[2], isNot(second.sent[2]));
       },
@@ -280,9 +283,62 @@ void main() {
           okPacket(),
         ]);
 
-        expect(run(transport), throwsA(isA<MySqlProtocolException>()));
+        expect(
+          run(transport, allowPublicKeyRetrieval: true),
+          throwsA(isA<MySqlProtocolException>()),
+        );
       },
     );
+
+    test('refused by default, before anything is sent for it, and without a '
+        'server round trip', () async {
+      // Fetching the server's public key over this same unencrypted
+      // connection would let anyone on the network path read it and,
+      // with it, recover the password -- so this driver does not do
+      // that unless the caller opts in.
+      final transport = ScriptedTransport(script());
+
+      await expectLater(run(transport), throwsA(isA<MySqlException>()));
+
+      expect(
+        transport.sent,
+        hasLength(1),
+        reason:
+            'only the initial handshake response; no 0x02 key request '
+            'was ever sent',
+      );
+    });
+
+    test('a password too long for the key fails with a MySqlException, not '
+        'an ArgumentError', () async {
+      // oaepEncode (rsa_oaep.dart) throws ArgumentError for a message
+      // that does not fit the key's width -- a mistake-by-the-caller
+      // exception everywhere else it is used, but here the "mistake"
+      // is just an ordinary password the caller has no way to have
+      // known would not fit a 2048-bit key, so it must not surface as
+      // an uncaught ArgumentError.
+      final transport = ScriptedTransport(script());
+      final longPassword = 'p' * 300;
+
+      await expectLater(
+        run(transport, password: longPassword, allowPublicKeyRetrieval: true),
+        throwsA(isA<MySqlException>()),
+      );
+    });
+
+    test('the opt-in works over the URL query parameter too', () {
+      expect(
+        MySqlConnectionSettings.parse(
+          'mysql://user@host/db?allowPublicKeyRetrieval=true',
+        ).allowPublicKeyRetrieval,
+        isTrue,
+      );
+      expect(
+        MySqlConnectionSettings.parse('mysql://user@host/db')
+            .allowPublicKeyRetrieval,
+        isFalse,
+      );
+    });
   });
 
   group('switching plugin', () {
@@ -357,7 +413,11 @@ void main() {
         okPacket(),
       ]);
 
-      await run(transport, plugin: 'mysql_native_password');
+      await run(
+        transport,
+        plugin: 'mysql_native_password',
+        allowPublicKeyRetrieval: true,
+      );
 
       expect(transport.sent, hasLength(4));
       expect(transport.sent[2], [0x02]);
@@ -444,7 +504,7 @@ void main() {
       ]);
 
       await expectLater(
-        run(transport),
+        run(transport, allowPublicKeyRetrieval: true),
         throwsA(
           isA<MySqlProtocolException>().having(
             (e) => e.toString(),
@@ -462,7 +522,10 @@ void main() {
         errPacket(1045, 'Access denied'),
       ]);
 
-      await expectLater(run(transport), throwsA(isA<MySqlAccessDenied>()));
+      await expectLater(
+        run(transport, allowPublicKeyRetrieval: true),
+        throwsA(isA<MySqlAccessDenied>()),
+      );
     });
 
     test('an ERR becomes a classified exception', () async {
