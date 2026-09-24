@@ -8,7 +8,11 @@ void main() {
     // the engine free of it is what would let it move out of this package
     // later, and is what lets it compile on every one of aim's runtimes,
     // including the ones that only run wasm.
-    const integration = {'lib/src/context.dart', 'lib/src/middleware.dart'};
+    const integration = {
+      'lib/src/context.dart',
+      'lib/src/middleware.dart',
+      'lib/src/typed.dart',
+    };
 
     final offenders = <String>[];
     for (final file in Directory(

@@ -11,3 +11,5 @@ export 'src/reader.dart' show Reader;
 export 'src/responses.dart'
     show Reply, ResponseBuilder, ResponseEntry, Responses, responses;
 export 'src/schema.dart' show Schema;
+export 'src/typed.dart'
+    show RouteContract, TypedHandler, TypedRequest, routeContractOf, typed;
