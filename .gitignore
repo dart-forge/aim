@@ -63,3 +63,19 @@ pubspec_overrides.yaml
 !/bench/apps/*/pubspec.lock
 !/bench/runner/pubspec.lock
 !/bench/runner/test/fixtures/pubspec.lock
+
+# Cloud benchmark: real project ids and refs live only in the local config.
+/bench/cloud/config.yaml
+/bench/cloud/**/build/
+/bench/cloud/supabase/supabase/functions/*/main.wasm
+/bench/cloud/supabase/supabase/functions/*/main.mjs
+/bench/cloud/supabase/supabase/functions/*/main.support.js
+/bench/cloud/supabase/supabase/functions/*/main.wasm.map
+/bench/cloud/supabase/supabase/.temp/
+/bench/cloud/functions/.firebaserc
+/bench/cloud/functions/.firebase/
+/bench/cloud/functions/native/node_modules/
+/bench/cloud/**/.wrangler/
+!/bench/cloud/workers/aim/pubspec.lock
+!/bench/cloud/supabase/aim_app/pubspec.lock
+!/bench/cloud/functions/aim/pubspec.lock

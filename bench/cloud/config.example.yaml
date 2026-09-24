@@ -1,0 +1,6 @@
+# Copy to config.yaml (git-ignored) and fill in. Nothing in this file is
+# written into results: the runner records regions and versions only.
+label: tokyo-office          # where the measurements are taken from
+firebase_project: my-firebase-project-id
+supabase_project_ref: abcdefghijklmnopqrst
+workers_name_prefix: aim-bench   # Workers are deployed as <prefix>-aim and <prefix>-native
