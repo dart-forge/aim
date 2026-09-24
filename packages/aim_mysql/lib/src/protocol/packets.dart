@@ -215,8 +215,13 @@ AuthSwitchRequest _parseAuthSwitchRequest(Uint8List payload) {
   // other use of "the rest of the packet" in this protocol, which carries
   // no terminator at all. Keeping it would feed the authentication plugin
   // a token one byte too long: the right length to look plausible, and
-  // wrong enough that the server refuses it.
-  final scramble = Uint8List.sublistView(rest, 0, rest.length - 1);
+  // wrong enough that the server refuses it. Only drop it when it is
+  // actually a NUL, though -- a scramble that happens not to carry a
+  // trailing NUL (or one whose last real byte is itself not zero) must
+  // keep every byte, or the plugin gets a token one byte too short instead.
+  final scramble = rest.last == 0
+      ? Uint8List.sublistView(rest, 0, rest.length - 1)
+      : rest;
 
   return AuthSwitchRequest(pluginName: pluginName, scramble: scramble);
 }
