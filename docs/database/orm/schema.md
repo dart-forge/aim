@@ -16,7 +16,7 @@ Configure your schema file path in `pubspec.yaml`:
 ```yaml
 aim:
   database:
-    schema: lib/schema.dart  # default
+    schema: lib/schema  # default
 ```
 See [Code Generation](/database/orm/codegen) for full setup.
 :::
@@ -85,6 +85,16 @@ createdAt: timestamp('created_at').withDefault(DateTime.now()),
 
 // Timestamp with NOW() default
 updatedAt: timestamp('updated_at').withDefaultNow(),
+
+// Indexed (adds a plain index, not a uniqueness constraint)
+email: varchar('email', length: 255).indexed(),
+
+// Foreign key reference, with optional ON DELETE / ON UPDATE actions
+userId: uuid('user_id').references(
+  () => users.id,
+  onDelete: OnDeleteAction.cascade,
+  onUpdate: OnUpdateAction.restrict,
+),
 ```
 
 ### Available Modifiers
@@ -96,6 +106,8 @@ updatedAt: timestamp('updated_at').withDefaultNow(),
 | `.nullable()` | Allow NULL values |
 | `.withDefault(value)` | Set default value (not on `serial()`: the sequence already provides one) |
 | `.withDefaultNow()` | Set default to NOW() (timestamp only) |
+| `.indexed()` | Add a database index on this column |
+| `.references(() => target, {onDelete, onUpdate})` | Add a foreign key reference to another table's column; `onDelete`/`onUpdate` take an `OnDeleteAction`/`OnUpdateAction` (`cascade`, `setNull`, `restrict`, `setDefault`) |
 
 ## Multiple Tables
 

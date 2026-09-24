@@ -15,13 +15,13 @@ Frequently asked questions about Aim.
 
 ### What is Aim?
 
-Aim is a lightweight, fast web framework for Dart. It's designed to be simple, type-safe, and performance-focused, with an API inspired by modern frameworks like Hono.
+Aim is a lightweight, modular web framework for Dart. It's designed to be simple and type-safe, with a small API surface inspired by modern frameworks like Hono.
 
 ### Why Aim over other Dart frameworks?
 
 - **Simple API**: Context-based API that's easy to learn, inspired by Hono
 - **Type-Safe**: Leverages Dart's type system with custom `Variables` classes for context variables
-- **Modular**: Independently versioned middleware packages, and a database stack (`aim_postgres`, `aim_orm`) that works without `aim_server`
+- **Modular**: Independently installable middleware packages (separate packages, released together at the same version), and a database stack (`aim_postgres`, `aim_orm`) that works without `aim_server`
 - **Runtime-independent core**: routing, middleware, and `Context` live in `aim_core`; the same application code runs on the Dart VM, Cloudflare Workers, Deno-based runtimes, and Cloud Functions for Firebase (with per-runtime caveats — see [Component Status](/status))
 - **Great DX**: Built-in hot reload (`aim dev`) and a dedicated testing package (`aim_server_testing`)
 
@@ -98,7 +98,7 @@ app.get('/users/:id', (c) async {
 
 ```dart
 app.get('/search', (c) async {
-  final query = c.req.queries['q']?.first;
+  final query = c.req.queryParameters['q'];
   return c.json({'query': query});
 });
 ```
@@ -231,7 +231,7 @@ final app = Aim<JwtVariables>(
   variablesFactory: () => JwtVariables.create(
     JwtOptions(
       algorithm: HS256(
-        secretKey: SecretKey(secret: 'your-secret-key'),
+        secretKey: SecretKey(secret: 'at-least-32-characters-long-secret-key'),
       ),
       excludedPaths: ['/login'],
     ),
@@ -243,15 +243,26 @@ app.use(jwt());
 
 ### How do I protect specific routes?
 
-Apply middleware before the routes you want to protect:
+`app.use()` registers middleware that runs for **every** request,
+regardless of where the call appears relative to the routes it sits next
+to — there is no Express-style "only affects routes registered after this
+point". Use `JwtOptions.excludedPaths` (or the equivalent option on other
+auth middleware) to name the routes that should skip authentication:
 
 ```dart
-// Public routes
-app.post('/login', loginHandler);
+final app = Aim<JwtVariables>(
+  variablesFactory: () => JwtVariables.create(
+    JwtOptions(
+      algorithm: HS256(secretKey: SecretKey(secret: '...')),
+      excludedPaths: ['/login'],
+    ),
+  ),
+);
 
-// Protected routes (apply auth middleware)
 app.use(jwt());
-app.get('/dashboard', dashboardHandler);
+
+app.post('/login', loginHandler);       // excluded, runs without a token
+app.get('/dashboard', dashboardHandler); // requires a valid token
 ```
 
 ### Can I use session-based auth?
@@ -325,7 +336,17 @@ See the [Testing guide](/server/guides/testing) for details.
 
 ### Does Aim support serverless?
 
-Aim is designed for traditional server deployments. For serverless, consider using `shelf` with Dart's Cloud Functions.
+Yes, for three targets, at different maturity levels (see [Component
+Status](/status) for what's verified in CI):
+
+- [Cloudflare Workers](/server/workers) (`aim_workers`) — Beta, integration-tested against a real `wrangler dev`.
+- [Supabase Edge Functions](/server/supabase) and other Deno runtimes (`aim_deno`) — Beta, verified against a local Supabase stack and, for HTTP routing only, a real deployed Supabase function.
+- [Cloud Functions for Firebase](/server/functions) (`aim_functions`) — Experimental, inheriting `firebase_functions`'s own experimental Dart support.
+
+The same application code runs across these and the Dart VM through
+`aim_core`'s runtime-independent design; each runtime page above covers its
+specific setup and limitations (for example, `aim_postgres` and the ORM
+need `dart:io` and cannot run in a Worker or Deno wasm build).
 
 ### How do I enable HTTPS?
 

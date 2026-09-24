@@ -1,6 +1,6 @@
 ---
 title: aim_server - Web Framework for Dart
-description: Lightweight, fast web framework for Dart. Context API, routing, middleware, and authentication for modern server-side applications.
+description: Lightweight, modular web framework for Dart. Context API, routing, middleware, and authentication for modern server-side applications.
 head:
   - - meta
     - name: keywords
@@ -9,7 +9,7 @@ head:
 
 # aim_server
 
-A lightweight, fast web framework for Dart.
+A lightweight, modular web framework for Dart.
 
 ## Features
 

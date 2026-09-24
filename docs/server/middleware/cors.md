@@ -111,7 +111,7 @@ app.use(cors(CorsOptions(
 )));
 ```
 
-Default: Reflects the `Access-Control-Request-Headers` from the request
+Default: `['*']` (any header is allowed)
 
 ## Exposed Headers
 
@@ -140,15 +140,16 @@ When `credentials: true`, you cannot use `origin: '*'`. You must specify exact o
 
 ## Preflight Caching
 
-Control how long browsers cache preflight responses:
+Control how long browsers cache preflight responses. `maxAge` is `int?`
+seconds, not a `Duration`:
 
 ```dart
 app.use(cors(CorsOptions(
-  maxAge: Duration(hours: 24),
+  maxAge: 86400, // 24 hours, in seconds
 )));
 ```
 
-Default: `Duration(hours: 24)`
+Default: `null` (no `Access-Control-Max-Age` header is sent)
 
 ## Complete Example
 
@@ -170,7 +171,7 @@ void main() async {
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowHeaders: ['Content-Type', 'Authorization'],
     exposeHeaders: ['X-Request-ID'],
-    maxAge: Duration(hours: 24),
+    maxAge: 86400,
   )));
 
   // API routes
@@ -265,7 +266,7 @@ app.use(cors(CorsOptions(
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowHeaders: ['Content-Type', 'Authorization'],
-  maxAge: Duration(hours: 24),
+  maxAge: 86400,
 )));
 ```
 
@@ -273,12 +274,12 @@ app.use(cors(CorsOptions(
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `origin` | `String \| List<String> \| Function` | `'*'` | Allowed origin(s) |
+| `origin` | `dynamic` (`String`, `List<String>`, or `bool Function(String)`) | `'*'` | Allowed origin(s) |
 | `credentials` | `bool` | `false` | Allow credentials |
-| `allowMethods` | `List<String>` | `['GET', 'HEAD', ...]` | Allowed HTTP methods |
-| `allowHeaders` | `List<String>?` | `null` | Allowed request headers |
-| `exposeHeaders` | `List<String>?` | `null` | Exposed response headers |
-| `maxAge` | `Duration` | `24 hours` | Preflight cache duration |
+| `allowMethods` | `List<String>` | `['GET', 'HEAD', 'PUT', 'POST', 'DELETE', 'PATCH']` | Allowed HTTP methods |
+| `allowHeaders` | `List<String>` | `['*']` | Allowed request headers |
+| `exposeHeaders` | `List<String>` | `[]` | Exposed response headers |
+| `maxAge` | `int?` (seconds) | `null` | Preflight cache duration |
 
 ## Common Issues
 

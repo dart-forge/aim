@@ -43,7 +43,7 @@ before relying on a given piece for production traffic.
 | `aim_orm` / `aim_orm_postgres` / `aim_orm_codegen` (ORM) | Beta | Published; PostgreSQL only, no relations/eager-loading yet. `aim_orm_codegen` has an integration test that runs in CI, but its build_runner "golden" tests — the spec for the generated code — are tagged `slow` and are **not** run by CI's default job |
 | `aim_cli` | Beta | Broad unit coverage, but the Docker-dependent `db:*` command tests are tagged `integration` and, unlike `aim_postgres`/`aim_orm_codegen`/`aim_workers`, CI has no step that runs them — so the CLI's migration commands are not verified against a real database on every push |
 | `aim_workers` (Cloudflare Workers) | Beta | Compiles to WebAssembly; integration-tested against a real `wrangler dev` in CI |
-| `aim_deno` (Supabase Edge Functions, other Deno runtimes) | Beta | Verified against a local Supabase stack; a production deploy is not yet verified |
+| `aim_deno` (Supabase Edge Functions, other Deno runtimes) | Beta | Verified against a local Supabase stack, and, for HTTP routing only, against a real deployed Supabase function; cold-start time, bundle size, and every other Supabase feature beyond serving requests remain unverified, and Deno Deploy/Netlify Edge are untested entirely |
 | `aim_functions` (Cloud Functions for Firebase) | Experimental | `firebase_functions`'s own Dart support is marked experimental; this adapter inherits that status |
 
 ## What CI actually runs

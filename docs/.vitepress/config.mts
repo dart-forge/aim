@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 const SITE_URL = 'https://aim-dart.dev'
 const SITE_NAME = 'Aim Framework'
-const SITE_DESCRIPTION_EN = 'A lightweight, fast web framework for Dart. Build modern server-side applications with simple API, type safety, and modular design.'
+const SITE_DESCRIPTION_EN = 'A lightweight, modular web framework for Dart. Build modern server-side applications with a small API surface, type safety, and minimal runtime abstraction.'
 
 // Every aim_* package in the workspace is released together at this
 // version (see the root CHANGELOG.md and the Migration Guide). Only the

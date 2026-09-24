@@ -48,9 +48,9 @@ app.get('/headers', (c) async {
 
 ```dart
 app.get('/search', (c) async {
-  final queries = c.req.queries;  // Map<String, List<String>>
-  final q = c.req.queries['q']?.first;
-  final page = c.req.queries['page']?.first ?? '1';
+  final queryParameters = c.req.queryParameters;  // Map<String, String>
+  final q = c.req.queryParameters['q'];
+  final page = c.req.queryParameters['page'] ?? '1';
 
   return c.json({
     'query': q,
@@ -59,7 +59,8 @@ app.get('/search', (c) async {
 });
 ```
 
-Example: `GET /search?q=dart&page=2`
+Example: `GET /search?q=dart&page=2`. `queryParameters` (from `Uri.queryParameters`)
+holds one string per key; a repeated key keeps only its last value.
 
 ### Request Body
 
@@ -83,13 +84,21 @@ app.post('/users', (c) async {
 #### Raw Body
 
 ```dart
+import 'dart:convert';
+import 'dart:typed_data';
+
 app.post('/webhook', (c) async {
-  final raw = await c.req.raw();  // List<int>
+  final chunks = await c.req.read().toList();
+  final raw = Uint8List.fromList(chunks.expand((chunk) => chunk).toList());
   final text = utf8.decode(raw);
 
   return c.text('Received ${raw.length} bytes');
 });
 ```
+
+`c.req.raw` is the platform-specific request object (a field, not a
+callable), not the body. Read the body bytes with `c.req.read()`, a
+`Stream<List<int>>`.
 
 #### Form Data
 
@@ -158,17 +167,21 @@ app.get('/page', (c) async {
 
 ### Binary Response
 
+There is no `c.bytes()` method; use `c.stream()` for binary content:
+
 ```dart
 import 'dart:io';
 
 app.get('/download', (c) async {
   final file = File('assets/document.pdf');
-  final bytes = await file.readAsBytes();
 
-  c.header('Content-Type', 'application/pdf');
-  c.header('Content-Disposition', 'attachment; filename="document.pdf"');
-
-  return c.bytes(bytes);
+  return c.stream(
+    file.openRead(),
+    headers: {
+      'content-type': 'application/pdf',
+      'content-disposition': 'attachment; filename="document.pdf"',
+    },
+  );
 });
 ```
 
@@ -179,9 +192,9 @@ app.get('/old-path', (c) async {
   return c.redirect('/new-path');
 });
 
-// With status code
+// With status code (positional, not named)
 app.get('/temp-redirect', (c) async {
-  return c.redirect('/new-path', statusCode: 302);
+  return c.redirect('/new-path', 302);
 });
 ```
 

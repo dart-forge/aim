@@ -453,6 +453,5 @@ Not supported:
 
 ## Next Steps
 
-- Learn about WebSocket support (coming soon)
 - Explore [Middleware patterns](/server/concepts/middleware)
 - Read about [Context streaming](/server/concepts/context#stream-response)

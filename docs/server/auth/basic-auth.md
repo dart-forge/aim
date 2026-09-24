@@ -398,4 +398,4 @@ Use JWT for:
 
 - Learn about [JWT Authentication](/server/auth/jwt) for token-based auth
 - Explore [Cookie middleware](/server/middleware/cookie) for session management
-- Read about [Security best practices](/server/concepts/middleware#security)
+- Read about [Security best practices](/server/guides/best-practices#security)

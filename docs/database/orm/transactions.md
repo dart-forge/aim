@@ -13,26 +13,42 @@ Use transactions for atomic database operations with automatic rollback on error
 
 ## Basic Usage
 
-Use `db.transaction()` to execute multiple operations atomically:
+Use `db.transaction()` to execute multiple operations atomically. Inside the
+callback, every generated table (`tx.users`, `tx.posts`, ...) is available on
+the `tx` (`PostgresTransaction`) object, and `.insert().values()` takes named
+parameters matching the table's columns — not a record literal:
 
 ```dart
+import 'package:uuid/uuid.dart';
+
 await db.transaction((tx) async {
-  await tx.users.insert().values((
-    id: 'user-123',
+  final userId = const Uuid().v4();
+
+  await tx.users.insert().values(
+    id: userId,
     name: 'Alice',
     email: 'alice@example.com',
     createdAt: DateTime.now(),
-  ));
+  );
 
-  await tx.posts.insert().values((
-    id: 0,
-    userId: 'user-123',
+  await tx.posts.insert().values(
+    id: const Uuid().v4(),
+    userId: userId,
     title: 'My First Post',
     content: 'Hello, World!',
     createdAt: DateTime.now(),
-  ));
+  );
 });
 ```
+
+::: warning `serial()` primary keys
+If a table's primary key is `serial()` instead of `uuid()`, the generated
+`values()` still requires it as a named parameter — it is not omitted the
+way a hand-written `INSERT` could leave it out for the sequence to fill in.
+Passing a literal like `0` inserts that literal, which fails on the second
+row. See the [INSERT guide](/database/orm/insert#serial-columns) for the raw-SQL
+workaround.
+:::
 
 ## Automatic Rollback
 
@@ -41,21 +57,23 @@ If any operation fails, the entire transaction is automatically rolled back:
 ```dart
 try {
   await db.transaction((tx) async {
-    await tx.users.insert().values((
-      id: 'user-123',
+    final userId = const Uuid().v4();
+
+    await tx.users.insert().values(
+      id: userId,
       name: 'Alice',
       email: 'alice@example.com',
       createdAt: DateTime.now(),
-    ));
+    );
 
     // If this fails, the user insert above is also rolled back
-    await tx.posts.insert().values((
-      id: 0,
-      userId: 'user-123',
+    await tx.posts.insert().values(
+      id: const Uuid().v4(),
+      userId: userId,
       title: 'Post',
       content: 'Content',
       createdAt: DateTime.now(),
-    ));
+    );
   });
 } catch (e) {
   print('Transaction failed: $e');
@@ -70,10 +88,11 @@ Inside a transaction callback, use `tx` instead of `db`:
 ```dart
 await db.transaction((tx) async {
   // Use tx.users, not db.users
-  final users = await tx.users.select();
+  final matches = await tx.users.select().where(id: users.id.eq('user-123'));
 
-  await tx.users.update()
-      .set((name: 'Updated'))
+  await tx.users
+      .update()
+      .set(name: 'Updated')
       .where(id: users.id.eq('user-123'));
 });
 ```
@@ -83,26 +102,29 @@ await db.transaction((tx) async {
 Transactions can return values:
 
 ```dart
-final newUser = await db.transaction((tx) async {
-  await tx.users.insert().values((
-    id: 'user-123',
+final newUserId = await db.transaction((tx) async {
+  final userId = const Uuid().v4();
+
+  await tx.users.insert().values(
+    id: userId,
     name: 'Alice',
     email: 'alice@example.com',
     createdAt: DateTime.now(),
-  ));
+  );
 
-  final result = await tx.users.select()
-      .where(id: users.id.eq('user-123'));
-
-  return result.first;
+  return userId;
 });
 
-print(newUser.name);  // Alice
+final created = await db.users.select().where(id: users.id.eq(newUserId));
+print(created.first.name);  // Alice
 ```
 
 ## Examples
 
 ### Transfer Operation
+
+`.set()` assigns literal values, not SQL expressions, so a balance update
+has to read the current value inside the same transaction first:
 
 ```dart
 Future<void> transfer({
@@ -111,18 +133,34 @@ Future<void> transfer({
   required int amount,
 }) async {
   await db.transaction((tx) async {
+    final sender = (await tx.accounts
+            .select()
+            .where(userId: accounts.userId.eq(fromUserId)))
+        .first;
+    final receiver = (await tx.accounts
+            .select()
+            .where(userId: accounts.userId.eq(toUserId)))
+        .first;
+
     // Deduct from sender
-    await tx.accounts.update()
-        .set((balance: currentBalance - amount))
+    await tx.accounts
+        .update()
+        .set(balance: sender.balance - amount)
         .where(userId: accounts.userId.eq(fromUserId));
 
     // Add to receiver
-    await tx.accounts.update()
-        .set((balance: currentBalance + amount))
+    await tx.accounts
+        .update()
+        .set(balance: receiver.balance + amount)
         .where(userId: accounts.userId.eq(toUserId));
   });
 }
 ```
+
+This reads both balances before writing either, so it is only safe against
+concurrent transfers if the underlying row locking (or a `WHERE balance >=
+amount` guard checked against the result) prevents an overdraft — the ORM
+does not add that guarantee for you.
 
 ### Create User with Profile
 
@@ -134,19 +172,19 @@ Future<void> createUserWithProfile({
   required String bio,
 }) async {
   await db.transaction((tx) async {
-    await tx.users.insert().values((
+    await tx.users.insert().values(
       id: id,
       name: name,
       email: email,
       createdAt: DateTime.now(),
-    ));
+    );
 
-    await tx.profiles.insert().values((
-      id: 0,
+    await tx.profiles.insert().values(
+      id: const Uuid().v4(),
       userId: id,
       bio: bio,
       createdAt: DateTime.now(),
-    ));
+    );
   });
 }
 ```
@@ -157,12 +195,12 @@ Future<void> createUserWithProfile({
 Future<void> bulkInsertUsers(List<Map<String, dynamic>> userData) async {
   await db.transaction((tx) async {
     for (final data in userData) {
-      await tx.users.insert().values((
+      await tx.users.insert().values(
         id: data['id'] as String,
         name: data['name'] as String,
         email: data['email'] as String,
         createdAt: DateTime.now(),
-      ));
+      );
     }
   });
 }
