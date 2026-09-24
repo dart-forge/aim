@@ -43,6 +43,12 @@ const List<AppSpec> apps = [
     entry: 'bin/server.dart',
     lockPackages: ['aim_server', 'aim_core'],
   ),
+  AppSpec(
+    name: 'shelf_router',
+    directory: 'shelf_router',
+    entry: 'bin/server.dart',
+    lockPackages: ['shelf', 'shelf_router'],
+  ),
 ];
 
 /// `bench/`, resolved from this package's location (`bench/runner`).
