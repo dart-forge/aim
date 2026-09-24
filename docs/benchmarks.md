@@ -188,7 +188,7 @@ another.
 ### What is measured
 
 - **Cold start.** The time to first byte of the first request sent right
-  after a fresh deployment, over a new TCP + TLS connection. Measured
+  after a fresh deployment, over a new DNS, TCP and TLS connection. Measured
   once per deploy cycle, over 5 deploy cycles, reported as a median. A
   404 returned while a brand-new route is still propagating is retried
   and counted; it was 0 here on every target.
@@ -222,7 +222,7 @@ another.
 - workers region: nearest Cloudflare colo
 - supabase region: Southeast Asia (Singapore)
 - functions region: us-central1
-- Tool versions: wrangler 4.138.0, supabase 2.111.0, firebase 15.30.0, node v26.8.2
+- Tool versions: wrangler 4.138.0, supabase 2.111.0, firebase 15.30.0, node v26.8.2 (local CLI; the Cloud Function itself runs on the platform's Node 22 runtime)
 - Dart: Dart SDK version: 3.13.3 (stable) (Tue Sep 1 01:07:17 2026 -0700) on "macos_arm64"
 - Aim commit: 0ab0fcd
 - 5 deploy cycles, 100 requests per scenario.

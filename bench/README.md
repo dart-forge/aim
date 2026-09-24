@@ -205,8 +205,8 @@ the platform's own API — on each of three runtimes:
 | Runtime | Aim variant | Native baseline | Region |
 |---|---|---|---|
 | Cloudflare Workers | `workers/aim`: `package:aim_workers` compiled with `dart compile wasm` | `workers/native`: a `fetch` handler, routes kept in a `Map` | nearest Cloudflare colo |
-| Supabase Edge Functions | `supabase/aim`: `package:aim` compiled with `dart compile wasm`, run under Deno | `supabase/native`: a `Deno.serve` handler, routes kept in a `Map` | Southeast Asia (Singapore) |
-| Firebase Cloud Functions | `functions/aim`: `package:aim_functions`, Dart AOT via the `dart3` runtime (a Cloud Run service under the hood) | `functions/native`: `firebase-functions` v2 `onRequest`, Node 22, routes kept in a `Map` | us-central1 |
+| Supabase Edge Functions | `supabase/aim`: `package:aim_deno` compiled with `dart compile wasm`, run under Deno | `supabase/native`: a `Deno.serve` handler, routes kept in a `Map` | Southeast Asia (Singapore) |
+| Cloud Functions for Firebase | `functions/aim`: `package:aim_functions`, Dart AOT via the `dart3` runtime (a Cloud Run service under the hood) | `functions/native`: `firebase-functions` v2 `onRequest`, Node 22, routes kept in a `Map` | us-central1 |
 
 All six answer the same four scenarios as the suite above (`plaintext`,
 `params_json`, `post_json`, `routes_100`), defined once in
@@ -215,16 +215,20 @@ All six answer the same four scenarios as the suite above (`plaintext`,
 Three metrics are recorded per target:
 
 - **Cold start.** The time to first byte of the first request sent right
-  after a fresh deployment, over a new TCP + TLS connection. Measured
-  once per deploy cycle (`--cycles`, default 5), so a target's cold start
-  is a handful of independent cold samples, not one. What counts as
-  "cold" differs by platform: on Cloud Run (the two `functions/*`
-  targets) it's the platform scaling a new revision up from zero
-  instances; on Workers it's a new version's isolate starting in
-  whichever colo answers the request; on Supabase it's a new version's
-  boot. Each cold sample is followed, on the same connection now kept
-  alive, by warm samples, so a cycle's cold and warm-right-after numbers
-  can be read side by side.
+  after a fresh deployment, over a new DNS, TCP and TLS connection.
+  Measured once per deploy cycle (`--cycles`, default 5), so a target's
+  cold start is a handful of independent cold samples, not one. What
+  counts as "cold" differs by platform: on Cloud Run (the two
+  `functions/*` targets), a deployment already starts an instance to
+  check that it listens, so the first request after a deployment is not
+  a scale-from-zero start — what the column shows there is simply the
+  first request over a new connection; on Workers it's a new version's
+  isolate starting in whichever colo answers the request; on Supabase
+  it's a new version's boot. Each cold sample is followed by 20 warm
+  samples on a new kept-alive connection — the cold probe's own client is
+  closed first — so the first of those warm samples also pays a
+  connection handshake, absorbed by the median of 20; a cycle's cold and
+  warm-right-after numbers can still be read side by side.
 - **Warm latency.** Sequential requests — concurrency 1, one at a time —
   on a single kept-alive connection, `--requests` (default 100) per
   scenario, reported as p50, p99 and min. With no concurrent load, this
@@ -271,7 +275,9 @@ Three metrics are recorded per target:
   a Blaze-plan project with the Cloud Run Admin API enabled (Cloud
   Functions for Dart deploys as a Cloud Run service), and with
   `firebase experiments:enable dartfunctions` run once on that machine.
-- Node 22.
+- Node, for the CLIs (`wrangler`, `firebase-tools`) and the `functions/native`
+  build; the Cloud Function itself runs on the platform's own Node 22
+  runtime regardless of the local version.
 - Dart 3.13 or newer.
 - `bench/cloud/config.yaml`, copied from `bench/cloud/config.example.yaml`
   and filled in with real values: `label`, `firebase_project`,
