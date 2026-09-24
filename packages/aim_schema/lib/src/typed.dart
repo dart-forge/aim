@@ -90,9 +90,7 @@ Handler<E> typed<
     P parsedPath;
     if (path != null) {
       final map = {
-        for (final f in path.spec)
-          // ignore: use_null_aware_elements
-          if (c.get<String>('param:${f.name}') case final v?) f.name: v,
+        for (final f in path.spec) f.name: ?c.get<String>('param:${f.name}'),
       };
       parsedPath = path.parse(map, coerce: true);
     } else {
