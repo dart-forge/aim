@@ -1,0 +1,9 @@
+{
+  "summary": {"successRate": 1.0, "total": 10.0, "requestsPerSec": 51234.5},
+  "metrics": {
+    "success_rate": 1.0,
+    "requests_per_sec": 51234.5,
+    "latency_ms": {"min": 0.1, "mean": 1.2, "p50": 1.1, "p95": 2.0, "p99": 3.4, "max": 20.0}
+  },
+  "statusCodeDistribution": {"200": 512345}
+}
