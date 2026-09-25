@@ -1,7 +1,6 @@
 import 'package:aim_database/aim_database.dart';
 import 'package:aim_postgres/src/pg_connection.dart';
 import 'package:aim_postgres/src/named_parameters.dart';
-import 'package:aim_postgres/src/pool/pool.dart';
 
 abstract interface class PostgresQueryable {
   Future<List<Map<String, dynamic>>> query(

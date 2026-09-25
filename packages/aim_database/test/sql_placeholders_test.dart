@@ -181,5 +181,36 @@ void main() {
         'real',
       ]);
     });
+
+    test('-- not followed by whitespace is two unary minuses, not a '
+        'comment', () {
+      // MySQL only treats `--` as a comment when whitespace or a control
+      // character follows. `1--:x` is the expression `1 - -:x`, so `:x`
+      // is still a placeholder -- unlike Postgres, where `--` always
+      // starts a comment.
+      expect(names('SELECT 1--:x', dialect: SqlDialect.mysql), ['x']);
+    });
+
+    test('-- followed by whitespace is still a comment', () {
+      expect(
+        names('SELECT 1 -- :x\n, :real', dialect: SqlDialect.mysql),
+        ['real'],
+      );
+    });
+
+    test('-- at the very end of the string, with nothing after it, is '
+        'still a comment', () {
+      expect(names('SELECT 1 --', dialect: SqlDialect.mysql), isEmpty);
+    });
+
+    test('a backslash inside a backtick-quoted identifier is not an '
+        'escape, even where a string would treat it as one', () {
+      // ``a\` `` is the two-character identifier `a\`, not an escaped
+      // backtick that swallows the rest of the string.
+      expect(
+        names(r'SELECT `a\` = :x', dialect: SqlDialect.mysql),
+        ['x'],
+      );
+    });
   });
 }

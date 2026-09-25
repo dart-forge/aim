@@ -1,3 +1,11 @@
+## Unreleased
+
+- New: `Pool<C>`, `PoolOptions`, `PoolStats` and `PoolTimeoutException` moved
+  here from `aim_postgres`. The pool was already generic — it takes create,
+  validate and destroy callbacks and knows nothing about any one database —
+  so every driver can share one instead of carrying a copy of the same
+  concurrency logic.
+
 ## 0.4.0
 
 - New: `scanSqlPlaceholders` finds the `:name` and `?` parameter

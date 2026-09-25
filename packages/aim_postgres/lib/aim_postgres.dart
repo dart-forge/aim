@@ -36,5 +36,11 @@ library;
 
 export 'src/pg_connection.dart';
 export 'src/pg_database.dart';
-export 'src/pool/pool.dart' show PoolOptions, PoolStats, PoolTimeoutException;
+
+// Moved into aim_database so every driver shares one pool rather than each
+// carrying a copy of the same concurrency logic. Re-exported so this
+// package's surface does not change.
+export 'package:aim_database/aim_database.dart'
+    show PoolOptions, PoolStats, PoolTimeoutException;
+
 export 'src/types/query_result_decoder.dart' show PostgresDecodeException;

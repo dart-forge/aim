@@ -1,7 +1,8 @@
-name: aim_postgres
-description: A native PostgreSQL driver for Dart with full wire protocol implementation. Supports SSL/TLS, SCRAM-SHA-256 authentication, and parameterized queries.
+name: aim_mysql
+description: A native MySQL driver for Dart. Speaks the wire protocol directly, with the authentication plugin the server asks for.
 version: 0.4.0
 repository: https://github.com/dart-forge/aim
+publish_to: none
 resolution: workspace
 
 environment:
@@ -11,8 +12,7 @@ dependencies:
   aim_database: ^0.4.0
   crypto: ^3.0.7
 
-
 dev_dependencies:
   lints: ^6.0.0
-  rig_postgres: ^0.4.0
+  rig_mysql: ^0.4.0
   test: ^1.25.6
