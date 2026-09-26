@@ -80,13 +80,11 @@ Future<void> createUser({
 
 ```dart
 Future<void> createPost({
-  required int id,
   required String userId,
   required String title,
   required String content,
 }) async {
   await db.posts.insert().values(
-    id: id,
     userId: userId,
     title: title,
     content: content,
@@ -95,27 +93,31 @@ Future<void> createPost({
 }
 ```
 
-### Serial Columns
+### Columns the Database Fills
 
-::: warning
-A `serial()` column is not left out of the statement the builder writes: the
-generated `values()` takes it like any other column and the `INSERT` names
-it. Passing `0` inserts a literal zero, and the second row to do so fails on
-the primary key. To let the sequence assign the value, write the statement
-yourself and leave the column out:
+A `serial()` column, and a `NOT NULL` column with a default, can be left out
+of `values()`. The statement then writes `DEFAULT` in that position and the
+database fills it: a serial column takes the next value of its sequence, a
+defaulted column takes its default.
 
 ```dart
-await db.execute(
-  'INSERT INTO posts (user_id, title, content, created_at) '
-  'VALUES (:userId, :title, :content, :createdAt)',
-  params: {
-    'userId': userId,
-    'title': title,
-    'content': content,
-    'createdAt': DateTime.now(),
-  },
+@PgTable('posts')
+final posts = (
+  id: serial('id').primaryKey(),
+  status: varchar('status', length: 20).withDefault('draft'),
+  title: varchar('title', length: 255),
 );
+
+await db.posts.insert().values(title: 'Hello');
+// INSERT INTO posts (id, status, title) VALUES (DEFAULT, DEFAULT, :title)
 ```
+
+Passing a value still works and is used as given.
+
+A nullable column is not treated this way: leaving it out sends an explicit
+`NULL`, as before. An optional parameter cannot tell "not given" from "NULL
+wanted", so a nullable column with a default has to be given its value to
+receive the default.
 
 `.values()` also returns `Future<int>` (the affected row count), never the
 generated id — there is no builder method that reads it back. If you need
@@ -136,7 +138,6 @@ final rows = await db.query(
 );
 final insertedId = rows.first['id'];
 ```
-:::
 
 ## Next Steps
 

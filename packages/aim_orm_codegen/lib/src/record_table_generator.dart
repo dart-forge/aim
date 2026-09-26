@@ -338,6 +338,18 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
     buffer.writeln();
   }
 
+  /// Whether the database fills [field] when an insert leaves it out: a
+  /// serial column takes the next value of its sequence, a column with a
+  /// default takes that default.
+  ///
+  /// Only a NOT NULL column qualifies. For a nullable parameter, null cannot
+  /// mean both "not given" and "NULL wanted", and today's generated code
+  /// sends an explicit NULL for an unset nullable column — changing that
+  /// would hand a default to callers who asked for NULL.
+  bool _databaseFills(AnalyzedField field) =>
+      !field.isNullable &&
+      (field.columnMapper == PgColumnMapper.serial || field.hasDefault);
+
   void generateInsertBuilder(
     StringBuffer buffer,
     String tableName,
@@ -361,8 +373,9 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
     buffer.writeln();
     buffer.writeln('  ${capitalize(tableName)}InsertBuilder values({');
     for (final field in fields) {
+      final optional = field.isNullable || _databaseFills(field);
       buffer.writeln(
-        '    ${field.isNullable ? '' : 'required'} ${field.returnType}${field.isNullable ? '?' : ''} ${field.fieldName},',
+        '    ${optional ? '' : 'required'} ${field.returnType}${optional ? '?' : ''} ${field.fieldName},',
       );
     }
     buffer.writeln('  }) {');
@@ -376,7 +389,7 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
     buffer.writeln('  @override');
     buffer.writeln('  Future<int> execute() {');
     for (final field in fields) {
-      if (!field.isNullable) {
+      if (!field.isNullable && !_databaseFills(field)) {
         buffer.writeln('    if (_${field.fieldName} == null) {');
         buffer.writeln(
           "      throw StateError('Field `${field.fieldName}` is required but not set');",
@@ -384,14 +397,40 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
         buffer.writeln('    }');
       }
     }
+
+    final filled = fields.where(_databaseFills).toList();
+    if (filled.isNotEmpty) {
+      buffer.writeln(
+        '    // A column left unset here is filled by the database: a serial takes',
+      );
+      buffer.writeln(
+        '    // the next value of its sequence, a column with a default takes that.',
+      );
+      for (final field in filled) {
+        buffer.writeln(
+          "    final ${field.fieldName}Value = _${field.fieldName} == null ? 'DEFAULT' : ':${field.columnName}';",
+        );
+      }
+    }
+
     final columnNames = fields.map((r) => r.columnName).toList();
+    final valuePlaceholders = fields.map((field) {
+      if (_databaseFills(field)) return '\$${field.fieldName}Value';
+      return ':${field.columnName}';
+    }).toList();
     buffer.writeln(
       "    final sql = 'INSERT INTO $tableName (${columnNames.join(', ')}) "
-      "VALUES (${columnNames.map((name) => ':$name').join(', ')})';",
+      "VALUES (${valuePlaceholders.join(', ')})';",
     );
     buffer.writeln('    final params = {');
     for (final field in fields) {
-      buffer.writeln("      '${field.columnName}': _${field.fieldName},");
+      if (_databaseFills(field)) {
+        buffer.writeln(
+          "      if (_${field.fieldName} != null) '${field.columnName}': _${field.fieldName},",
+        );
+      } else {
+        buffer.writeln("      '${field.columnName}': _${field.fieldName},");
+      }
     }
     buffer.writeln('    };');
     buffer.writeln('    return db.execute(sql, params: params);');
@@ -1007,6 +1046,7 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
     bool isPrimaryKey = false;
     bool isUnique = false;
     bool isNullable = false;
+    bool hasDefault = false;
     String? columnType;
     String? columnName;
     PgColumnMapper? columnMapper;
@@ -1057,6 +1097,9 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
         isUnique = true;
       } else if (methodName == 'nullable') {
         isNullable = true;
+      } else if (methodName == 'withDefault' ||
+          methodName == 'withDefaultNow') {
+        hasDefault = true;
       } else if (methodName == 'references') {
         for (final arg in method.argumentList.arguments) {
           if (arg is FunctionExpression) {
@@ -1086,6 +1129,7 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
       isPrimaryKey: isPrimaryKey,
       isUnique: isUnique,
       isNullable: isNullable,
+      hasDefault: hasDefault,
       varcharLength: varcharLength,
       refTable: refTable,
       refColumn: refColumn,
@@ -1121,6 +1165,10 @@ class RecordPgTableGenerator extends GeneratorForAnnotation<PgTable> {
               isPrimaryKey: f['isPrimaryKey'] as bool,
               isUnique: f['isUnique'] as bool,
               isNullable: f['isNullable'] as bool,
+              // Not collected into the cross-file JSON: these fields are
+              // only read for foreign-key lookups, never for insert
+              // generation, so the database-fills check never needs it here.
+              hasDefault: false,
               varcharLength: f['varcharLength'] as int?,
               refTable: f['refTable'] as String?,
               refColumn: f['refColumn'] as String?,
@@ -1147,6 +1195,7 @@ typedef AnalyzedField = ({
   bool isPrimaryKey,
   bool isUnique,
   bool isNullable,
+  bool hasDefault,
   int? varcharLength,
   String? refTable,
   String? refColumn,
